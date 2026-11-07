@@ -1,0 +1,16 @@
+node_modules
+dist
+.env
+**/.env
+!**/.env.example
+data/uploads
+contracts/cache
+contracts/artifacts
+coverage
+*.log
+.expo
+.tmp-deploy
+.tmp-deploy-cache
+.vite-runner
+.api-*
+.e2e-*

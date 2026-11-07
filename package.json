@@ -1,0 +1,22 @@
+{
+  "name": "2pescrow",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "contracts"
+  ],
+  "devDependencies": {
+    "ts-node": "^10.9.2"
+  },
+  "scripts": {
+    "build": "npm run build -w @2pescrow/shared && npm run build -w @2pescrow/api && npm run build -w @2pescrow/indexer && npm run build -w @2pescrow/indexer-tron && npm run build -w @2pescrow/web",
+    "dev:api": "npm run dev -w @2pescrow/api",
+    "dev:indexer": "npm run dev -w @2pescrow/indexer",
+    "dev:web": "npm run dev -w @2pescrow/web",
+    "dev:mobile": "npm run start -w @2pescrow/mobile",
+    "compile": "npm run compile -w @2pescrow/contracts",
+    "test:contracts": "npm run test -w @2pescrow/contracts"
+  }
+}

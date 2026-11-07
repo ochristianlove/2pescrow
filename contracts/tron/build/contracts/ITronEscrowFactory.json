@@ -1,0 +1,83 @@
+{
+  "contractName": "ITronEscrowFactory",
+  "abi": [
+    {
+      "inputs": [],
+      "name": "buyerFavorBps",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "creationFee",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "feeRecipient",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "resolver",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "sellerShareBps",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "sourceMap": "",
+  "deployedSourceMap": "",
+  "source": "// SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.20;\r\n\r\n/**\r\n * @title TronEscrowDeal — buyer-funded escrow on Tron TVM (TRC-20)\r\n * @dev Mirrors Scroll EscrowDeal flow; deployed directly (no clone proxy) for TVM tooling compatibility.\r\n */\r\ninterface ITRC20 {\r\n    function transfer(address to, uint256 value) external returns (bool);\r\n    function transferFrom(address from, address to, uint256 value) external returns (bool);\r\n}\r\n\r\ninterface ITronEscrowFactory {\r\n    function feeRecipient() external view returns (address);\r\n    function creationFee() external view returns (uint256);\r\n    function resolver() external view returns (address);\r\n    function sellerShareBps() external view returns (uint256);\r\n    function buyerFavorBps() external view returns (uint256);\r\n}\r\n\r\ncontract TronEscrowDeal {\r\n    enum State {\r\n        Created,\r\n        Funded,\r\n        InProgress,\r\n        Completed,\r\n        Cancelled,\r\n        Disputed,\r\n        Resolved\r\n    }\r\n\r\n    address public factory;\r\n    address public buyer;\r\n    address public seller;\r\n    address public token;\r\n    uint256 public escrowAmount;\r\n    address public optionalAgent;\r\n\r\n    State public state;\r\n    bytes32 public deliveryProofHash;\r\n    bool public buyerCancelRequested;\r\n    bool public sellerCancelRequested;\r\n\r\n    event StateChanged(State indexed previousState, State indexed newState);\r\n    event Funded(address indexed buyer, uint256 escrowAmount, uint256 creationFee);\r\n    event ProofSubmitted(address indexed seller, bytes32 proofHash);\r\n    event Released(address indexed buyer, address indexed seller, uint256 toSeller, uint256 toFee);\r\n    event CancelRequested(address indexed party);\r\n    event CancelRefused(address indexed party);\r\n    /// @notice Trade amount returned to the buyer. The creation fee is never included.\r\n    event Cancelled(address indexed buyer, uint256 returnedAmount);\r\n    event DisputeOpened(address indexed opener);\r\n    event DisputeResolved(bool buyerFavor, uint256 toBuyer, uint256 toSeller, uint256 toFee);\r\n\r\n    modifier onlyBuyer() {\r\n        require(msg.sender == buyer, \"Not buyer\");\r\n        _;\r\n    }\r\n\r\n    modifier onlySeller() {\r\n        require(msg.sender == seller, \"Not seller\");\r\n        _;\r\n    }\r\n\r\n    modifier inState(State s) {\r\n        require(state == s, \"Invalid state\");\r\n        _;\r\n    }\r\n\r\n    constructor(\r\n        address factory_,\r\n        address buyer_,\r\n        address seller_,\r\n        address token_,\r\n        uint256 escrowAmount_,\r\n        address optionalAgent_\r\n    ) {\r\n        factory = factory_;\r\n        buyer = buyer_;\r\n        seller = seller_;\r\n        token = token_;\r\n        escrowAmount = escrowAmount_;\r\n        optionalAgent = optionalAgent_;\r\n        state = State.Created;\r\n        emit StateChanged(State.Created, State.Created);\r\n    }\r\n\r\n    function _transition(State next) internal {\r\n        State prev = state;\r\n        state = next;\r\n        emit StateChanged(prev, next);\r\n    }\r\n\r\n    function fund() external onlyBuyer inState(State.Created) {\r\n        ITronEscrowFactory f = ITronEscrowFactory(factory);\r\n        uint256 fee = f.creationFee();\r\n        require(ITRC20(token).transferFrom(buyer, address(this), escrowAmount + fee), \"Transfer failed\");\r\n        require(ITRC20(token).transfer(f.feeRecipient(), fee), \"Fee transfer failed\");\r\n        _transition(State.Funded);\r\n        emit Funded(buyer, escrowAmount, fee);\r\n    }\r\n\r\n    function submitProof(bytes32 proofHash) external onlySeller inState(State.Funded) {\r\n        require(proofHash != bytes32(0), \"Empty proof\");\r\n        deliveryProofHash = proofHash;\r\n        _transition(State.InProgress);\r\n        emit ProofSubmitted(seller, proofHash);\r\n    }\r\n\r\n    function approveRelease() external onlyBuyer inState(State.InProgress) {\r\n        ITronEscrowFactory f = ITronEscrowFactory(factory);\r\n        uint256 toSeller = (escrowAmount * f.sellerShareBps()) / 10_000;\r\n        uint256 toFee = escrowAmount - toSeller;\r\n        require(ITRC20(token).transfer(seller, toSeller), \"Seller transfer failed\");\r\n        require(ITRC20(token).transfer(f.feeRecipient(), toFee), \"Fee transfer failed\");\r\n        _transition(State.Completed);\r\n        emit Released(buyer, seller, toSeller, toFee);\r\n    }\r\n\r\n    /// @notice Seller cancel closes the trade and returns only the trade amount.\r\n    /// The creation fee was already paid to the protocol at funding and is never refunded.\r\n    function requestCancel() external {\r\n        require(state == State.Funded || state == State.InProgress, \"Cannot cancel\");\r\n        if (msg.sender == seller) {\r\n            sellerCancelRequested = true;\r\n            emit CancelRequested(seller);\r\n            _refundTradeAmountAndCancel();\r\n            return;\r\n        }\r\n        require(msg.sender == buyer, \"Not party\");\r\n        require(!buyerCancelRequested, \"Already requested\");\r\n        buyerCancelRequested = true;\r\n        emit CancelRequested(buyer);\r\n    }\r\n\r\n    function refuseCancel() external {\r\n        require(state == State.Funded || state == State.InProgress, \"Cannot cancel\");\r\n        require(msg.sender == seller, \"Only seller can refuse\");\r\n        require(buyerCancelRequested, \"Nothing to refuse\");\r\n        buyerCancelRequested = false;\r\n        emit CancelRefused(seller);\r\n    }\r\n\r\n    function _refundTradeAmountAndCancel() internal {\r\n        uint256 refund = escrowAmount;\r\n        require(ITRC20(token).transfer(buyer, refund), \"Refund failed\");\r\n        _transition(State.Cancelled);\r\n        emit Cancelled(buyer, refund);\r\n    }\r\n\r\n    function openDispute() external {\r\n        require(msg.sender == buyer || msg.sender == seller, \"Not party\");\r\n        require(state == State.Funded || state == State.InProgress, \"Invalid state\");\r\n        _transition(State.Disputed);\r\n        emit DisputeOpened(msg.sender);\r\n    }\r\n\r\n    function resolveDispute(bool buyerFavor) external inState(State.Disputed) {\r\n        ITronEscrowFactory f = ITronEscrowFactory(factory);\r\n        require(msg.sender == f.resolver(), \"Not resolver\");\r\n        uint256 toBuyer;\r\n        uint256 toSeller;\r\n        uint256 toFee;\r\n        if (buyerFavor) {\r\n            toBuyer = (escrowAmount * f.buyerFavorBps()) / 10_000;\r\n            toFee = escrowAmount - toBuyer;\r\n            require(ITRC20(token).transfer(buyer, toBuyer), \"Buyer transfer failed\");\r\n            if (toFee > 0) require(ITRC20(token).transfer(f.feeRecipient(), toFee), \"Fee transfer failed\");\r\n        } else {\r\n            toSeller = escrowAmount;\r\n            require(ITRC20(token).transfer(seller, toSeller), \"Seller transfer failed\");\r\n        }\r\n        _transition(State.Resolved);\r\n        emit DisputeResolved(buyerFavor, toBuyer, toSeller, toFee);\r\n    }\r\n}\r\n",
+  "sourcePath": "c:\\Users\\Christian\\2Pescrow\\contracts\\tron\\contracts\\TronEscrowDeal.sol",
+  "compiler": {
+    "name": "solc",
+    "version": "0.8.20+commit.5f1834bc.Emscripten.clang"
+  },
+  "networks": {},
+  "schemaVersion": "2.1.0",
+  "updatedAt": "2026-10-26T19:23:03.633Z"
+}

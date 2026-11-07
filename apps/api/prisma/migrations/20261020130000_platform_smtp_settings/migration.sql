@@ -1,0 +1,6 @@
+ALTER TABLE "PlatformSettings" ADD COLUMN IF NOT EXISTS "smtp_host" TEXT;
+ALTER TABLE "PlatformSettings" ADD COLUMN IF NOT EXISTS "smtp_port" INTEGER DEFAULT 587;
+ALTER TABLE "PlatformSettings" ADD COLUMN IF NOT EXISTS "smtp_user" TEXT;
+ALTER TABLE "PlatformSettings" ADD COLUMN IF NOT EXISTS "smtp_pass" TEXT;
+ALTER TABLE "PlatformSettings" ADD COLUMN IF NOT EXISTS "smtp_from" TEXT;
+ALTER TABLE "PlatformSettings" ADD COLUMN IF NOT EXISTS "smtp_secure" BOOLEAN NOT NULL DEFAULT false;

@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "2Pescrow",
+    "slug": "2pescrow",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "twopescrow",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#07140f"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.twopescrow.app",
+      "buildNumber": "1",
+      "associatedDomains": ["applinks:2pescrow.com"],
+      "infoPlist": {
+        "NSAllowsLocalNetworking": true,
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.twopescrow.app",
+      "versionCode": 1,
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#07140f"
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            { "scheme": "twopescrow" },
+            { "scheme": "https", "host": "2pescrow.com", "pathPrefix": "/auth/verify" }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "plugins": ["expo-router", "expo-secure-store"],
+    "experiments": { "typedRoutes": false },
+    "extra": {
+      "apiUrl": "http://10.148.130.68:3002",
+      "webOrigin": "http://10.148.130.68:3003",
+      "privacyPolicyUrl": "https://2pescrow.com/privacy",
+      "supportEmail": "support@2pescrow.com"
+    }
+  }
+}

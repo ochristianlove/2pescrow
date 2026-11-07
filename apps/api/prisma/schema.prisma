@@ -1,0 +1,549 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String   @id @default(uuid())
+  email                 String?  @unique
+  displayName           String?  @map("display_name")
+  role                  String   @default("user")
+  permissions           String[] @default([])
+  passwordHash          String?  @map("password_hash")
+  referredByReferrerId  String?  @map("referred_by_referrer_id")
+  createdAt             DateTime @default(now()) @map("created_at")
+  wallets               Wallet[]
+  escrowsAsBuyer        Escrow[] @relation("EscrowBuyer")
+  escrowsAsSeller       Escrow[] @relation("EscrowSeller")
+  chatMessages          ChatMessage[]
+  privateTradeMessages  ChatMessage[] @relation("TradeMessageRecipient")
+  referrer              Referrer?
+  referralReferee       ReferralReferee?
+  feedbackSubmissions   FeedbackSubmission[]
+  disputesAssigned      Dispute[] @relation("DisputeAssignedModerator")
+  disputesAssignedBy    Dispute[] @relation("DisputeAssignedBy")
+  disputesAsAgent       Dispute[] @relation("DisputeAssignedAgent")
+  disputesOwned         Dispute[] @relation("DisputeOwner")
+  disputesRecommended   Dispute[] @relation("DisputeRecommendedBy")
+  disputesOpened        Dispute[] @relation("DisputeOpenedBy")
+  disputeStaffMessages  DisputeStaffMessage[]
+  agentProfile          Agent?
+  staffNotifications    StaffNotification[]
+  disputeEscalations    DisputeEscalation[] @relation("EscalationFrom")
+  agentActivities       AgentActivity[]
+  agentApplications     AgentApplication[]
+  agentApplicationsReviewed AgentApplication[] @relation("AgentApplicationReviewer")
+  agentCommissionProfile AgentCommissionProfile?
+}
+
+model AgentApplication {
+  id                  String   @id @default(uuid())
+  userId              String   @map("user_id")
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status              String   @default("pending")
+  applicantNote       String?  @map("applicant_note") @db.Text
+  volumeAtomicAtApply String   @map("volume_atomic_at_apply")
+  reviewedByUserId    String?  @map("reviewed_by_user_id")
+  reviewedBy          User?    @relation("AgentApplicationReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  reviewNote          String?  @map("review_note") @db.Text
+  decidedAt           DateTime? @map("decided_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model Referrer {
+  id                    String   @id @default(uuid())
+  userId                String   @unique @map("user_id")
+  user                  User     @relation(fields: [userId], references: [id])
+  referralCode          String   @unique @map("referral_code")
+  displayName           String?  @map("display_name")
+  tier                  String   @default("bronze")
+  totalEarnedAtomic     String   @default("0") @map("total_earned_atomic")
+  totalPaidAtomic       String   @default("0") @map("total_paid_atomic")
+  pendingBalanceAtomic  String   @default("0") @map("pending_balance_atomic")
+  successfulReferrals   Int      @default(0) @map("successful_referrals")
+  createdAt             DateTime @default(now()) @map("created_at")
+  referees              ReferralReferee[]
+  clicks                ReferralClick[]
+  commissions           ReferralCommission[]
+  notifications         ReferrerNotification[]
+  payoutRequests        ReferralPayoutRequest[]
+}
+
+model ReferralReferee {
+  id            String   @id @default(uuid())
+  referrerId    String   @map("referrer_id")
+  referrer      Referrer @relation(fields: [referrerId], references: [id])
+  refereeUserId String   @unique @map("referee_user_id")
+  referee       User     @relation(fields: [refereeUserId], references: [id])
+  attributedAt  DateTime @default(now()) @map("attributed_at")
+}
+
+model ReferralClick {
+  id         String   @id @default(uuid())
+  referrerId String   @map("referrer_id")
+  referrer   Referrer @relation(fields: [referrerId], references: [id])
+  visitedAt  DateTime @default(now()) @map("visited_at")
+}
+
+model ReferralCommission {
+  id                   String    @id @default(uuid())
+  referrerId           String    @map("referrer_id")
+  referrer             Referrer  @relation(fields: [referrerId], references: [id])
+  escrowId             String    @unique @map("escrow_id")
+  platformProfitAtomic String    @map("platform_profit_atomic")
+  commissionAtomic     String    @map("commission_atomic")
+  commissionBps        Int       @default(200) @map("commission_bps")
+  status               String    @default("pending")
+  paidAt               DateTime? @map("paid_at")
+  payoutRequestId      String?   @map("payout_request_id")
+  payoutRequest        ReferralPayoutRequest? @relation(fields: [payoutRequestId], references: [id], onDelete: SetNull)
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  @@index([payoutRequestId])
+}
+
+model ReferralPayoutRequest {
+  id                String    @id @default(uuid())
+  referrerId        String    @map("referrer_id")
+  referrer          Referrer  @relation(fields: [referrerId], references: [id])
+  commissions       ReferralCommission[]
+  amountAtomic      String    @map("amount_atomic")
+  payoutAddress     String    @map("payout_address")
+  payoutChain       String    @map("payout_chain")
+  status            String    @default("pending")
+  adminNote         String?   @map("admin_note")
+  reviewedAt        DateTime? @map("reviewed_at")
+  reviewedByUserId  String?   @map("reviewed_by_user_id")
+  sentAt            DateTime? @map("sent_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+}
+
+model ReferrerNotification {
+  id         String    @id @default(uuid())
+  referrerId String    @map("referrer_id")
+  referrer   Referrer  @relation(fields: [referrerId], references: [id])
+  type       String
+  message    String
+  readAt     DateTime? @map("read_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+}
+
+model MagicLink {
+  id        String    @id @default(uuid())
+  email     String
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+}
+
+model Wallet {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  user       User?    @relation(fields: [userId], references: [id])
+  address    String   @unique
+  chainKind  String   @default("evm") @map("chain_kind")
+  roleTag    String?  @map("role_tag")
+  verifiedAt DateTime? @map("verified_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+}
+
+model Agent {
+  id              String   @id @default(uuid())
+  userId          String?  @unique @map("user_id")
+  user            User?    @relation(fields: [userId], references: [id])
+  walletAddress   String?  @unique @map("wallet_address")
+  displayName     String   @map("display_name")
+  feeBps          Int      @default(500) @map("fee_bps")
+  externalContact String?  @map("external_contact") @db.Text
+  disputesResolved Int     @default(0) @map("disputes_resolved")
+  disputesWon     Int      @default(0) @map("disputes_won")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+}
+
+model AgentCommissionProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique @map("user_id")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName      String   @map("display_name")
+  payoutAddress    String?  @map("payout_address")
+  payoutChain      String?  @map("payout_chain")
+  /// Null means the platform default (50 bps). Admin overrides apply to future cases only.
+  commissionBps    Int?     @map("commission_bps")
+  optedInAt        DateTime @default(now()) @map("opted_in_at")
+  coolingOffEndsAt DateTime @map("cooling_off_ends_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  commissions      AgentCaseCommission[]
+  payoutRequests   AgentPayoutRequest[]
+}
+
+model AgentCaseCommission {
+  id                   String   @id @default(uuid())
+  profileId            String   @map("profile_id")
+  profile              AgentCommissionProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  escrowId             String   @unique @map("escrow_id")
+  disputeId            String?  @map("dispute_id")
+  commissionBps        Int      @map("commission_bps")
+  platformProfitAtomic String   @map("platform_profit_atomic")
+  commissionAtomic     String   @map("commission_atomic")
+  /// pending (withdrawable), cooling_off (never payable), paid
+  status               String   @default("pending")
+  finalizedAt          DateTime @map("finalized_at")
+  paidAt               DateTime? @map("paid_at")
+  payoutRequestId      String?  @map("payout_request_id")
+  payoutRequest        AgentPayoutRequest? @relation(fields: [payoutRequestId], references: [id], onDelete: SetNull)
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  @@index([profileId, status])
+}
+
+model AgentPayoutRequest {
+  id            String   @id @default(uuid())
+  profileId     String   @map("profile_id")
+  profile       AgentCommissionProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  amountAtomic  String   @map("amount_atomic")
+  status        String   @default("pending")
+  adminNote     String?  @map("admin_note") @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+  reviewedAt    DateTime? @map("reviewed_at")
+  sentAt        DateTime? @map("sent_at")
+  commissions   AgentCaseCommission[]
+
+  @@index([profileId, status])
+  @@index([status, createdAt])
+}
+
+model Escrow {
+  id               String   @id @default(uuid())
+  chain            String   @default("ethereum")
+  chainId          Int      @map("chain_id")
+  contractAddress  String?  @unique @map("contract_address")
+  buyerAddress     String?  @map("buyer_address")
+  sellerAddress    String?  @map("seller_address")
+  tradeCode        String?  @unique @map("trade_code")
+  buyerUserId      String?  @map("buyer_user_id")
+  buyerUser        User?    @relation("EscrowBuyer", fields: [buyerUserId], references: [id], onDelete: SetNull)
+  sellerUserId     String?  @map("seller_user_id")
+  sellerUser       User?    @relation("EscrowSeller", fields: [sellerUserId], references: [id], onDelete: SetNull)
+  joinDeadlineAt   DateTime? @map("join_deadline_at")
+  fundDeadlineAt   DateTime? @map("fund_deadline_at")
+  deliveryDeadlineAt DateTime? @map("delivery_deadline_at")
+  reviewDeadlineAt DateTime? @map("review_deadline_at")
+  deliveryWindowHours Int @default(72) @map("delivery_window_hours")
+  reviewWindowHours Int @default(48) @map("review_window_hours")
+  agentAddress     String?  @map("agent_address")
+  tokenAddress     String   @map("token_address")
+  tokenSymbol      String   @map("token_symbol")
+  amountAtomic     String   @map("amount_atomic")
+  title            String
+  description      String?
+  status           String   @default("Created")
+  proofHash        String?  @map("proof_hash")
+  proofFilePath    String?  @map("proof_file_path")
+  createTxHash     String?  @map("create_tx_hash")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  events           EscrowEvent[]
+  disputes         Dispute[]
+  notifications    Notification[]
+  messages         ChatMessage[]
+  tradeRecords     TradeRecord[]
+}
+
+model ChatMessage {
+  id           String   @id @default(uuid())
+  escrowId     String   @map("escrow_id")
+  escrow       Escrow   @relation(fields: [escrowId], references: [id], onDelete: Cascade)
+  authorUserId String?  @map("author_user_id")
+  author       User?    @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+  recipientUserId String? @map("recipient_user_id")
+  recipientUser User? @relation("TradeMessageRecipient", fields: [recipientUserId], references: [id], onDelete: SetNull)
+  kind         String   @default("user")
+  body         String
+  filePath     String?  @map("file_path")
+  fileName     String?  @map("file_name")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([escrowId, createdAt])
+  @@index([recipientUserId])
+}
+
+model EscrowEvent {
+  id          BigInt   @id @default(autoincrement())
+  escrowId    String   @map("escrow_id")
+  escrow      Escrow   @relation(fields: [escrowId], references: [id])
+  eventName   String   @map("event_name")
+  blockNumber BigInt?  @map("block_number")
+  txHash      String?  @map("tx_hash")
+  payload     Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+}
+
+model Dispute {
+  id          String   @id @default(uuid())
+  escrowId    String   @map("escrow_id")
+  escrow      Escrow   @relation(fields: [escrowId], references: [id])
+  openedBy    String   @map("opened_by")
+  openedByUserId String? @map("opened_by_user_id")
+  openedByUser User? @relation("DisputeOpenedBy", fields: [openedByUserId], references: [id], onDelete: SetNull)
+  status      String   @default("open")
+  resolution  String?
+  buyerFavor  Boolean? @map("buyer_favor")
+  resolverAddress String? @map("resolver_address")
+  handledByAdmin Boolean @default(false) @map("handled_by_admin")
+  handledByAdminAt DateTime? @map("handled_by_admin_at")
+  handledByAdminUserId String? @map("handled_by_admin_user_id")
+  requestedResolverTier String @default("moderator") @map("requested_resolver_tier")
+  assignedAgentUserId String? @map("assigned_agent_user_id")
+  assignedAgent User? @relation("DisputeAssignedAgent", fields: [assignedAgentUserId], references: [id])
+  assignedAgentAt DateTime? @map("assigned_agent_at")
+  assignedModeratorUserId String? @map("assigned_moderator_user_id")
+  assignedModerator User? @relation("DisputeAssignedModerator", fields: [assignedModeratorUserId], references: [id])
+  assignedByUserId String? @map("assigned_by_user_id")
+  assignedBy User? @relation("DisputeAssignedBy", fields: [assignedByUserId], references: [id])
+  assignedAt DateTime? @map("assigned_at")
+  ownerUserId String? @map("owner_user_id")
+  owner User? @relation("DisputeOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  claimedAt DateTime? @map("claimed_at")
+  awaitingRulingTier String? @map("awaiting_ruling_tier")
+  recommendationBuyerFavor Boolean? @map("recommendation_buyer_favor")
+  recommendationNote String? @map("recommendation_note") @db.Text
+  recommendedAt DateTime? @map("recommended_at")
+  recommendedByUserId String? @map("recommended_by_user_id")
+  recommendedBy User? @relation("DisputeRecommendedBy", fields: [recommendedByUserId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
+  resolvedAt  DateTime? @map("resolved_at")
+  ruledByUserId String? @map("ruled_by_user_id")
+  rulingNote  String?  @map("ruling_note") @db.Text
+  ruledAt     DateTime? @map("ruled_at")
+  appealDeadlineAt DateTime? @map("appeal_deadline_at")
+  onChainResolveTxHash String? @map("on_chain_resolve_tx_hash")
+  evidence    DisputeEvidence[]
+  escalations DisputeEscalation[]
+  appeal      DisputeAppeal?
+  staffMessages DisputeStaffMessage[]
+}
+
+model DisputeStaffMessage {
+  id           String   @id @default(uuid())
+  disputeId    String   @map("dispute_id")
+  dispute      Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  authorUserId String   @map("author_user_id")
+  author       User     @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+  body         String   @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([disputeId, createdAt])
+}
+
+model DisputeAppeal {
+  id              String   @id @default(uuid())
+  disputeId       String   @unique @map("dispute_id")
+  dispute         Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  filedByUserId   String   @map("filed_by_user_id")
+  filedByParty    String   @map("filed_by_party")
+  reason          String   @db.Text
+  status          String   @default("open")
+  decidedByUserId String?  @map("decided_by_user_id")
+  decisionNote    String?  @map("decision_note") @db.Text
+  upholdRuling    Boolean? @map("uphold_ruling")
+  decidedAt       DateTime? @map("decided_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+}
+
+model DisputeEscalation {
+  id                    String   @id @default(uuid())
+  disputeId             String   @map("dispute_id")
+  dispute               Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  fromUserId            String   @map("from_user_id")
+  fromUser              User     @relation("EscalationFrom", fields: [fromUserId], references: [id])
+  fromTier              String   @map("from_tier")
+  toTier                String   @map("to_tier")
+  preliminaryBuyerFavor Boolean? @map("preliminary_buyer_favor")
+  note                  String   @db.Text
+  externalProof         String?  @map("external_proof") @db.Text
+  chatSummary           String?  @map("chat_summary") @db.Text
+  status                String   @default("pending")
+  createdAt             DateTime @default(now()) @map("created_at")
+  acknowledgedAt        DateTime? @map("acknowledged_at")
+
+  @@index([disputeId, createdAt])
+}
+
+model AgentActivity {
+  id          String   @id @default(uuid())
+  agentUserId String   @map("agent_user_id")
+  agent       User     @relation(fields: [agentUserId], references: [id], onDelete: Cascade)
+  action      String
+  disputeId   String?  @map("dispute_id")
+  escrowId    String?  @map("escrow_id")
+  summary     String   @db.Text
+  payload     Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt(sort: Desc)])
+  @@index([agentUserId, createdAt(sort: Desc)])
+}
+
+model StaffNotification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  disputeId String?  @map("dispute_id")
+  escrowId  String?  @map("escrow_id")
+  type      String
+  title     String
+  message   String   @db.Text
+  payload   Json?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, readAt])
+}
+
+model DisputeEvidence {
+  id          String   @id @default(uuid())
+  disputeId   String   @map("dispute_id")
+  dispute     Dispute  @relation(fields: [disputeId], references: [id])
+  submittedBy String   @map("submitted_by")
+  filePath    String?  @map("file_path")
+  contentHash String?  @map("content_hash")
+  fileName    String?  @map("file_name")
+  note        String?
+  createdAt   DateTime @default(now()) @map("created_at")
+}
+
+model TradeRecord {
+  id           String   @id @default(uuid())
+  escrowId     String   @map("escrow_id")
+  escrow       Escrow   @relation(fields: [escrowId], references: [id], onDelete: Cascade)
+  snapshot     Json
+  snapshotHash String   @map("snapshot_hash")
+  signature    String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([escrowId, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  escrowId  String?  @map("escrow_id")
+  escrow    Escrow?  @relation(fields: [escrowId], references: [id])
+  userAddress String @map("user_address")
+  type      String
+  message   String
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime @default(now()) @map("created_at")
+}
+
+model PlatformSettings {
+  id                    Int      @id @default(1)
+  feeRecipientWallet    String   @map("fee_recipient_wallet")
+  resolutionMode        String   @default("admin") @map("resolution_mode")
+  agentModeEnabled      Boolean  @default(false) @map("agent_mode_enabled")
+  usdcAddress           String   @map("usdc_address")
+  usdtAddress           String   @map("usdt_address")
+  thirdStablecoinAddress String  @map("third_stablecoin_address")
+  factoryAddress        String?  @map("factory_address")
+  tronSupportEnabled    Boolean  @default(false) @map("tron_support_enabled")
+  tronUsdtAddress       String?  @map("tron_usdt_address")
+  tronFactoryAddress    String?  @map("tron_factory_address")
+  tronFeeRecipientWallet String? @map("tron_fee_recipient_wallet")
+  tronResolverWallet    String?  @map("tron_resolver_wallet")
+  smtpHost              String?  @map("smtp_host")
+  smtpPort              Int?     @default(587) @map("smtp_port")
+  smtpUser              String?  @map("smtp_user")
+  smtpPass              String?  @map("smtp_pass")
+  smtpFrom              String?  @map("smtp_from")
+  smtpSecure            Boolean  @default(false) @map("smtp_secure")
+  joinWindowHours       Int      @default(24) @map("join_window_hours")
+  fundWindowHours       Int      @default(24) @map("fund_window_hours")
+  deliveryWindowHours   Int      @default(72) @map("delivery_window_hours")
+  reviewWindowHours     Int      @default(48) @map("review_window_hours")
+  siteTitle             String?  @map("site_title")
+  siteLogoUrl           String?  @map("site_logo_url")
+  siteFaviconUrl        String?  @map("site_favicon_url")
+  metaDescription       String?  @map("meta_description")
+  metaKeywords          String?  @map("meta_keywords")
+  feedbackEnabled       Boolean  @default(false) @map("feedback_enabled")
+  referralLeaderboardEnabled Boolean @default(false) @map("referral_leaderboard_enabled")
+  mobileAppsEnabled     Boolean  @default(false) @map("mobile_apps_enabled")
+  iosAppStoreUrl        String?  @map("ios_app_store_url")
+  androidPlayStoreUrl   String?  @map("android_play_store_url")
+  telegramUrl           String?  @map("telegram_url")
+  xUrl                  String?  @map("x_url")
+  discordUrl            String?  @map("discord_url")
+  remindersEnabled      Boolean  @default(false) @map("reminders_enabled")
+  reminderEmailSubject  String?  @map("reminder_email_subject")
+  reminderEmailBody     String?  @map("reminder_email_body") @db.Text
+  siteNoticeEnabled     Boolean  @default(true) @map("site_notice_enabled")
+  siteNoticeTitle       String   @default("Wallet connection help") @map("site_notice_title") @db.VarChar(120)
+  siteNoticeBody        String   @default("For the full 2Pescrow experience, connect a supported wallet before starting a trade. A connected wallet is required to fund escrow and complete on-chain actions.\n\nIf wallet connection is slow on mobile, try opening 2Pescrow in your wallet’s built-in browser or in a desktop browser. If your network route is causing delays, a VPN may help reduce connection latency.") @map("site_notice_body") @db.Text
+  siteNoticeAudience    String   @default("all") @map("site_notice_audience") @db.VarChar(16)
+  siteNoticeDelaySeconds Int     @default(15) @map("site_notice_delay_seconds")
+  siteNoticeRevision    Int      @default(1) @map("site_notice_revision")
+  disputeAppealMessage String @default("A provisional ruling favored {favoredParty}. You may appeal within {appealDays} days. Log in and return to this trade to submit your appeal before {appealDeadline}.") @map("dispute_appeal_message") @db.Text
+  disputeFinalMessage String @default("A final ruling favored {favoredParty}. This ruling is final and the appeal window is closed.") @map("dispute_final_message") @db.Text
+  disputeEmailNotificationsEnabled Boolean @default(true) @map("dispute_email_notifications_enabled")
+  disputeAppealEmailSubject String @default("A ruling is ready for appeal") @map("dispute_appeal_email_subject") @db.VarChar(180)
+  disputeFinalEmailSubject String @default("Final dispute ruling") @map("dispute_final_email_subject") @db.VarChar(180)
+  disputeAppealDecisionMessage String @default("The appeal for {tradeTitle} has been reviewed. The final ruling favors {favoredParty}. Trade: {tradeUrl}") @map("dispute_appeal_decision_message") @db.Text
+  disputeAppealDecisionEmailSubject String @default("Your dispute appeal has been decided") @map("dispute_appeal_decision_email_subject") @db.VarChar(180)
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+}
+
+model FaqEntry {
+  id        String   @id @default(uuid())
+  question  String
+  answer    String
+  published Boolean  @default(false)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([published, sortOrder])
+}
+
+model BlogPost {
+  id          String    @id @default(uuid())
+  slug        String    @unique
+  title         String
+  excerpt       String
+  body          String
+  coverImageUrl String?   @map("cover_image_url")
+  published   Boolean   @default(false)
+  publishedAt DateTime? @map("published_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([published, publishedAt(sort: Desc)])
+}
+
+model FeedbackSubmission {
+  id          String   @id @default(uuid())
+  userId      String?  @map("user_id")
+  user        User?    @relation(fields: [userId], references: [id])
+  email       String?
+  displayName String?  @map("display_name")
+  category    String   @default("general")
+  subject     String?
+  message     String
+  pagePath    String?  @map("page_path")
+  status      String   @default("new")
+  adminNote   String?  @map("admin_note")
+  emailSent   Boolean  @default(false) @map("email_sent")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([status, createdAt(sort: Desc)])
+}

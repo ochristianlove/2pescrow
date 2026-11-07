@@ -1,0 +1,110 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 3109 >>
+stream
+0.035 0.075 0.12 rg 0 742 612 50 re f
+0.12 0.78 0.82 rg 48 724 68 3 re f
+BT /F2 20 Tf 48 759 Td (2PESCROW) Tj ET
+0.04 0.09 0.14 rg
+BT /F2 16 Tf 48 695 Td (P2P ESCROW DEAL RECORD) Tj ET
+BT /F1 9 Tf 48 679 Td (Record preview  |  Issued 2026-10-30T00:00:00.000Z) Tj ET
+0.05 0.52 0.57 rg
+BT /F2 11 Tf 48 634 Td (AGREEMENT SNAPSHOT) Tj ET
+0.04 0.09 0.14 rg
+0.04 0.09 0.14 rg
+BT 48 611 Td /F1 9 Tf (Trade: Vintage camera) Tj ET
+0.05 0.52 0.57 rg
+BT /F2 11 Tf 48 597 Td (TERMS) Tj ET
+0.04 0.09 0.14 rg
+0.04 0.09 0.14 rg
+BT /F2 12 Tf 48 573 Td (What is being delivered) Tj ET
+0.04 0.09 0.14 rg
+BT 48 546 Td /F1 9 Tf (A tested camera, packed in the original box. The seller marks the parcel) Tj /F2 9 Tf ( fragile) Tj /F1 9 Tf (.) Tj ET
+0.04 0.09 0.14 rg
+BT /F2 11 Tf 48 524 Td (Acceptance) Tj ET
+0.04 0.09 0.14 rg
+BT 48 499 Td /F1 9 Tf (- The camera powers on) Tj ET
+0.04 0.09 0.14 rg
+BT 48 486 Td /F1 9 Tf (- There are no cracks in the body) Tj ET
+0.04 0.09 0.14 rg
+BT 48 465 Td /F1 9 Tf (Questions go to the help desk \(https://example.com/help\) before the review window ends.) Tj ET
+0.04 0.09 0.14 rg
+BT 48 444 Td /F1 9 Tf (Amount: 100.00 USDT) Tj ET
+0.04 0.09 0.14 rg
+BT 48 431 Td /F1 9 Tf (Network: Ethereum \(ERC-20 USDT\)) Tj ET
+0.04 0.09 0.14 rg
+BT 48 418 Td /F1 9 Tf (Created: 2026-10-30T00:00:00.000Z) Tj ET
+0.04 0.09 0.14 rg
+BT 48 405 Td /F1 9 Tf (Snapshot status: Created) Tj ET
+0.05 0.52 0.57 rg
+BT /F2 11 Tf 48 391 Td (PARTIES) Tj ET
+0.04 0.09 0.14 rg
+0.04 0.09 0.14 rg
+BT 48 368 Td /F1 9 Tf (Buyer: Buyer) Tj ET
+0.04 0.09 0.14 rg
+BT 48 355 Td /F1 9 Tf (Buyer wallet: 0x0000000000000000000000000000000000000001) Tj ET
+0.04 0.09 0.14 rg
+BT 48 342 Td /F1 9 Tf (Seller: Seller) Tj ET
+0.04 0.09 0.14 rg
+BT 48 329 Td /F1 9 Tf (Seller wallet: 0x0000000000000000000000000000000000000002) Tj ET
+0.05 0.52 0.57 rg
+BT /F2 11 Tf 48 315 Td (ON-CHAIN REFERENCE) Tj ET
+0.04 0.09 0.14 rg
+0.04 0.09 0.14 rg
+BT 48 292 Td /F1 9 Tf (Escrow contract: Not deployed yet) Tj ET
+0.05 0.52 0.57 rg
+BT /F2 11 Tf 48 278 Td (INDEPENDENT VERIFICATION) Tj ET
+0.04 0.09 0.14 rg
+0.04 0.09 0.14 rg
+BT 48 255 Td /F1 9 Tf (Record ID: preview) Tj ET
+0.04 0.09 0.14 rg
+BT 48 242 Td /F1 9 Tf (Verify this document: http://localhost:3003/verify/preview) Tj ET
+0.04 0.09 0.14 rg
+BT 48 229 Td /F1 9 Tf (Snapshot SHA-256: abc123) Tj ET
+0.04 0.09 0.14 rg
+BT 48 216 Td /F1 9 Tf (The verification page confirms the signed snapshot and shows the public on-chain references) Tj ET
+0.04 0.09 0.14 rg
+BT 48 203 Td /F1 9 Tf (when available.) Tj ET
+0.05 0.52 0.57 rg
+BT /F2 11 Tf 48 189 Td (IMPORTANT) Tj ET
+0.04 0.09 0.14 rg
+0.04 0.09 0.14 rg
+BT 48 166 Td /F1 9 Tf (This document records trade details held by 2Pescrow at the time it was issued. It is not a) Tj ET
+0.04 0.09 0.14 rg
+BT 48 153 Td /F1 9 Tf (guarantee that goods or services were delivered, not a dispute decision, and not legal) Tj ET
+0.04 0.09 0.14 rg
+BT 48 140 Td /F1 9 Tf (advice. Always verify on-chain transactions independently.) Tj ET
+0.65 0.7 0.75 RG 48 52 m 564 52 l S
+BT /F1 8 Tf 48 37 Td (Verify at http://localhost:3003/verify/preview) Tj ET
+BT /F1 8 Tf 534 37 Td (1/1) Tj ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000185 00000 n 
+0000000260 00000 n 
+0000000396 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+3557
+%%EOF

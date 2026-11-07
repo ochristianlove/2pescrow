@@ -1,0 +1,9 @@
+{
+  "chain": "tron",
+  "buyerAddress": "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf",
+  "sellerAddress": "TNPeeaaFB7K9cmo4uFYgc6fbY3DaSAqh7j",
+  "tokenSymbol": "TRON_USDT",
+  "amountAtomic": "50000000",
+  "title": "Demo Tron USDT escrow",
+  "description": "Localhost demo — Tron chain ledger row (fund on-chain needs Shasta factory + TronLink)."
+}

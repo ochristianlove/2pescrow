@@ -1,0 +1,7 @@
+node_modules
+**/node_modules
+.git
+data/uploads
+contracts/cache
+contracts/artifacts
+**/*.log

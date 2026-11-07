@@ -1,0 +1,127 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: twopescrow
+      POSTGRES_PASSWORD: twopescrow
+      POSTGRES_DB: twopescrow
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # Local SMTP catch-all for magic-link / notification testing (no auth).
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  api:
+    image: 2pescrow-api:latest
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    # Existing image: install OpenSSL, regenerate Prisma client for musl+openssl3, then migrate+start.
+    command:
+      [
+        "sh",
+        "-c",
+        "apk add --no-cache openssl >/dev/null 2>&1 || true; npx prisma generate && npx prisma migrate deploy && node dist/index.js",
+      ]
+    ports:
+      - "3002:3000"
+      - "8000:3000"
+    environment:
+      DATABASE_URL: postgresql://twopescrow:twopescrow@postgres:5432/twopescrow
+      REDIS_URL: redis://redis:6379
+      PORT: 3000
+      UPLOAD_DIR: /data/uploads
+      ETHEREUM_RPC_URL: ${ETHEREUM_RPC_URL:-https://ethereum-rpc.publicnode.com}
+      ETHEREUM_CHAIN_ID: ${ETHEREUM_CHAIN_ID:-1}
+      ESCROW_FACTORY_ADDRESS: ${ESCROW_FACTORY_ADDRESS:-}
+      FEE_RECIPIENT_WALLET: ${FEE_RECIPIENT_WALLET:-}
+      DEPLOYER_WALLET: ${DEPLOYER_WALLET:-}
+      BUYER_WALLET: ${BUYER_WALLET:-}
+      SELLER_WALLET: ${SELLER_WALLET:-}
+      AGENT_WALLET: ${AGENT_WALLET:-}
+      USDC_ADDRESS: ${USDC_ADDRESS:-}
+      USDT_ADDRESS: ${USDT_ADDRESS:-}
+      THIRD_STABLECOIN_ADDRESS: ${THIRD_STABLECOIN_ADDRESS:-}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?set ADMIN_API_KEY in .env}
+      INDEXER_API_KEY: ${INDEXER_API_KEY:?set INDEXER_API_KEY in .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-ochristianlove@gmail.com}
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}"
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3003}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@2pescrow.local}
+      RESOLUTION_MODE: ${RESOLUTION_MODE:-admin}
+    volumes:
+      - uploads:/data/uploads
+      - ./apps/api/prisma:/app/apps/api/prisma
+    depends_on:
+      - postgres
+      - redis
+
+  indexer-tron:
+    image: 2pescrow-indexer-tron:latest
+    build:
+      context: .
+      dockerfile: docker/indexer-tron.Dockerfile
+    environment:
+      TRON_GRID_URL: ${TRON_GRID_URL:-https://api.shasta.trongrid.io}
+      TRONGRID_API_KEY: ${TRONGRID_API_KEY:-}
+      TRON_ESCROW_FACTORY_ADDRESS: ${TRON_ESCROW_FACTORY_ADDRESS:-}
+      API_INTERNAL_URL: http://api:3000
+      INDEXER_API_KEY: ${INDEXER_API_KEY:?set INDEXER_API_KEY in .env}
+    depends_on:
+      - api
+
+  indexer:
+    image: 2pescrow-indexer:latest
+    build:
+      context: .
+      dockerfile: docker/indexer.Dockerfile
+    environment:
+      ETHEREUM_RPC_URL: ${ETHEREUM_RPC_URL:-https://ethereum-rpc.publicnode.com}
+      ESCROW_FACTORY_ADDRESS: ${ESCROW_FACTORY_ADDRESS:-}
+      API_INTERNAL_URL: http://api:3000
+      INDEXER_API_KEY: ${INDEXER_API_KEY:?set INDEXER_API_KEY in .env}
+    depends_on:
+      - api
+
+  web:
+    image: 2pescrow-web:latest
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        # Leave empty by default so the bundle uses runtime config.js (API_PUBLIC_URL), not a baked-in host.
+        VITE_API_URL: ${VITE_API_URL:-}
+        VITE_WALLETCONNECT_PROJECT_ID: ${VITE_WALLETCONNECT_PROJECT_ID:-}
+        VITE_TRON_RPC_URL: ${TRON_WEB_RPC_URL:-${TRON_GRID_URL:-https://api.shasta.trongrid.io}}
+        VITE_TRON_NETWORK: ${TRON_APP_NETWORK:-}
+    # Host 3000/3001 often taken — web UI on 3003. Admin: http://localhost:3003/admin
+    ports:
+      - "3003:3001"
+    environment:
+      # Runtime override written to /config.js on container start (no rebuild needed).
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:3002}
+      VITE_ETHEREUM_RPC_URL: ${ETHEREUM_RPC_URL:-https://ethereum-rpc.publicnode.com}
+      VITE_WALLETCONNECT_PROJECT_ID: ${VITE_WALLETCONNECT_PROJECT_ID:-}
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  uploads:
