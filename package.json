@@ -12,6 +12,7 @@
   },
   "scripts": {
     "build": "npm run build -w @2pescrow/shared && npm run build -w @2pescrow/api && npm run build -w @2pescrow/indexer && npm run build -w @2pescrow/indexer-tron && npm run build -w @2pescrow/web",
+    "start": "npm run prisma:migrate -w @2pescrow/api && npm run start -w @2pescrow/api",
     "dev:api": "npm run dev -w @2pescrow/api",
     "dev:indexer": "npm run dev -w @2pescrow/indexer",
     "dev:web": "npm run dev -w @2pescrow/web",
