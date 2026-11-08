@@ -2,11 +2,9 @@ import { http, createConfig } from "wagmi";
 import { baseAccount, injected, walletConnect } from "wagmi/connectors";
 import { mainnet } from "viem/chains";
 
-const localTestProjectId = import.meta.env.DEV && typeof window !== "undefined" &&
-  ["localhost", "127.0.0.1"].includes(window.location.hostname)
-  ? "b56e18d47c72ab683b10814fe9495694"
-  : "";
-const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID?.trim() || localTestProjectId;
+const projectId =
+  import.meta.env.VITE_WALLETCONNECT_PROJECT_ID?.trim() ||
+  "99700e35ab779a3fdd3918084d55bd02";
 export const walletConnectProjectId = projectId;
 export const walletConnectConfigured = Boolean(projectId);
 

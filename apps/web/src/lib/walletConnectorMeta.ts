@@ -299,6 +299,8 @@ export async function resolveWalletPickerOptions(all: WalletPickerOption[]): Pro
   }
 
   const always: WalletPickerOption[] = [];
+  const metaMask = pool.find((o) => o.connector?.id === "metaMask" || o.connector?.id.toLowerCase() === "io.metamask");
+  if (metaMask) always.push(withResolvedIcon({ ...metaMask, key: "always-metamask", name: "MetaMask" }));
   const base = pool.find((o) => isBaseFallbackConnector(o.connector));
   if (base) always.push(withResolvedIcon({ ...base, key: "always-base", name: "Base" }));
   if (wc) {
