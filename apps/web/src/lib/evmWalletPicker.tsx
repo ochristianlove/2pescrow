@@ -374,8 +374,8 @@ function EvmWalletPickerModal({
                     {opt.connector && isWalletConnectConnector(opt.connector) && (
                       <span className="muted wallet-picker-sub">
                         {isMobileClient()
-                          ? "Opens WalletConnect — choose your wallet app and approve"
-                          : "Scan QR with your mobile wallet"}
+                          ? "Opens WalletConnect — choose MetaMask or another wallet and approve"
+                          : "MetaMask in this browser, or scan the QR with a mobile wallet"}
                       </span>
                     )}
                     {opt.connector && isBaseFallbackConnector(opt.connector) && (

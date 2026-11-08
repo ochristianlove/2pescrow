@@ -1,6 +1,9 @@
+import { AppKit, AppKitProvider } from "@reown/appkit-react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
+import { View } from "react-native";
+import { appKit } from "../src/appkit";
 import { AuthProvider, useAuth } from "../src/auth";
 import { colors } from "../src/theme";
 
@@ -18,27 +21,41 @@ function Gate() {
   return null;
 }
 
+function WalletConnectShell({ children }: { children: ReactNode }) {
+  if (!appKit) return <>{children}</>;
+  return (
+    <AppKitProvider instance={appKit}>
+      {children}
+      <View pointerEvents="box-none" style={{ position: "absolute", height: "100%", width: "100%" }}>
+        <AppKit />
+      </View>
+    </AppKitProvider>
+  );
+}
+
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <StatusBar style="light" />
-      <Gate />
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: colors.bg },
-          headerTintColor: colors.text,
-          headerShadowVisible: false,
-          contentStyle: { backgroundColor: colors.bg },
-        }}
-      >
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-        <Stack.Screen name="auth/verify" options={{ title: "Sign in" }} />
-        <Stack.Screen name="(app)" options={{ headerShown: false }} />
-        <Stack.Screen name="new-trade" options={{ title: "New trade" }} />
-        <Stack.Screen name="join-trade" options={{ title: "Join a trade" }} />
-        <Stack.Screen name="trade/[id]" options={{ title: "Trade" }} />
-      </Stack>
+      <WalletConnectShell>
+        <StatusBar style="light" />
+        <Gate />
+        <Stack
+          screenOptions={{
+            headerStyle: { backgroundColor: colors.bg },
+            headerTintColor: colors.text,
+            headerShadowVisible: false,
+            contentStyle: { backgroundColor: colors.bg },
+          }}
+        >
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/verify" options={{ title: "Sign in" }} />
+          <Stack.Screen name="(app)" options={{ headerShown: false }} />
+          <Stack.Screen name="new-trade" options={{ title: "New trade" }} />
+          <Stack.Screen name="join-trade" options={{ title: "Join a trade" }} />
+          <Stack.Screen name="trade/[id]" options={{ title: "Trade" }} />
+        </Stack>
+      </WalletConnectShell>
     </AuthProvider>
   );
 }

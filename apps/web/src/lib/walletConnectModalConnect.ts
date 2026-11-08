@@ -24,5 +24,5 @@ export function walletConnectPendingHint(): string {
   if (isMobileClient()) {
     return "Complete the connection in the WalletConnect window, then approve in your wallet app. Keep this page open until you finish.";
   }
-  return "Scan the QR code with your mobile wallet. Keep this page open until you approve — closing this screen cancels the connection.";
+  return "Use MetaMask in this browser, or scan the QR code with a mobile wallet. Keep this page open until you approve — closing this screen cancels the connection.";
 }

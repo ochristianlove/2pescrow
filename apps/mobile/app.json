@@ -20,7 +20,8 @@
       "associatedDomains": ["applinks:2pescrow.com"],
       "infoPlist": {
         "NSAllowsLocalNetworking": true,
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": ["metamask", "trust", "rainbow", "safe"]
       }
     },
     "android": {
@@ -43,13 +44,14 @@
         }
       ]
     },
-    "plugins": ["expo-router", "expo-secure-store"],
+    "plugins": ["expo-router", "expo-secure-store", "./queries.js"],
     "experiments": { "typedRoutes": false },
     "extra": {
       "apiUrl": "http://10.148.130.68:3002",
       "webOrigin": "http://10.148.130.68:3003",
       "privacyPolicyUrl": "https://2pescrow.com/privacy",
-      "supportEmail": "support@2pescrow.com"
+      "supportEmail": "support@2pescrow.com",
+      "walletConnectProjectId": "99700e35ab779a3fdd3918084d55bd02"
     }
   }
 }

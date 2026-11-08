@@ -65,10 +65,10 @@ export const wagmiConfig = createConfig({
             qrModalOptions: {
               enableExplorer: true,
               explorerRecommendedWalletIds: [
-                "4622a2cb2a569f3da8ca4cc045b9c25f4a56945b",
-                "c57ca95a4757518a8676d5b496a380d5201d169",
+                "c57ca95b47569778a828d19178114f2db125b25b778adf5cba72bd778e231769",
+                "4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0",
                 "fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa",
-                "1ae92b26df02f80511c108d6cb6d4100b7c601c0027150b5a0bb5dc408e2748",
+                "1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369",
               ],
             },
           }),

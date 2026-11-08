@@ -1,13 +1,42 @@
-import { useCallback, useState } from "react";
+import { useAccount, useAppKit } from "@reown/appkit-react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Linking, ScrollView, Share, Text, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { api, ApiError } from "../../src/api";
+import { walletConnectReady } from "../../src/appkit";
 import { useAuth } from "../../src/auth";
 import { apiUrl, privacyUrl } from "../../src/config";
 import { shortAddr } from "../../src/format";
 import { colors } from "../../src/theme";
 import type { ReferralView } from "../../src/types";
 import { Button, Card, Field, Notice } from "../../src/ui";
+
+function WalletConnectLink({ onAddress }: { onAddress: (address: string) => Promise<void> }) {
+  const { open, disconnect } = useAppKit();
+  const { address, isConnected } = useAccount();
+  const sent = useRef("");
+
+  useEffect(() => {
+    if (!isConnected || !address || sent.current === address) return;
+    sent.current = address;
+    void onAddress(address).catch(() => {
+      sent.current = "";
+    });
+  }, [address, isConnected, onAddress]);
+
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Button
+        label={isConnected && address ? `Connected ${shortAddr(address)}` : "Connect with WalletConnect"}
+        onPress={() => open({ view: "Connect" })}
+      />
+      <Text style={{ color: colors.muted, marginTop: 8, marginBottom: 8, lineHeight: 20 }}>
+        Opens WalletConnect. Choose MetaMask and approve. The address is linked to this account.
+      </Text>
+      {isConnected ? <Button label="Disconnect WalletConnect" tone="ghost" onPress={() => { sent.current = ""; void disconnect(); }} /> : null}
+    </View>
+  );
+}
 
 export default function AccountScreen() {
   const { user, refresh, signOut } = useAuth();
@@ -41,6 +70,21 @@ export default function AccountScreen() {
       setBusy(null);
     }
   }
+
+  const linkConnectedAddress = useCallback(async (address: string) => {
+    setBusy("wallet");
+    setError(null);
+    try {
+      await api("/v1/auth/link-wallet", { method: "POST", body: JSON.stringify({ address, chainKind: "evm" }) });
+      await refresh();
+      setNote("Wallet linked to this account. Funding still has to be signed in the wallet.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not link that address.");
+      throw err;
+    } finally {
+      setBusy(null);
+    }
+  }, [refresh]);
 
   async function linkWallet() {
     setBusy("wallet");
@@ -84,6 +128,13 @@ export default function AccountScreen() {
         {(user?.wallets || []).length === 0 ? <Text style={{ color: colors.muted, marginBottom: 8 }}>None linked yet.</Text> : user?.wallets?.map((item) => (
           <Text key={item.address} style={{ color: colors.gold, marginBottom: 6 }}>{shortAddr(item.address)} · {item.chainKind || "wallet"}</Text>
         ))}
+        {walletConnectReady ? (
+          <WalletConnectLink onAddress={linkConnectedAddress} />
+        ) : (
+          <Text style={{ color: colors.muted, marginBottom: 12, lineHeight: 20 }}>
+            WalletConnect is not configured. Set EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID from dashboard.reown.com.
+          </Text>
+        )}
         <Field label="Wallet address" autoCapitalize="none" autoCorrect={false} value={wallet} onChangeText={setWallet} placeholder="0x… or Tron address" />
         <Button label="Link wallet" tone="ghost" onPress={() => void linkWallet()} busy={busy === "wallet"} />
       </Card>

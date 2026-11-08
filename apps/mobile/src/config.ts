@@ -23,3 +23,16 @@ export function webOrigin(): string {
 export function privacyUrl(): string {
   return `${webOrigin()}/privacy`;
 }
+
+const localTestProjectId = "b56e18d47c72ab683b10814fe9495694";
+
+/** Reown project id. The env value wins, then app.json extra. Dev with neither uses Reown's public localhost id. */
+export function walletConnectProjectId(): string {
+  const fromEnv = clean(process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID);
+  if (fromEnv) return fromEnv;
+  const extra = Constants.expoConfig?.extra as { walletConnectProjectId?: string } | undefined;
+  const fromExtra = clean(extra?.walletConnectProjectId);
+  if (fromExtra) return fromExtra;
+  if (typeof __DEV__ !== "undefined" && __DEV__) return localTestProjectId;
+  return "";
+}
