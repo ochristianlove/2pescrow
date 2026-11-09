@@ -637,6 +637,7 @@
 }
 .home-faq-list summary { cursor: pointer; font-weight: 700; }
 .home-faq-list p { margin: 0.65rem 0 0; color: var(--muted); }
+.home-faq-more { margin-top: 0.9rem; }
 
 .home-notes { margin: 2rem 0 0.5rem; }
 .home-notes h3 { margin: 0.35rem 0; font-size: 1.12rem; line-height: 1.25; }

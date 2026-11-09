@@ -6,7 +6,7 @@ import "./FaqPage.css";
 
 type FaqItem = { id: string; question: string; answer: string };
 
-const FALLBACK_FAQ: FaqItem[] = [
+export const FALLBACK_FAQ: FaqItem[] = [
   {
     id: "referrer",
     question: "What does a referrer earn?",

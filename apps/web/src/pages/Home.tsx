@@ -10,12 +10,52 @@ import { usePlatformSettings } from "../lib/platformSettings";
 import { SocialMark, socialLinks } from "../components/CommunityLinks";
 import { eventLabel } from "../lib/eventLabel";
 import { TradePartyBadge } from "../components/TradePartyBadge";
+import { FALLBACK_FAQ } from "./Faq";
 import "./HomePage.css";
 
 type HomeReferral = {
   enrolled: boolean;
   referralUrl?: string;
 };
+
+const HOME_FAQ_PREVIEW = 3;
+
+function HomeFaqPreview() {
+  const { navigate } = useRouter();
+  const { t } = useLanguage();
+  const [items, setItems] = useState(FALLBACK_FAQ.slice(0, HOME_FAQ_PREVIEW));
+
+  useEffect(() => {
+    let cancelled = false;
+    api<{ id: string; question: string; answer: string }[]>("/v1/faq")
+      .then((rows) => {
+        if (!cancelled && rows.length > 0) setItems(rows.slice(0, HOME_FAQ_PREVIEW));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <section className="home-faq" aria-labelledby="home-faq-title">
+      <div className="section-head">
+        <h2 id="home-faq-title">{t("FAQ")}</h2>
+      </div>
+      <div className="home-faq-list">
+        {items.map((entry) => (
+          <details key={entry.id}>
+            <summary>{t(entry.question)}</summary>
+            <p>{t(entry.answer)}</p>
+          </details>
+        ))}
+      </div>
+      <button type="button" className="home-faq-more" onClick={() => navigate("/faq")}>
+        {t("Load more")}
+      </button>
+    </section>
+  );
+}
 
 /** Marketing landing — green + gold brand system (HomePage.css). */
 export function HomePage() {
@@ -382,6 +422,8 @@ export function HomePage() {
           )}
         </div>
       </section>
+
+      <HomeFaqPreview />
 
       <section className="home-notes" aria-labelledby="home-notes-title">
         <div className="section-head">
