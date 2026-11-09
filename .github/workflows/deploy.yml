@@ -25,6 +25,8 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0 ndk;26.1.10909125"
       - run: npm ci
       - name: Generate the Android project
         working-directory: apps/mobile
