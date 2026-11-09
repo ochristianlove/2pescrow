@@ -38,7 +38,7 @@ jobs:
         run: npx expo prebuild --platform android --non-interactive
       - name: Build a debug APK
         working-directory: apps/mobile/android
-        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon -Pandroid.kotlinVersion=1.9.24
       - uses: actions/upload-artifact@v4
         with:
           name: 2pescrow-android
