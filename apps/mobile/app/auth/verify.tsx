@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { api, ApiError, tokenFromInput } from "../../src/api";
@@ -12,12 +12,15 @@ export default function VerifyScreen() {
   const { signInWithToken } = useAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const started = useRef<string | null>(null);
 
   useEffect(() => {
     if (!token) {
       setError("This sign-in link has no token.");
       return;
     }
+    if (started.current === token) return;
+    started.current = token;
     let cancelled = false;
     (async () => {
       try {

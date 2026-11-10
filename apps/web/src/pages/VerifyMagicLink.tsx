@@ -20,8 +20,11 @@ export function VerifyMagicLinkPage() {
       setErr(t("Missing token"));
       return;
     }
-    setStatus(t("Verifying magic link…"));
-    (async () => {
+    let cancelled = false;
+
+    const verifyOnWeb = async () => {
+      if (cancelled) return;
+      setStatus(t("Verifying magic link…"));
       try {
         const referralCode = peekReferralCode();
         const res = await api<{ token: string; user: SessionUser }>("/v1/auth/magic-link/verify", {
@@ -29,6 +32,7 @@ export function VerifyMagicLinkPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token, referralCode: referralCode || undefined }),
         });
+        if (cancelled) return;
         clearReferralCode();
         setSession(res.token, res.user);
         const joinCode = localStorage.getItem("2pescrow_join_code");
@@ -41,9 +45,44 @@ export function VerifyMagicLinkPage() {
           navigate(workspaceEntryPath(res.user));
         }
       } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
+        if (!cancelled) setErr(e instanceof Error ? e.message : String(e));
       }
-    })();
+    };
+
+    const phone = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const stayOnWeb = params.get("web") === "1";
+    if (phone && !stayOnWeb) {
+      setStatus(t("Opening the 2Pescrow app…"));
+      const fallback = new URL(window.location.href);
+      fallback.searchParams.set("web", "1");
+      const encodedToken = encodeURIComponent(token);
+      if (/Android/i.test(navigator.userAgent)) {
+        const fallbackUrl = encodeURIComponent(fallback.toString());
+        window.location.href = `intent://auth/verify?token=${encodedToken}#Intent;scheme=twopescrow;package=com.twopescrow.app;S.browser_fallback_url=${fallbackUrl};end`;
+      } else {
+        window.location.href = `twopescrow://auth/verify?token=${encodedToken}`;
+        const timer = window.setTimeout(() => {
+          if (document.visibilityState === "visible") void verifyOnWeb();
+        }, 1500);
+        const onHide = () => {
+          if (document.visibilityState === "hidden") cancelled = true;
+        };
+        document.addEventListener("visibilitychange", onHide);
+        return () => {
+          cancelled = true;
+          window.clearTimeout(timer);
+          document.removeEventListener("visibilitychange", onHide);
+        };
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void verifyOnWeb();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per token; t() only for initial error copy
   }, [navigate, setSession]);
 
@@ -51,6 +90,18 @@ export function VerifyMagicLinkPage() {
     <div className="page narrow">
       <h1>{t("Magic link")}</h1>
       {err ? <p className="error-banner">{err}</p> : <p className="muted">{status}</p>}
+      {!err && status === t("Opening the 2Pescrow app…") && (
+        <button
+          type="button"
+          onClick={() => {
+            const next = new URL(window.location.href);
+            next.searchParams.set("web", "1");
+            window.location.assign(next.toString());
+          }}
+        >
+          {t("Continue on the website")}
+        </button>
+      )}
       {err && (
         <button type="button" onClick={() => navigate("/signin")}>
           {t("Request a new link")}
