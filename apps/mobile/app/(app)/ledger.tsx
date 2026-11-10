@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
-import { FlatList, RefreshControl, Text } from "react-native";
+import { FlatList, RefreshControl, Text, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { api, ApiError } from "../../src/api";
+import { AppBottomNav } from "../../src/AppBottomNav";
 import { formatAmount, tokenLabel } from "../../src/format";
 import { colors } from "../../src/theme";
 import type { TradeRow } from "../../src/types";
@@ -24,8 +25,9 @@ export default function LedgerScreen() {
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   return (
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
     <FlatList
-      style={{ backgroundColor: colors.bg }}
+      style={{ backgroundColor: colors.bg, flex: 1 }}
       contentContainerStyle={{ padding: 20 }}
       data={rows}
       keyExtractor={(item) => item.id}
@@ -45,5 +47,7 @@ export default function LedgerScreen() {
         </Text>
       )}
     />
+    <AppBottomNav active="escrows" />
+    </View>
   );
 }

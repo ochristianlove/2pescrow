@@ -5,10 +5,8 @@ export default function AppTabs() {
   return (
     <Tabs
       screenOptions={{
-        headerStyle: { backgroundColor: colors.bg },
-        headerTintColor: colors.text,
-        headerShadowVisible: false,
-        tabBarStyle: { backgroundColor: colors.bg, borderTopColor: colors.line },
+        headerShown: false,
+        tabBarStyle: { display: "none" },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
       }}

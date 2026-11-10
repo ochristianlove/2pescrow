@@ -14,8 +14,9 @@ function Gate() {
 
   useEffect(() => {
     if (!ready) return;
-    const inApp = segments[0] === "(app)" || segments[0] === "trade" || segments[0] === "new-trade" || segments[0] === "join-trade";
-    if (!user && inApp) router.replace("/sign-in");
+    const inApp = segments[0] === "(app)" || segments[0] === "trade" || segments[0] === "new-trade";
+    const publicTrades = segments[0] === "(app)" && (segments[1] === "ledger" || segments[1] === "trades");
+    if (!user && inApp && !publicTrades) router.replace("/sign-in");
   }, [ready, user, segments, router]);
 
   return null;
@@ -52,8 +53,8 @@ export default function RootLayout() {
           <Stack.Screen name="auth/verify" options={{ title: "Sign in" }} />
           <Stack.Screen name="(app)" options={{ headerShown: false }} />
           <Stack.Screen name="new-trade" options={{ title: "New trade" }} />
-          <Stack.Screen name="join-trade" options={{ title: "Join a trade" }} />
-          <Stack.Screen name="trade/[id]" options={{ title: "Trade" }} />
+          <Stack.Screen name="join-trade" options={{ headerShown: false }} />
+          <Stack.Screen name="trade/[id]" options={{ headerShown: false }} />
         </Stack>
       </WalletConnectShell>
     </AuthProvider>

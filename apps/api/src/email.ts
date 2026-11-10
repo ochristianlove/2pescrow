@@ -6,12 +6,12 @@ function escapeHtml(value: string) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-/** Turn raw message text into HTML, keeping http(s) addresses as real links. */
+/** Turn raw message text into HTML, keeping web and app addresses as real links. */
 function textToHtml(text: string) {
   return text
-    .split(/(https?:\/\/[^\s]+)/g)
+    .split(/(https?:\/\/[^\s]+|twopescrow:\/\/[^\s]+)/g)
     .map((part) => {
-      if (!/^https?:\/\//.test(part)) return escapeHtml(part);
+      if (!/^(https?:\/\/|twopescrow:\/\/)/.test(part)) return escapeHtml(part);
       const href = escapeHtml(part);
       return `<a href="${href}" style="color:#3ecf8e;text-decoration:underline;word-break:break-all">${href}</a>`;
     })
@@ -62,14 +62,18 @@ async function sendPlainEmail(opts: {
 export async function sendMagicLinkEmail(opts: {
   to: string;
   magicLink: string;
+  appLink: string;
   log: { info: (obj: object, msg?: string) => void; warn?: (obj: object, msg?: string) => void };
 }): Promise<{ sent: true } | { sent: false; reason: string }> {
   const subject = "Your 2Pescrow sign-in link";
   const text = [
     "Hi,",
     "",
-    "Use this one-time link to sign in to 2Pescrow (valid for 30 minutes):",
+    "Use this one-time link to sign in on the website (valid for 30 minutes):",
     opts.magicLink,
+    "",
+    "Or open the 2Pescrow app:",
+    opts.appLink,
     "",
     "If you did not request this, you can ignore this email.",
     "",

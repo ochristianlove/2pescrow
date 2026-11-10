@@ -2,6 +2,8 @@ import { useCallback, useState } from "react";
 import { KeyboardAvoidingView, Linking, Platform, ScrollView, Share, Text, View } from "react-native";
 import { useLocalSearchParams, useFocusEffect } from "expo-router";
 import { api, ApiError } from "../../src/api";
+import { AppBottomNav } from "../../src/AppBottomNav";
+import { AppTopBar } from "../../src/AppTopBar";
 import { useAuth } from "../../src/auth";
 import { webOrigin } from "../../src/config";
 import { formatAmount, shortAddr, tokenLabel } from "../../src/format";
@@ -62,8 +64,12 @@ export default function TradeScreen() {
 
   if (!trade) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, padding: 20 }}>
-        {error ? <Notice text={error} /> : <Text style={{ color: colors.muted }}>Loading the trade…</Text>}
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <AppTopBar />
+        <View style={{ flex: 1, padding: 20 }}>
+          {error ? <Notice text={error} /> : <Text style={{ color: colors.muted }}>Loading the trade…</Text>}
+        </View>
+        <AppBottomNav active="escrows" />
       </View>
     );
   }
@@ -72,7 +78,9 @@ export default function TradeScreen() {
   const canDispute = trade.status === "Funded" || trade.status === "InProgress";
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <AppTopBar />
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         {error ? <Notice text={error} /> : null}
         <Text style={{ color: colors.text, fontSize: 24, fontWeight: "700" }}>{trade.title}</Text>
@@ -114,5 +122,7 @@ export default function TradeScreen() {
         ) : null}
       </ScrollView>
     </KeyboardAvoidingView>
+    <AppBottomNav active="escrows" />
+    </View>
   );
 }

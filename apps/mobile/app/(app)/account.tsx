@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Linking, ScrollView, Share, Text, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { api, ApiError } from "../../src/api";
+import { AppBottomNav } from "../../src/AppBottomNav";
 import { walletConnectReady } from "../../src/appkit";
 import { useAuth } from "../../src/auth";
 import { apiUrl, privacyUrl } from "../../src/config";
@@ -116,7 +117,8 @@ export default function AccountScreen() {
   }
 
   return (
-    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <ScrollView style={{ backgroundColor: colors.bg, flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>
       <Text style={{ color: colors.text, fontSize: 22, fontWeight: "700" }}>{user?.displayName || user?.email || "Account"}</Text>
       <Text style={{ color: colors.muted, marginTop: 4, marginBottom: 16 }}>{user?.email}</Text>
       {error ? <Notice text={error} /> : null}
@@ -155,5 +157,7 @@ export default function AccountScreen() {
       <Button label="Sign out" tone="danger" onPress={() => void signOut()} />
       <Text style={{ color: colors.muted, marginTop: 18, fontSize: 12 }}>API {apiUrl()}</Text>
     </ScrollView>
+    <AppBottomNav active="profile" />
+    </View>
   );
 }

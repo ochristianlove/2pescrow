@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { api, ApiError } from "../../src/api";
+import { AppBottomNav } from "../../src/AppBottomNav";
 import { colors } from "../../src/theme";
 import type { FaqItem } from "../../src/types";
 import { Notice } from "../../src/ui";
@@ -17,7 +18,8 @@ export default function FaqScreen() {
   }, []);
 
   return (
-    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <ScrollView style={{ backgroundColor: colors.bg, flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
       <Text style={{ color: colors.muted, marginBottom: 14, lineHeight: 20 }}>The same published questions as the website.</Text>
       {error ? <Notice text={error} /> : null}
       {rows.map((item) => {
@@ -31,5 +33,7 @@ export default function FaqScreen() {
       })}
       {!error && rows.length === 0 ? <Text style={{ color: colors.muted }}>No questions are published yet.</Text> : null}
     </ScrollView>
+    <AppBottomNav />
+    </View>
   );
 }

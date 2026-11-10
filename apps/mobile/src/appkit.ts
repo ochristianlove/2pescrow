@@ -57,7 +57,7 @@ export const appKit = walletConnectReady
       features: {
         swaps: false,
         onramp: false,
-        socials: false,
+        socials: [],
         showWallets: true,
       },
       metadata: {

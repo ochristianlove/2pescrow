@@ -38,7 +38,7 @@ export function Button({
       onPress={onPress}
       style={[styles.button, tone === "ghost" && styles.ghost, tone === "danger" && styles.danger]}
     >
-      {busy ? <ActivityIndicator color={tone === "primary" ? "#062116" : colors.text} /> : <Text style={[styles.buttonText, tone !== "primary" && { color: colors.text }]}>{label}</Text>}
+      {busy ? <ActivityIndicator color={tone === "primary" ? colors.primaryFg : colors.text} /> : <Text style={[styles.buttonText, tone !== "primary" && { color: colors.text }]}>{label}</Text>}
     </Pressable>
   );
 }
@@ -52,8 +52,8 @@ export function Card({ children }: { children: ReactNode }) {
 }
 
 const styles = StyleSheet.create({
-  title: { color: colors.text, fontSize: 28, fontWeight: "700", letterSpacing: -0.4 },
-  subtitle: { color: colors.muted, marginTop: 6, fontSize: 15, lineHeight: 21 },
+  title: { color: colors.text, fontSize: 32, fontWeight: "800", letterSpacing: -0.8, lineHeight: 34 },
+  subtitle: { color: colors.muted, marginTop: 8, fontSize: 16, lineHeight: 24 },
   label: { color: colors.muted, marginBottom: 6, fontSize: 13 },
   input: {
     color: colors.text,
@@ -67,15 +67,15 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: colors.accent,
-    borderRadius: 12,
-    minHeight: 48,
+    borderRadius: 10,
+    minHeight: 46,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
   },
-  ghost: { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.line },
+  ghost: { backgroundColor: "transparent", borderWidth: 1, borderColor: "rgba(232, 184, 74, 0.38)" },
   danger: { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.danger },
-  buttonText: { color: "#062116", fontWeight: "700", fontSize: 16 },
+  buttonText: { color: colors.primaryFg, fontWeight: "700", fontSize: 15 },
   notice: { color: colors.danger, marginBottom: 12, lineHeight: 20 },
   card: {
     backgroundColor: colors.card,

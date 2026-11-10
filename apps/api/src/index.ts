@@ -299,8 +299,9 @@ app.post("/v1/auth/magic-link", async (req, reply) => {
   const expiresAt = new Date(Date.now() + 1000 * 60 * 30);
   await upsertUserByEmail(email);
   const magicLink = `${config.webOrigin}/auth/verify?token=${raw}`;
+  const appLink = `twopescrow://auth/verify?token=${raw}`;
   await prisma.magicLink.create({ data: { email, tokenHash, expiresAt } });
-  const delivery = await sendMagicLinkEmail({ to: email, magicLink, log: req.log });
+  const delivery = await sendMagicLinkEmail({ to: email, magicLink, appLink, log: req.log });
   if (!delivery.sent) {
     await prisma.magicLink.delete({ where: { tokenHash } }).catch(() => undefined);
     return reply.code(503).send({

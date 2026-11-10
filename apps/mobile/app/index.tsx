@@ -1,6 +1,7 @@
 import { ActivityIndicator, View } from "react-native";
 import { Redirect } from "expo-router";
 import { useAuth } from "../src/auth";
+import { IntroHome } from "../src/IntroHome";
 import { colors } from "../src/theme";
 
 export default function Index() {
@@ -12,6 +13,6 @@ export default function Index() {
       </View>
     );
   }
-  if (!user) return <Redirect href="/sign-in" />;
+  if (!user) return <IntroHome />;
   return <Redirect href="/(app)/trades" />;
 }
