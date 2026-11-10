@@ -229,6 +229,20 @@ a:hover { text-decoration: underline; }
   overflow-wrap: anywhere;
 }
 .profile-page-head { align-items: flex-start; }
+.profile-page-head > div,
+.dash-welcome-card {
+  min-width: 0;
+  max-width: 100%;
+}
+.profile-page-head h1,
+.profile-page-email,
+.profile-display-name-value,
+.dash-welcome-title,
+.dash-welcome-name {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .profile-page-email { margin: 0.2rem 0 0.35rem; font-size: 0.92rem; }
 .profile-display-name-card { margin-bottom: 1rem; }
 .profile-display-name-head {

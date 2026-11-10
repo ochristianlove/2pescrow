@@ -54,7 +54,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/failed to fetch|networkerror|load failed/i.test(msg)) {
-      throw new Error(`Cannot reach API at ${requireApiBase()}. Is the API running? (${msg})`);
+      throw new Error("Cannot reach the server right now. Try again in a moment.");
     }
     throw e;
   }
