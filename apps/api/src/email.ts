@@ -24,6 +24,7 @@ async function sendPlainEmail(opts: {
   to: string;
   subject: string;
   text: string;
+  html?: string;
   log: { info: (obj: object, msg?: string) => void; warn?: (obj: object, msg?: string) => void };
 }): Promise<{ sent: true } | { sent: false; reason: string }> {
   const smtp = await resolveSmtpConfig();
@@ -40,7 +41,9 @@ async function sendPlainEmail(opts: {
     const mark = logo
       ? `<img src="cid:brand@2pescrow" alt="2Pescrow" height="36" style="height:36px;width:auto;display:block;border:0" />`
       : "";
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /></head><body bgcolor="#071018" style="margin:0;padding:0;background:#071018;width:100%"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#071018" style="background:#071018;width:100%;margin:0;padding:0"><tr><td bgcolor="#071018" style="background:#071018;padding:32px 20px;font-family:Segoe UI,sans-serif;color:#e8f4f2">${mark}<div style="margin-top:22px;line-height:1.6;white-space:pre-wrap;font-size:15px;color:#e8f4f2">${textToHtml(opts.text)}</div></td></tr></table></body></html>`;
+    const body = opts.html
+      ?? `<div style="margin-top:22px;line-height:1.6;white-space:pre-wrap;font-size:15px;color:#e8f4f2">${textToHtml(opts.text)}</div>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /></head><body bgcolor="#071018" style="margin:0;padding:0;background:#071018;width:100%"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#071018" style="background:#071018;width:100%;margin:0;padding:0"><tr><td bgcolor="#071018" style="background:#071018;padding:32px 20px;font-family:Segoe UI,sans-serif;color:#e8f4f2">${mark}${body}</td></tr></table></body></html>`;
     await tx.sendMail({
       from: smtp.from,
       to: opts.to,
@@ -62,25 +65,24 @@ async function sendPlainEmail(opts: {
 export async function sendMagicLinkEmail(opts: {
   to: string;
   magicLink: string;
-  appLink: string;
   log: { info: (obj: object, msg?: string) => void; warn?: (obj: object, msg?: string) => void };
 }): Promise<{ sent: true } | { sent: false; reason: string }> {
   const subject = "Your 2Pescrow sign-in link";
+  const href = escapeHtml(opts.magicLink);
   const text = [
     "Hi,",
     "",
-    "Use this one-time link to sign in on the website (valid for 30 minutes):",
-    opts.magicLink,
+    "Sign in to 2Pescrow. This link is valid for 30 minutes.",
     "",
-    "Or open the 2Pescrow app:",
-    opts.appLink,
+    opts.magicLink,
     "",
     "If you did not request this, you can ignore this email.",
     "",
     "— 2Pescrow",
   ].join("\n");
+  const html = `<p style="margin:22px 0 0;font-family:Segoe UI,sans-serif;font-size:15px;line-height:1.6;color:#e8f4f2">Sign in to 2Pescrow. This button is valid for 30 minutes.</p><table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:18px"><tr><td bgcolor="#3ecf8e" style="border-radius:10px"><a href="${href}" style="display:inline-block;padding:14px 22px;font-family:Segoe UI,sans-serif;font-size:15px;font-weight:700;color:#042016;text-decoration:none">Sign in</a></td></tr></table><p style="margin:18px 0 0;font-family:Segoe UI,sans-serif;font-size:13px;line-height:1.6;color:#8aa3ad">If you did not request this, you can ignore this email.</p>`;
 
-  return sendPlainEmail({ to: opts.to, subject, text, log: opts.log });
+  return sendPlainEmail({ to: opts.to, subject, text, html, log: opts.log });
 }
 
 export async function sendAdminEmailMessage(opts: {
