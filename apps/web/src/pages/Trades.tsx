@@ -19,7 +19,7 @@ export function TradesPage() {
   const { t } = useLanguage();
   const { syncEscrowIds } = useLiveNotifications();
   const [escrows, setEscrows] = useState<Escrow[]>([]);
-  const [showPublicLedger, setShowPublicLedger] = useState(false);
+  const [showPublicLedger, setShowPublicLedger] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -27,14 +27,13 @@ export function TradesPage() {
       if (user && !showPublicLedger) {
         setEscrows(await api<Escrow[]>("/v1/me/trades", { headers: authHeaders() }));
       } else {
-        const q = address ? `?wallet=${address}` : "";
-        setEscrows(await api<Escrow[]>(`/v1/escrows${q}`));
+        setEscrows(await api<Escrow[]>("/v1/escrows"));
       }
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : t("Failed to load"));
     }
-  }, [address, showPublicLedger, user, authHeaders, t]);
+  }, [showPublicLedger, user, authHeaders, t]);
 
   useLiveTradeUpdates(load, { enabled: Boolean(user) || showPublicLedger });
 
