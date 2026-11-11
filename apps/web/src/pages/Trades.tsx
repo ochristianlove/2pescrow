@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAccount } from "wagmi";
 import { api, shortAddr } from "../lib/api";
 import { useLiveTradeUpdates } from "../lib/useLiveTradeUpdates";
@@ -12,28 +12,42 @@ import { useAuth } from "../lib/auth";
 import { useTradeListWindow } from "../lib/useTradeListWindow";
 import { TradePartyBadge } from "../components/TradePartyBadge";
 
+const EMPTY_TRADES: Escrow[] = [];
+
 export function TradesPage() {
   const { address } = useAccount();
   const { user, authHeaders } = useAuth();
   const { navigate } = useRouter();
   const { t } = useLanguage();
   const { syncEscrowIds } = useLiveNotifications();
-  const [escrows, setEscrows] = useState<Escrow[]>([]);
-  const [showPublicLedger, setShowPublicLedger] = useState(true);
+  const [showPublicLedger, setShowPublicLedger] = useState(false);
+  const scope = showPublicLedger ? "public" : user ? `mine:${user.id}` : "signed-out";
+  const activeScope = useRef(scope);
+  activeScope.current = scope;
+  const requestId = useRef(0);
+  const [result, setResult] = useState<{ scope: string; escrows: Escrow[] } | null>(null);
+  const escrows = result?.scope === scope ? result.escrows : EMPTY_TRADES;
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    const id = ++requestId.current;
+    if (!showPublicLedger && !user) {
+      setResult(null);
+      setError(null);
+      return;
+    }
     try {
-      if (user && !showPublicLedger) {
-        setEscrows(await api<Escrow[]>("/v1/me/trades", { headers: authHeaders() }));
-      } else {
-        setEscrows(await api<Escrow[]>("/v1/escrows"));
-      }
+      const rows = showPublicLedger
+        ? await api<Escrow[]>("/v1/escrows")
+        : await api<Escrow[]>("/v1/me/trades", { headers: authHeaders() });
+      if (id !== requestId.current || activeScope.current !== scope) return;
+      setResult({ scope, escrows: rows });
       setError(null);
     } catch (e) {
+      if (id !== requestId.current || activeScope.current !== scope) return;
       setError(e instanceof Error ? e.message : t("Failed to load"));
     }
-  }, [showPublicLedger, user, authHeaders, t]);
+  }, [showPublicLedger, user, authHeaders, t, scope]);
 
   useLiveTradeUpdates(load, { enabled: Boolean(user) || showPublicLedger });
 
@@ -51,9 +65,9 @@ export function TradesPage() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>{user && !showPublicLedger ? t("My trades") : t("Trades")}</h1>
+          <h1>{!showPublicLedger ? t("My trades") : t("Trades")}</h1>
           <p className="muted">
-            {user && !showPublicLedger
+            {!showPublicLedger
               ? t("Every trade where you are buyer, seller, or linked by wallet.")
               : t("All escrow deals on the platform ledger, by chain.")}
           </p>
@@ -66,12 +80,11 @@ export function TradesPage() {
         </button>
       </div>
 
-      {user ? (
-        <label className="check-row">
+      <label className="check-row">
           <input type="checkbox" checked={showPublicLedger} onChange={(e) => setShowPublicLedger(e.target.checked)} />
           {t("Show public platform ledger")}
-        </label>
-      ) : (
+      </label>
+      {!user && !showPublicLedger && (
         <p className="muted">
           {t("Sign in to see all your trades")} · {address ? shortAddr(address) : t("(connect wallet)")}
         </p>
@@ -79,7 +92,7 @@ export function TradesPage() {
 
       {error && <p className="error-banner">{error}</p>}
 
-      {escrows.length === 0 && !error && (
+      {(user || showPublicLedger) && escrows.length === 0 && !error && (
         <div className="empty card-surface">
           <p>{t("No trades yet.")}</p>
           <button type="button" onClick={() => navigate("/trades/new")}>

@@ -2165,7 +2165,6 @@ export function TradeDetailPage({ id }: { id: string }) {
                     </button>
                   </>
                 )}
-                <p>{t("Staff tools")}: <button type="button" className="linkish" onClick={() => navigate("/admin")}>{t("Admin panel")}</button></p>
               </div>
             )}
           </section>
