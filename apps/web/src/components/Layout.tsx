@@ -1,3 +1,4 @@
+import { useLanguage as useCopyLanguage } from "../lib/language";
 import type { ReactNode } from "react";
 import { Link, useRouter } from "../lib/router";
 import { useAuth } from "../lib/auth";
@@ -16,6 +17,7 @@ import { userDisplayLabel } from "../lib/userDisplay";
 import { WalletConnectionNotice } from "./WalletConnectionNotice";
 
 export function Layout({ children }: { children: ReactNode }) {
+  const { t: localizeCopy } = useCopyLanguage();
   const { path, navigate } = useRouter();
   const { user, signOut } = useAuth();
   const dash = dashboardPath(user);
@@ -37,7 +39,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <>
         <header className="topbar topbar-app">
           <div className="topbar-app-inner">
-          <Link to={user ? dash : "/"} className="brand brand-app" aria-label={brandTitle.replace(/\s*—.*$/, "").trim() || "2Pescrow"}>
+          <Link to={user ? dash : "/"} className="brand brand-app" aria-label={localizeCopy(brandTitle.replace(/\s*—.*$/, "").trim() || "2Pescrow")}>
             <img src={logoUrl} alt="" className="brand-logo-wide" />
           </Link>
           <nav className="nav nav-desktop">
@@ -70,6 +72,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="topbar-app-tools">
+            <label className="language-picker language-picker-mobile"><span className="sr-only">{t("Language")}</span><select aria-label={t("Language")} value={language} onChange={(event) => setLanguage(event.target.value as typeof language)}>{languageOptions.map(option => <option value={option.id} key={option.id}>{option.label}</option>)}</select></label>
             {user ? <NotificationBell /> : null}
             <div className="wallet-actions-app">
               <WalletControl />
@@ -91,7 +94,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {!hideChrome && showFooter && (
         <footer className="footer footer-desktop site-footer">
           <div className="site-footer-brand">
-            <img src={logoUrl} alt={brandTitle.replace(/\s*—.*$/, "").trim() || "2Pescrow"} className="brand-logo-wide brand-logo-footer" />
+            <img src={logoUrl} alt={localizeCopy(brandTitle.replace(/\s*—.*$/, "").trim() || "2Pescrow")} className="brand-logo-wide brand-logo-footer" />
             <p>{t("2Pescrow is Web3 peer-to-peer escrow. Two people trade directly, and the payment stays in a smart contract until the deal is done.")}</p>
             <div className="site-footer-socials">
               {socialLinks(settings).map((link) => (
