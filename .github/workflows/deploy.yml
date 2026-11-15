@@ -1,19 +1,32 @@
 name: Deploy
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - cursor/api-start-and-prisma-generate
 
 concurrency:
   group: deploy-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
   phone-android:
     name: Build Android app
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    needs: verify
+    env:
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_PUBLIC_API_URL: https://api.45.90.223.177.sslip.io
+      EXPO_PUBLIC_WEB_ORIGIN: https://2pescrow.com
+      EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID: "99700e35ab779a3fdd3918084d55bd02"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,43 +51,25 @@ jobs:
         run: npx expo prebuild --platform android --non-interactive
       - name: Build a debug APK
         working-directory: apps/mobile/android
-        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon -Pandroid.kotlinVersion=1.9.24
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon --max-workers=2 -Pandroid.kotlinVersion=1.9.24
+      - name: Verify the APK contains the JavaScript bundle
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk') as apk:
+              assert 'assets/index.android.bundle' in apk.namelist(), 'APK cannot run without Metro'
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: 2pescrow-android
           path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-  phone-ios:
-    name: Build iOS app
-    runs-on: macos-15
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - name: Generate the iOS project
-        working-directory: apps/mobile
-        env:
-          EXPO_NO_TELEMETRY: "1"
-          EXPO_PUBLIC_API_URL: https://api.45.90.223.177.sslip.io
-          EXPO_PUBLIC_WEB_ORIGIN: https://2pescrow.com
-          EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID: "99700e35ab779a3fdd3918084d55bd02"
-        run: npx expo prebuild --platform ios --non-interactive
-      - name: Build for the iOS simulator
-        working-directory: apps/mobile/ios
-        run: |
-          workspace=$(ls -d *.xcworkspace | head -n 1)
-          scheme=$(basename "$workspace" .xcworkspace)
-          xcodebuild -workspace "$workspace" -scheme "$scheme" -sdk iphonesimulator -configuration Debug -destination "generic/platform=iOS Simulator" CODE_SIGNING_ALLOWED=NO build
-
   api:
     name: Deploy API
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: [verify, phone-android]
     steps:
       - name: Deploy this commit to the live API
         env:
@@ -104,11 +99,11 @@ jobs:
           curl -fsS -X POST "${DOKPLOY_URL}/api/application.saveGithubProvider" \
             -H "x-api-key: ${DOKPLOY_API_KEY}" \
             -H "content-type: application/json" \
-            -d "${payload}"
+            -d "${payload}" > /dev/null
           curl -fsS -X POST "${DOKPLOY_URL}/api/application.deploy" \
             -H "x-api-key: ${DOKPLOY_API_KEY}" \
             -H "content-type: application/json" \
-            -d "$(jq -n --arg applicationId "${APPLICATION_ID}" --arg title "GitHub Actions ${SHA}" '{applicationId:$applicationId, title:$title}')"
+            -d "$(jq -n --arg applicationId "${APPLICATION_ID}" --arg title "GitHub Actions ${SHA}" '{applicationId:$applicationId, title:$title}')" > /dev/null
           seen_running=0
           for _ in $(seq 1 40); do
             status=$(curl -fsS "${DOKPLOY_URL}/api/application.one?applicationId=${APPLICATION_ID}" \
