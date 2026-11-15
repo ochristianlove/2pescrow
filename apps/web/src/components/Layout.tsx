@@ -1,5 +1,5 @@
 import { useLanguage as useCopyLanguage } from "../lib/language";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useRouter } from "../lib/router";
 import { useAuth } from "../lib/auth";
 import { dashboardPath } from "../lib/dashboardPath";
@@ -16,6 +16,31 @@ import { brandSrc, DEFAULT_LOGO } from "../lib/brand";
 import { userDisplayLabel } from "../lib/userDisplay";
 import { WalletConnectionNotice } from "./WalletConnectionNotice";
 
+function languageCode(id: string) {
+  return id === "pt-BR" ? "PT" : id.toUpperCase();
+}
+
+function LanguageMenu({ className }: { className: string }) {
+  const { language, setLanguage, t } = useLanguage();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`language-picker ${className}`}>
+      <button type="button" className="language-picker-button" aria-label={t("Language")} aria-expanded={open} aria-haspopup="listbox" onClick={() => setOpen((value) => !value)}>
+        {languageCode(language)}
+      </button>
+      {open ? (
+        <div className="language-picker-menu" role="listbox" aria-label={t("Language")}>
+          {languageOptions.map((option) => (
+            <button key={option.id} type="button" role="option" aria-selected={language === option.id} onClick={() => { setLanguage(option.id); setOpen(false); }}>
+              {option.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function Layout({ children }: { children: ReactNode }) {
   const { t: localizeCopy } = useCopyLanguage();
   const { path, navigate } = useRouter();
@@ -25,7 +50,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const isHome = path === "/";
   const showFooter = isHome || path === "/blog" || path.startsWith("/blog/") || path === "/terms" || path === "/privacy" || path === "/faq";
   const { settings } = usePlatformSettings();
-  const { language, setLanguage, t } = useLanguage();
+  const { t } = useLanguage();
   const brandTitle = settings?.siteTitle?.trim() || "2Pescrow";
   const escrowFactory = settings?.factoryAddress?.trim() || "0x08Be929Ac784E8aEe20403c4F5bbEE2668e183c9";
   const logoUrl = brandSrc(settings?.siteLogoUrl, DEFAULT_LOGO);
@@ -52,7 +77,7 @@ export function Layout({ children }: { children: ReactNode }) {
             {!user ? <Link to="/signin">{t("Sign in")}</Link> : null}
           </nav>
           <div className="wallet-slot wallet-slot-header">
-            <label className="language-picker language-picker-desktop"><span className="sr-only">{t("Language")}</span><select aria-label={t("Language")} value={language} onChange={(event) => setLanguage(event.target.value as typeof language)}>{languageOptions.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select></label>
+            <LanguageMenu className="language-picker-desktop" />
             <div className="header-account-desktop">
               {user && (
                 <button
@@ -72,7 +97,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="topbar-app-tools">
-            <label className="language-picker language-picker-mobile"><span className="sr-only">{t("Language")}</span><select aria-label={t("Language")} value={language} onChange={(event) => setLanguage(event.target.value as typeof language)}>{languageOptions.map(option => <option value={option.id} key={option.id}>{option.label}</option>)}</select></label>
+            <LanguageMenu className="language-picker-mobile" />
             {user ? <NotificationBell /> : null}
             <div className="wallet-actions-app">
               <WalletControl />
