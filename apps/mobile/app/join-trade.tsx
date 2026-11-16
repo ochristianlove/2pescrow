@@ -1,5 +1,6 @@
+import { Text, TextInput } from "../src/language";
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { api, ApiError } from "../src/api";
 import { AppBottomNav } from "../src/AppBottomNav";
@@ -7,6 +8,7 @@ import { AppTopBar } from "../src/AppTopBar";
 import { PageWash } from "../src/PageWash";
 import { useAuth } from "../src/auth";
 import { formatAmount, tokenLabel } from "../src/format";
+import { plainTerms } from "../src/tradePresentation";
 
 type Preview = {
   id: string;
@@ -103,8 +105,8 @@ export default function JoinTradeScreen() {
             {preview ? (
               <View style={styles.preview}>
                 <Text style={styles.eyebrow}>Review before joining</Text>
-                <Text style={styles.previewTitle}>{preview.title}</Text>
-                <Text style={styles.terms}>{preview.description?.trim() || "No extra terms provided."}</Text>
+                <Text translate={false} style={styles.previewTitle}>{preview.title}</Text>
+                <Text translate={!preview.description} style={styles.terms}>{plainTerms(preview.description || "") || "No extra terms provided."}</Text>
                 <View style={styles.row}>
                   <Text style={styles.rowLabel}>Amount</Text>
                   <Text style={styles.rowValue}>{tokenLabel(preview.tokenSymbol)} {formatAmount(preview.amountAtomic)}</Text>

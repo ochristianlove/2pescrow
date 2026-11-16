@@ -21,7 +21,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(`${base}${path}`, { ...init, headers });
   } catch {
-    throw new ApiError(`Cannot reach the API at ${base}. Check the phone is on the same network.`, 0);
+    throw new ApiError("Cannot reach the server right now. Try again in a moment.", 0);
   }
   const text = await response.text();
   if (!response.ok) {

@@ -1,10 +1,12 @@
+import { Text, TextInput } from "../src/language";
 import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { api, ApiError, tokenFromInput } from "../src/api";
 import { AppTopBar } from "../src/AppTopBar";
+import { LegalSheet, type LegalDoc } from "../src/LegalSheet";
 import { PageWash } from "../src/PageWash";
 import { useAuth } from "../src/auth";
 
@@ -16,6 +18,7 @@ export default function SignInScreen() {
   const [sent, setSent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [legal, setLegal] = useState<LegalDoc | null>(null);
 
   useEffect(() => {
     const incoming = typeof params.link === "string" ? params.link : "";
@@ -86,6 +89,11 @@ export default function SignInScreen() {
             <Pressable accessibilityRole="button" disabled={busy} onPress={() => void sendLink()} style={styles.submit}>
               <Text style={styles.submitLabel}>{busy ? "Sending…" : "Email me a sign-in link"}</Text>
             </Pressable>
+            <Text style={styles.legalNote}>
+              By signing in, you agree to the <Text style={styles.link} onPress={() => setLegal("terms")}>Terms</Text>
+              {" and "}
+              <Text style={styles.link} onPress={() => setLegal("privacy")}>Privacy Policy</Text>.
+            </Text>
           </View>
 
           <Text style={styles.hint}>
@@ -97,12 +105,14 @@ export default function SignInScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      {legal ? <LegalSheet key={legal} doc={legal} onClose={() => setLegal(null)} /> : null}
+
       <SafeAreaView edges={["bottom"]} style={styles.nav}>
         <NavItem label="Home" icon="home" onPress={() => router.replace("/")} />
         <NavItem label="Escrows" icon="escrows" onPress={() => router.push("/(app)/trades")} />
-        <NavItem label="Start" fab icon="start" onPress={() => {}} />
-        <NavItem label="Join" icon="join" onPress={() => router.push("/sign-in")} />
-        <NavItem label="Sign in" active icon="profile" onPress={() => {}} />
+        <NavItem label="Start" fab icon="start" onPress={() => router.replace("/sign-in")} />
+        <NavItem label="Join" icon="join" onPress={() => router.replace("/sign-in")} />
+        <NavItem label="Sign in" active icon="profile" onPress={() => router.replace("/sign-in")} />
       </SafeAreaView>
     </View>
   );
@@ -249,6 +259,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255, 107, 107, 0.35)",
     color: "#ffb4b4",
+    width: "100%",
   },
   okBanner: {
     marginTop: 12,
@@ -268,6 +279,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#3ecf8e",
   },
   submitLabel: { color: "#042016", fontWeight: "700", fontSize: 15 },
+  legalNote: { color: "#8aa3ad", fontSize: 13, lineHeight: 20, marginTop: 12, textAlign: "center" },
   hint: { color: "#8aa3ad", fontSize: 13, lineHeight: 20, marginTop: 12, marginBottom: 16 },
   link: { color: "#2bb8c8", fontWeight: "700" },
   nav: {

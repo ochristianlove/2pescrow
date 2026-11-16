@@ -1,32 +1,47 @@
-import { useCallback, useState } from "react";
-import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
+import { Text } from "../../src/language";
+import { useCallback, useRef, useState } from "react";
+import { FlatList, Pressable, RefreshControl, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { api, ApiError } from "../../src/api";
 import { AppBottomNav } from "../../src/AppBottomNav";
 import { AppTopBar } from "../../src/AppTopBar";
 import { useAuth } from "../../src/auth";
-import { formatAmount, tokenLabel } from "../../src/format";
+import { useLiveNotifications } from "../../src/liveNotifications";
+import { formatAmount, shortAddr, tokenLabel } from "../../src/format";
 import { colors } from "../../src/theme";
 import type { TradeRow } from "../../src/types";
 import { Button, Notice } from "../../src/ui";
+import { readableLabel } from "../../src/tradePresentation";
+import { TradeRoleTags } from "../../src/TradeRoleTags";
+import { TradePartyBadge } from "../../src/TradePartyBadge";
 
-export default function TradesScreen() {
+export default function TradesScreen({ publicOnly = false }: { publicOnly?: boolean }) {
   const router = useRouter();
   const { user } = useAuth();
+  const { syncEscrowIds } = useLiveNotifications();
   const [rows, setRows] = useState<TradeRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showPublic, setShowPublic] = useState(publicOnly);
+  const generation = useRef(0);
 
   const load = useCallback(async () => {
+    const request = ++generation.current;
     setError(null);
     try {
-      setRows(await api<TradeRow[]>(user ? "/v1/me/trades" : "/v1/escrows"));
+      const next = await api<TradeRow[]>(user && !showPublic ? "/v1/me/trades" : "/v1/escrows");
+      if (request !== generation.current) return;
+      setRows(next);
+      if (user && !showPublic) syncEscrowIds(next.map((trade) => trade.id));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load trades.");
+      if (request === generation.current) setError(err instanceof ApiError ? err.message : "Could not load trades.");
+    } finally {
+      if (request === generation.current) setLoading(false);
     }
-  }, [user]);
+  }, [user, showPublic, syncEscrowIds]);
 
-  useFocusEffect(useCallback(() => { void load(); }, [load]));
+  useFocusEffect(useCallback(() => { setRows([]); setLoading(true); void load(); return () => { generation.current++; }; }, [load]));
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -39,25 +54,33 @@ export default function TradesScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} tintColor={colors.accent} onRefresh={() => { setRefreshing(true); void load().finally(() => setRefreshing(false)); }} />}
       ListHeaderComponent={
         <View style={{ marginBottom: 8 }}>
-          <Text style={{ color: colors.text, fontSize: 32, fontWeight: "800", letterSpacing: -0.8, lineHeight: 34, marginBottom: 8 }}>{user ? "My trades" : "Trades"}</Text>
+          <Text style={{ color: colors.text, fontSize: 32, fontWeight: "800", letterSpacing: -0.8, lineHeight: 34, marginBottom: 8 }}>{showPublic ? "Public ledger" : user ? "My trades" : "Trades"}</Text>
           <Text style={{ color: colors.muted, marginBottom: 16, fontSize: 16, lineHeight: 24 }}>
-            {user
+            {user && !showPublic
               ? "Every trade where you are buyer, seller, or linked by wallet."
               : "All escrow deals on the platform ledger, by chain. Sign in to see all your trades."}
           </Text>
-          {error ? <Notice text={error} /> : null}
+          {error ? <><Notice text={error} /><Button label="Try again" tone="ghost" onPress={() => void load()} /></> : null}
+          {user && !publicOnly ? <View style={{ marginBottom: 12 }}><Button label={showPublic ? "Show my trades" : "Browse public ledger"} tone="ghost" onPress={() => { setRows([]); setLoading(true); setShowPublic(value => !value); }} /></View> : null}
           <View style={{ flexDirection: "row", gap: 10, marginBottom: 8 }}>
             <View style={{ flex: 1 }}><Button label="Start a trade" onPress={() => router.push("/new-trade")} /></View>
             <View style={{ flex: 1 }}><Button label="Join a trade" tone="ghost" onPress={() => router.push(user ? "/join-trade" : "/sign-in")} /></View>
           </View>
         </View>
       }
-      ListEmptyComponent={<Text style={{ color: colors.muted, marginTop: 12 }}>No trades yet.</Text>}
+      ListEmptyComponent={!error ? <Text style={{ color: colors.muted, marginTop: 12 }}>{loading ? "Loading trades…" : "No trades yet."}</Text> : null}
       renderItem={({ item }) => (
-        <Pressable onPress={() => router.push(`/trade/${item.id}`)} style={{ backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: "rgba(62, 207, 142, 0.16)", padding: 14, marginTop: 10 }}>
-          <Text style={{ color: colors.text, fontWeight: "700", fontSize: 16 }}>{item.title}</Text>
+        <Pressable accessibilityRole="button" onPress={() => router.push(`/trade/${item.id}`)} style={{ backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: "rgba(62, 207, 142, 0.16)", padding: 14, marginTop: 10 }}>
+          <Text translate={false} style={{ color: colors.text, fontWeight: "700", fontSize: 16 }}>{item.title}</Text>
+          {user ? <View style={{ marginTop: 8 }}><TradePartyBadge trade={item} userId={user.id} walletAddresses={user.wallets?.map((wallet) => wallet.address)} /></View> : null}
           <Text style={{ color: colors.gold, marginTop: 6 }}>{formatAmount(item.amountAtomic)} {tokenLabel(item.tokenSymbol)}</Text>
-          <Text style={{ color: colors.muted, marginTop: 4 }}>{item.status}{item.partyRole ? ` · ${item.partyRole}` : ""}</Text>
+          <Text style={{ color: colors.muted, marginTop: 4 }}>{readableLabel(item.status)} · {item.chain === "tron" ? "Tron" : "Ethereum"}</Text>
+          <View style={{ marginTop: 8 }}>
+            <TradeRoleTags
+              buyer={item.buyerUser?.displayName || (item.buyerAddress ? shortAddr(item.buyerAddress) : "")}
+              seller={item.sellerUser?.displayName || (item.sellerAddress ? shortAddr(item.sellerAddress) : "")}
+            />
+          </View>
         </Pressable>
       )}
     />

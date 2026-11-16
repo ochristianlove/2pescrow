@@ -1,13 +1,16 @@
+import { Text } from "../../src/language";
 import { useAccount, useAppKit } from "@reown/appkit-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Linking, ScrollView, Share, Text, View } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { Pressable, ScrollView, Share, Switch, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
 import { api, ApiError } from "../../src/api";
 import { AppBottomNav } from "../../src/AppBottomNav";
+import { AppTopBar } from "../../src/AppTopBar";
 import { walletConnectReady } from "../../src/appkit";
 import { useAuth } from "../../src/auth";
-import { apiUrl, privacyUrl } from "../../src/config";
-import { shortAddr } from "../../src/format";
+import { LegalSheet, WalletAgreement, type LegalDoc } from "../../src/LegalSheet";
+import { breakable, shortAddr } from "../../src/format";
+import { useLiveNotifications } from "../../src/liveNotifications";
 import { colors } from "../../src/theme";
 import type { ReferralView } from "../../src/types";
 import { Button, Card, Field, Notice } from "../../src/ui";
@@ -16,6 +19,7 @@ function WalletConnectLink({ onAddress }: { onAddress: (address: string) => Prom
   const { open, disconnect } = useAppKit();
   const { address, isConnected } = useAccount();
   const sent = useRef("");
+  const [legal, setLegal] = useState<LegalDoc | null>(null);
 
   useEffect(() => {
     if (!isConnected || !address || sent.current === address) return;
@@ -34,19 +38,25 @@ function WalletConnectLink({ onAddress }: { onAddress: (address: string) => Prom
       <Text style={{ color: colors.muted, marginTop: 8, marginBottom: 8, lineHeight: 20 }}>
         Opens WalletConnect. Choose MetaMask and approve. The address is linked to this account.
       </Text>
+      <WalletAgreement onOpen={setLegal} />
+      {legal ? <LegalSheet key={legal} doc={legal} onClose={() => setLegal(null)} /> : null}
       {isConnected ? <Button label="Disconnect WalletConnect" tone="ghost" onPress={() => { sent.current = ""; void disconnect(); }} /> : null}
     </View>
   );
 }
 
 export default function AccountScreen() {
+  const router = useRouter();
   const { user, refresh, signOut } = useAuth();
+  const { soundEnabled, setSoundEnabled } = useLiveNotifications();
   const [name, setName] = useState(user?.displayName || "");
+  const [publicName, setPublicName] = useState(user?.displayName || "");
   const [wallet, setWallet] = useState("");
   const [referral, setReferral] = useState<ReferralView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [legal, setLegal] = useState<LegalDoc | null>(null);
 
   const loadReferral = useCallback(async () => {
     try {
@@ -106,7 +116,10 @@ export default function AccountScreen() {
     setBusy("referral");
     setError(null);
     try {
-      await api("/v1/referral/register", { method: "POST", body: JSON.stringify({}) });
+      await api("/v1/referral/register", {
+        method: "POST",
+        body: JSON.stringify({ displayName: publicName.trim() || undefined }),
+      });
       await loadReferral();
       setNote("Referral link is ready.");
     } catch (err) {
@@ -118,9 +131,10 @@ export default function AccountScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <AppTopBar />
     <ScrollView style={{ backgroundColor: colors.bg, flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>
-      <Text style={{ color: colors.text, fontSize: 22, fontWeight: "700" }}>{user?.displayName || user?.email || "Account"}</Text>
-      <Text style={{ color: colors.muted, marginTop: 4, marginBottom: 16 }}>{user?.email}</Text>
+      <Text style={{ color: colors.text, fontSize: 22, fontWeight: "700", width: "100%" }}>{breakable(user?.displayName || user?.email || "Account")}</Text>
+      <Text style={{ color: colors.muted, marginTop: 4, marginBottom: 16, width: "100%" }}>{breakable(user?.email)}</Text>
       {error ? <Notice text={error} /> : null}
       {note ? <Notice text={note} tone="ok" /> : null}
       <Field label="Display name" value={name} onChangeText={setName} />
@@ -141,22 +155,41 @@ export default function AccountScreen() {
         <Button label="Link wallet" tone="ghost" onPress={() => void linkWallet()} busy={busy === "wallet"} />
       </Card>
       <Card>
+        <Text style={{ color: colors.text, fontWeight: "700", marginBottom: 8 }}>Live alerts</Text>
+        <Pressable onPress={() => setSoundEnabled(!soundEnabled)} style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <Switch
+            value={soundEnabled}
+            onValueChange={setSoundEnabled}
+            trackColor={{ false: colors.line, true: "#1f6b4a" }}
+            thumbColor={soundEnabled ? colors.accent : colors.muted}
+          />
+          <Text style={{ color: colors.text, flex: 1, lineHeight: 20 }}>
+            Play a bell sound when your trades update (wallet linked, new phase, messages).
+          </Text>
+        </Pressable>
+        <Text style={{ color: colors.muted, lineHeight: 20 }}>Use the bell icon in the header on any page to review recent alerts.</Text>
+      </Card>
+      <Card>
         <Text style={{ color: colors.text, fontWeight: "700", marginBottom: 8 }}>Referral</Text>
         {referral?.enrolled && referral.referralUrl ? (
           <>
             <Text style={{ color: colors.muted, marginBottom: 8 }}>You earn 2% of the platform fee when someone you referred finishes a trade.</Text>
-            <Text style={{ color: colors.text, marginBottom: 10 }}>{referral.referralUrl}</Text>
+            <Text style={{ color: colors.text, marginBottom: 10, width: "100%" }}>{breakable(referral.referralUrl)}</Text>
             <Button label="Share link" tone="ghost" onPress={() => void Share.share({ message: referral.referralUrl || "" })} />
+            <Button label="Payouts & cash out" tone="ghost" onPress={() => router.push("/(app)/referrals")} />
           </>
         ) : (
-          <Button label="Get my referral link" tone="ghost" onPress={() => void enroll()} busy={busy === "referral"} />
+          <>
+            <Field label="Public name (optional)" value={publicName} onChangeText={setPublicName} placeholder="Christian" autoCapitalize="words" />
+            <Button label="Get my referral link" tone="ghost" onPress={() => void enroll()} busy={busy === "referral"} />
+          </>
         )}
       </Card>
-      <Button label="Privacy policy" tone="ghost" onPress={() => void Linking.openURL(privacyUrl())} />
+      <Button label="Privacy policy" tone="ghost" onPress={() => setLegal("privacy")} />
+      {legal ? <LegalSheet key={legal} doc={legal} onClose={() => setLegal(null)} /> : null}
       <View style={{ height: 10 }} />
       <Button label="Sign out" tone="danger" onPress={() => void signOut()} />
-      <Text style={{ color: colors.muted, marginTop: 18, fontSize: 12 }}>API {apiUrl()}</Text>
-    </ScrollView>
+      </ScrollView>
     <AppBottomNav active="profile" />
     </View>
   );

@@ -65,6 +65,76 @@ jobs:
           path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
+  web:
+    name: Deploy website
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: verify
+    steps:
+      - name: Deploy this commit to the live website
+        env:
+          DOKPLOY_URL: http://45.90.223.177:3000
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          DOKPLOY_WEB_APPLICATION_ID: ${{ secrets.DOKPLOY_WEB_APPLICATION_ID }}
+          WEB_APP_NAME: web2pescrow-vyov0a
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DOKPLOY_API_KEY}" ]; then
+            echo "Add the DOKPLOY_API_KEY repository secret from the Dokploy profile API token." >&2
+            exit 1
+          fi
+          if [ -n "${DOKPLOY_WEB_APPLICATION_ID}" ]; then
+            APPLICATION_ID="${DOKPLOY_WEB_APPLICATION_ID}"
+          else
+            projects=$(curl -fsS "${DOKPLOY_URL}/api/project.all" -H "x-api-key: ${DOKPLOY_API_KEY}")
+            APPLICATION_ID=$(echo "${projects}" | jq -r --arg name "${WEB_APP_NAME}" '[.. | objects | select(.appName == $name) | .applicationId] | first // empty')
+          fi
+          if [ -z "${APPLICATION_ID}" ] || [ "${APPLICATION_ID}" = "null" ]; then
+            echo "Could not find the Dokploy website app ${WEB_APP_NAME}." >&2
+            echo "Set the DOKPLOY_WEB_APPLICATION_ID repository secret to that application's id." >&2
+            exit 1
+          fi
+          app=$(curl -fsS "${DOKPLOY_URL}/api/application.one?applicationId=${APPLICATION_ID}" \
+            -H "x-api-key: ${DOKPLOY_API_KEY}")
+          github_id=$(echo "${app}" | jq -r '.githubId // empty')
+          build_path=$(echo "${app}" | jq -r '.buildPath // "/"')
+          payload=$(jq -n \
+            --arg applicationId "${APPLICATION_ID}" \
+            --arg repository "2pescrow" \
+            --arg owner "ochristianlove" \
+            --arg buildPath "${build_path}" \
+            --arg branch "${BRANCH}" \
+            --arg githubId "${github_id}" \
+            '{applicationId:$applicationId, repository:$repository, owner:$owner, buildPath:$buildPath, branch:$branch, triggerType:"push"} + (if $githubId == "" then {} else {githubId:$githubId} end)')
+          curl -fsS -X POST "${DOKPLOY_URL}/api/application.saveGithubProvider" \
+            -H "x-api-key: ${DOKPLOY_API_KEY}" \
+            -H "content-type: application/json" \
+            -d "${payload}" > /dev/null
+          curl -fsS -X POST "${DOKPLOY_URL}/api/application.deploy" \
+            -H "x-api-key: ${DOKPLOY_API_KEY}" \
+            -H "content-type: application/json" \
+            -d "$(jq -n --arg applicationId "${APPLICATION_ID}" --arg title "GitHub Actions ${SHA}" '{applicationId:$applicationId, title:$title}')" > /dev/null
+          seen_running=0
+          for _ in $(seq 1 60); do
+            status=$(curl -fsS "${DOKPLOY_URL}/api/application.one?applicationId=${APPLICATION_ID}" \
+              -H "x-api-key: ${DOKPLOY_API_KEY}" | jq -r '.applicationStatus')
+            echo "Website deploy status: ${status}"
+            if [ "${status}" = "running" ]; then
+              seen_running=1
+            fi
+            if [ "${status}" = "done" ] && [ "${seen_running}" = "1" ]; then
+              exit 0
+            fi
+            if [ "${status}" = "error" ]; then
+              exit 1
+            fi
+            sleep 15
+          done
+          echo "Website deploy did not finish." >&2
+          exit 1
+
   api:
     name: Deploy API
     runs-on: ubuntu-latest

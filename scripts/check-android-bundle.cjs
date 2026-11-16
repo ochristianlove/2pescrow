@@ -1,0 +1,10 @@
+const assert = require('node:assert/strict');
+const { embedAndroidBundle } = require('../apps/mobile/plugins/withEmbeddedAndroidBundle.js');
+const fixture = 'def projectRoot = rootDir.getParentFile().getAbsolutePath()\nreact {\n    bundleCommand = "export:embed"\n}\n';
+const configured = embedAndroidBundle(fixture);
+assert(configured.includes('root = file(projectRoot)'));
+assert(configured.includes('debuggableVariants = []'));
+assert(configured.includes('extraPackagerArgs = ["--max-workers", "1"]'));
+assert.equal(embedAndroidBundle(configured), configured);
+assert.throws(() => embedAndroidBundle('android {}'), /Expected the React Native/);
+console.log('Android prebuild embeds JavaScript and remains idempotent.');

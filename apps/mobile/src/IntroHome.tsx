@@ -1,11 +1,15 @@
+import { Text } from "./language";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AccessibilityInfo, Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+// Android debug builds can throw on non-monotonic native frame timestamps; use JS-driven motion there.
+import { AccessibilityInfo, Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { api } from "./api";
 import { AppTopBar } from "./AppTopBar";
+import { useAuth } from "./auth";
 import { HomeFooter } from "./HomeFooter";
+import { HomeLower } from "./HomeLower";
 
 const steps = [
   ["1", "You set the terms", "Code"],
@@ -16,6 +20,7 @@ const steps = [
 
 export function IntroHome() {
   const router = useRouter();
+  const { user } = useAuth();
   const [tradeCount, setTradeCount] = useState("—");
   const [tronEnabled, setTronEnabled] = useState(false);
   const [motion, setMotion] = useState(true);
@@ -49,8 +54,16 @@ export function IntroHome() {
     };
   }, []);
 
-  function signIn() {
-    router.push("/sign-in");
+  function openStart() {
+    router.push(user ? "/new-trade" : "/sign-in");
+  }
+
+  function openJoin() {
+    router.push(user ? "/join-trade" : "/sign-in");
+  }
+
+  function openAccount() {
+    router.push(user ? "/(app)/account" : "/sign-in");
   }
 
   return (
@@ -75,13 +88,13 @@ export function IntroHome() {
           </Rise>
           <Rise motion={motion} delay={210}>
             <Breathe motion={motion}>
-              <Pressable accessibilityRole="button" onPress={signIn} style={({ pressed }) => [styles.startButton, pressed && styles.pressed]}>
+              <Pressable accessibilityRole="button" onPress={openStart} style={({ pressed }) => [styles.startButton, pressed && styles.pressed]}>
                 <Text style={styles.startLabel}>Start a trade</Text>
               </Pressable>
             </Breathe>
           </Rise>
           <Rise motion={motion} delay={280}>
-            <Pressable accessibilityRole="button" onPress={signIn} style={({ pressed }) => [styles.joinButton, pressed && styles.pressed]}>
+            <Pressable accessibilityRole="button" onPress={openJoin} style={({ pressed }) => [styles.joinButton, pressed && styles.pressed]}>
               <Text style={styles.joinLabel}>Join a trade</Text>
             </Pressable>
           </Rise>
@@ -158,16 +171,17 @@ export function IntroHome() {
             </Rise>
           ) : null}
         </View>
+        <HomeLower />
         <HomeFooter />
       </ScrollView>
 
       <Rise motion={motion} delay={120} distance={8}>
       <SafeAreaView edges={["bottom"]} style={styles.nav}>
-        <NavItem label="Home" active icon="home" onPress={() => {}} />
+        <NavItem label="Home" active={!user} icon="home" onPress={() => { if (user) router.push("/(app)/dashboard"); }} />
         <NavItem label="Escrows" icon="escrows" onPress={() => router.push("/(app)/trades")} />
-        <NavItem label="Start" fab icon="start" onPress={signIn} motion={motion} />
-        <NavItem label="Join" icon="join" onPress={signIn} />
-        <NavItem label="Sign in" icon="profile" onPress={signIn} />
+        <NavItem label="Start" fab icon="start" onPress={openStart} motion={motion} />
+        <NavItem label="Join" icon="join" onPress={openJoin} />
+        <NavItem label={user ? "Profile" : "Sign in"} icon="profile" onPress={openAccount} />
       </SafeAreaView>
       </Rise>
     </View>
@@ -212,7 +226,7 @@ function Rise({
       duration: 560,
       delay,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== "android",
     });
     anim.start();
     return () => anim.stop();
@@ -243,8 +257,8 @@ function LiveDot({ motion }: { motion: boolean }) {
     }
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: Platform.OS !== "android" }),
+        Animated.timing(pulse, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.ease), useNativeDriver: Platform.OS !== "android" }),
       ]),
     );
     loop.start();
@@ -282,8 +296,8 @@ function Breathe({ motion, children }: { motion: boolean; children: ReactNode })
     if (!motion) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(value, { toValue: 1, duration: 1600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(value, { toValue: 0, duration: 1600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(value, { toValue: 1, duration: 1600, easing: Easing.inOut(Easing.ease), useNativeDriver: Platform.OS !== "android" }),
+        Animated.timing(value, { toValue: 0, duration: 1600, easing: Easing.inOut(Easing.ease), useNativeDriver: Platform.OS !== "android" }),
       ]),
     );
     loop.start();
@@ -316,8 +330,8 @@ function DriftOrb({
     if (!motion) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(drift, { toValue: 1, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(drift, { toValue: 0, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(drift, { toValue: 1, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== "android" }),
+        Animated.timing(drift, { toValue: 0, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== "android" }),
       ]),
     );
     loop.start();

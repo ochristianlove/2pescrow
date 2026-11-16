@@ -1,5 +1,7 @@
+import { Text, TextInput, useLanguage } from "./language";
 import type { ReactNode } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View, type TextInputProps } from "react-native";
+import { breakable } from "./format";
 import { colors, space } from "./theme";
 
 export function ScreenTitle({ title, subtitle }: { title: string; subtitle?: string }) {
@@ -15,7 +17,7 @@ export function Field({ label, style, ...props }: { label: string } & TextInputP
   return (
     <View style={{ marginBottom: 12 }}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput placeholderTextColor={colors.muted} style={[styles.input, style]} {...props} />
+      <TextInput accessibilityLabel={label} placeholderTextColor={colors.muted} style={[styles.input, props.multiline && { textAlignVertical: "top", minHeight: 96 }, style]} {...props} />
     </View>
   );
 }
@@ -24,19 +26,24 @@ export function Button({
   label,
   onPress,
   busy,
+  disabled = false,
   tone = "primary",
 }: {
   label: string;
   onPress: () => void;
   busy?: boolean;
+  disabled?: boolean;
   tone?: "primary" | "ghost" | "danger";
 }) {
+  const { t } = useLanguage();
   return (
     <Pressable
       accessibilityRole="button"
-      disabled={busy}
+      accessibilityLabel={t(label)}
+      accessibilityState={{ disabled: disabled || Boolean(busy), busy: Boolean(busy) }}
+      disabled={disabled || busy}
       onPress={onPress}
-      style={[styles.button, tone === "ghost" && styles.ghost, tone === "danger" && styles.danger]}
+      style={({ pressed }) => [styles.button, tone === "ghost" && styles.ghost, tone === "danger" && styles.danger, (disabled || busy) && { opacity: 0.5 }, pressed && { opacity: 0.75 }]}
     >
       {busy ? <ActivityIndicator color={tone === "primary" ? colors.primaryFg : colors.text} /> : <Text style={[styles.buttonText, tone !== "primary" && { color: colors.text }]}>{label}</Text>}
     </Pressable>
@@ -44,7 +51,8 @@ export function Button({
 }
 
 export function Notice({ text, tone = "error" }: { text: string; tone?: "error" | "ok" }) {
-  return <Text style={[styles.notice, tone === "ok" && { color: colors.accent }]}>{text}</Text>;
+  const { t } = useLanguage();
+  return <Text accessibilityLiveRegion="polite" style={[styles.notice, tone === "ok" && { color: colors.accent }]}>{breakable(t(text))}</Text>;
 }
 
 export function Card({ children }: { children: ReactNode }) {
@@ -68,15 +76,15 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: colors.accent,
     borderRadius: 10,
-    minHeight: 46,
+    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
   },
   ghost: { backgroundColor: "transparent", borderWidth: 1, borderColor: "rgba(232, 184, 74, 0.38)" },
   danger: { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.danger },
-  buttonText: { color: colors.primaryFg, fontWeight: "700", fontSize: 15 },
-  notice: { color: colors.danger, marginBottom: 12, lineHeight: 20 },
+  buttonText: { color: colors.primaryFg, fontWeight: "700", fontSize: 15, textAlign: "center", paddingVertical: 10 },
+  notice: { color: colors.danger, marginBottom: 12, lineHeight: 20, width: "100%" },
   card: {
     backgroundColor: colors.card,
     borderRadius: 16,

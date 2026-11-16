@@ -26,6 +26,12 @@ export function dollarsToAtomic(input: string): string | null {
   return (BigInt(match[1]) * 1_000_000n + BigInt(frac)).toString();
 }
 
+/** Break opportunities so a long email or URL can wrap on a narrow phone. */
+export function breakable(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.replace(/[@./_:-]/g, (mark) => `${mark}\u200b`);
+}
+
 export function shortAddr(value: string | null | undefined): string {
   if (!value) return "Not linked";
   if (value.length < 12) return value;

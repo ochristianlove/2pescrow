@@ -1,3 +1,6 @@
+// Expo 52's embedded Android bundle resolves its relative entry from the app,
+// while the default monorepo server root points two directories above it.
+process.env.EXPO_NO_METRO_WORKSPACE_ROOT = "1";
 const { getDefaultConfig } = require("expo/metro-config");
 const path = require("path");
 
@@ -8,6 +11,8 @@ const valtioForAppKit = path.join(
 );
 
 const config = getDefaultConfig(projectRoot);
+// Shared translations and hoisted dependencies live outside the app root.
+config.watchFolders = [...new Set([...config.watchFolders, path.resolve(projectRoot, "../..")])];
 
 // AppKit packages each ship a separate valtio 2.1.8. A proxy created by one
 // copy is invisible to subscribeKey from the other, which throws

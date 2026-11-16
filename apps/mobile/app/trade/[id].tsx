@@ -1,128 +1,80 @@
-import { useCallback, useState } from "react";
-import { KeyboardAvoidingView, Linking, Platform, ScrollView, Share, Text, View } from "react-native";
-import { useLocalSearchParams, useFocusEffect } from "expo-router";
+import { Text } from "../../src/language";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, AppState, KeyboardAvoidingView, Linking, Platform, RefreshControl, ScrollView, View } from "react-native";
+import { useLocalSearchParams, useFocusEffect, useRouter } from "expo-router";
 import { api, ApiError } from "../../src/api";
 import { AppBottomNav } from "../../src/AppBottomNav";
 import { AppTopBar } from "../../src/AppTopBar";
 import { useAuth } from "../../src/auth";
 import { webOrigin } from "../../src/config";
-import { formatAmount, shortAddr, tokenLabel } from "../../src/format";
+import { useLiveNotifications } from "../../src/liveNotifications";
 import { colors } from "../../src/theme";
 import type { TradeRow } from "../../src/types";
-import { Button, Card, Field, Notice } from "../../src/ui";
+import { Button, Field, Notice } from "../../src/ui";
+import { tradePermissions } from "../../src/tradePresentation";
+import { TradeRoom } from "../../src/TradeRoom";
+import { EvidenceComposer } from "../../src/TradeFiles";
+import { TradeWallet } from "../../src/TradeWallet";
 
 export default function TradeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { user } = useAuth();
+  const { trackEscrowId } = useLiveNotifications();
   const [trade, setTrade] = useState<TradeRow | null>(null);
   const [message, setMessage] = useState("");
-  const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-
+  const [refreshing, setRefreshing] = useState(false);
+  const generation = useRef(0);
+  const actionLock = useRef(false);
   const load = useCallback(async () => {
-    if (!id) return;
+    const request = ++generation.current;
     try {
-      setTrade(await api<TradeRow>(`/v1/escrows/${id}`));
-      setError(null);
+      const result = await api<TradeRow>(`/v1/escrows/${encodeURIComponent(id)}`);
+      if (request === generation.current) { setTrade(result); setError(null); }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not open this trade.");
+      if (request === generation.current) setError(err instanceof ApiError ? err.message : "Could not refresh this trade. Pull down to try again.");
     }
-  }, [id]);
-
-  useFocusEffect(useCallback(() => { void load(); }, [load]));
-
+  }, [id, user?.id]);
+  useEffect(() => { setTrade(null); setMessage(""); if (id) trackEscrowId(id); }, [id, user?.id, trackEscrowId]);
+  useFocusEffect(useCallback(() => {
+    void load();
+    const timer = setInterval(() => { if (AppState.currentState === "active" && !actionLock.current) void load(); }, 15000);
+    const listener = AppState.addEventListener("change", state => { if (state === "active" && !actionLock.current) void load(); });
+    return () => { generation.current++; clearInterval(timer); listener.remove(); };
+  }, [load]));
+  const permission = trade ? tradePermissions(trade, user?.id) : null;
+  async function openWeb() {
+    try { await Linking.openURL(`${webOrigin()}/trades/${encodeURIComponent(id)}`); }
+    catch { setError("Could not open the website. Please try again."); }
+  }
   async function send() {
-    if (!message.trim() || !id) return;
-    setBusy("message");
-    setError(null);
+    if (!message.trim() || !permission?.canPost || actionLock.current) return;
+    actionLock.current = true; setBusy("message"); setError(null);
     try {
       await api(`/v1/escrows/${id}/messages`, { method: "POST", body: JSON.stringify({ body: message.trim() }) });
-      setMessage("");
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not send that message.");
-    } finally {
-      setBusy(null);
-    }
+      setMessage(""); await load();
+    } catch (err) { setError(err instanceof ApiError ? err.message : "Could not send your message. Your text is saved here; try again."); }
+    finally { actionLock.current = false; setBusy(null); }
   }
-
-  async function dispute() {
-    if (!id) return;
-    setBusy("dispute");
-    setError(null);
-    try {
-      await api(`/v1/escrows/${id}/disputes`, { method: "POST", body: JSON.stringify({ reason: reason.trim() }) });
-      setReason("");
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not open a dispute.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  if (!trade) {
-    return (
-      <View style={{ flex: 1, backgroundColor: colors.bg }}>
-        <AppTopBar />
-        <View style={{ flex: 1, padding: 20 }}>
-          {error ? <Notice text={error} /> : <Text style={{ color: colors.muted }}>Loading the trade…</Text>}
-        </View>
-        <AppBottomNav active="escrows" />
-      </View>
-    );
-  }
-
-  const canFund = trade.status === "AwaitingFunding" || trade.status === "Created";
-  const canDispute = trade.status === "Funded" || trade.status === "InProgress";
-
-  return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+  return <View style={{ flex: 1, backgroundColor: colors.bg }}>
     <AppTopBar />
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-        {error ? <Notice text={error} /> : null}
-        <Text style={{ color: colors.text, fontSize: 24, fontWeight: "700" }}>{trade.title}</Text>
-        <Text style={{ color: colors.gold, marginTop: 8 }}>{formatAmount(trade.amountAtomic)} {tokenLabel(trade.tokenSymbol)}</Text>
-        <Text style={{ color: colors.muted, marginTop: 4 }}>{trade.status}{trade.partyRole ? ` · you are the ${trade.partyRole}` : ""}</Text>
-        {trade.tradeCode ? (
-          <Card>
-            <Text style={{ color: colors.muted }}>Join code</Text>
-            <Text style={{ color: colors.text, fontSize: 22, fontWeight: "700", letterSpacing: 1, marginVertical: 6 }}>{trade.tradeCode}</Text>
-            <Button label="Share code" tone="ghost" onPress={() => void Share.share({ message: `Join my 2Pescrow trade with code ${trade.tradeCode}` })} />
-          </Card>
-        ) : null}
-        {trade.description ? <Text style={{ color: colors.text, lineHeight: 22, marginBottom: 14 }}>{trade.description}</Text> : null}
-        <Text style={{ color: colors.muted, marginBottom: 12 }}>Buyer {shortAddr(trade.buyerAddress)} · Seller {shortAddr(trade.sellerAddress)}</Text>
-        {(trade.messages || []).map((item) => (
-          <View key={item.id} style={{ marginBottom: 10 }}>
-            <Text style={{ color: item.authorUserId && item.authorUserId === user?.id ? colors.accent : colors.muted, fontSize: 12 }}>{item.kind === "system" ? "2Pescrow" : item.authorUserId === user?.id ? "You" : "Other party"}</Text>
-            <Text style={{ color: colors.text, lineHeight: 20 }}>{item.body}</Text>
-          </View>
-        ))}
-        <Field label="Message" value={message} onChangeText={setMessage} placeholder="Write to the other person" multiline />
-        <Button label="Send" onPress={() => void send()} busy={busy === "message"} />
-        {canFund ? (
-          <View style={{ marginTop: 16 }}>
-            <Text style={{ color: colors.muted, marginBottom: 8, lineHeight: 20 }}>The coins move from the buyer’s wallet into the escrow contract. That signature happens in the wallet, on the website.</Text>
-            <Button label="Open on the website to fund" tone="ghost" onPress={() => void Linking.openURL(`${webOrigin()}/trades/${trade.id}`)} />
-          </View>
-        ) : null}
-        {canDispute ? (
-          <View style={{ marginTop: 18 }}>
-            <Field label="Dispute reason" value={reason} onChangeText={setReason} placeholder="What went wrong" multiline />
-            <Button label="Open a dispute" tone="danger" onPress={() => void dispute()} busy={busy === "dispute"} />
-          </View>
-        ) : null}
-        {trade.contractAddress ? (
-          <View style={{ marginTop: 16 }}>
-            <Button label="Open on the website" tone="ghost" onPress={() => void Linking.openURL(`${webOrigin()}/trades/${trade.id}`)} />
-          </View>
-        ) : null}
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }} keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} tintColor={colors.accent} onRefresh={() => { setRefreshing(true); void load().finally(() => setRefreshing(false)); }} />}>
+        <Button label="Back to trades" tone="ghost" onPress={() => router.replace("/(app)/trades")} />
+        {error ? <View style={{ marginTop: 16 }}><Notice text={error} /><Button label="Try again" tone="ghost" onPress={() => void load()} /></View> : null}
+        {!trade || !permission ? (!error && <ActivityIndicator style={{ marginTop: 32 }} accessibilityLabel="Loading trade" color={colors.accent} />) :
+          <TradeRoom trade={trade} userId={user?.id} onWeb={() => void openWeb()} onError={setError} onChanged={load}
+            wallet={<TradeWallet trade={trade} onLinked={load} />}
+            composer={permission.canPost ? <View style={{ marginTop: 16, gap: 10 }}>
+              <Field label="Message" value={message} editable={!busy} maxLength={4000} onChangeText={setMessage} placeholder="Write to the other person" multiline />
+              <Button label="Send message" onPress={() => void send()} busy={busy === "message"} disabled={!message.trim() || Boolean(busy)} />
+              {permission.party ? <EvidenceComposer trade={trade} seller={permission.seller} disabled={Boolean(busy)} onBusy={value => { actionLock.current = value; setBusy(value ? "file" : null); }} onUploaded={load} /> : null}
+            </View> : <Text style={{ color: colors.muted, marginTop: 16 }}>{user ? "Only trade participants can send messages." : "Sign in with your trade account to send messages."}</Text>} />}
       </ScrollView>
     </KeyboardAvoidingView>
     <AppBottomNav active="escrows" />
-    </View>
-  );
+  </View>;
 }

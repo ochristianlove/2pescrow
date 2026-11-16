@@ -1,8 +1,11 @@
-import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Text } from "./language";
+import { Image, Linking, Pressable, StyleSheet, View } from "react-native";
 import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import { api } from "./api";
+import { useAuth } from "./auth";
 import { webOrigin } from "./config";
+import { LegalSheet, type LegalDoc } from "./LegalSheet";
 
 const logo = require("../assets/logo.png");
 const factoryFallback = "0x08Be929Ac784E8aEe20403c4F5bbEE2668e183c9";
@@ -16,7 +19,9 @@ type Settings = {
 
 export function HomeFooter() {
   const router = useRouter();
+  const { user } = useAuth();
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [legal, setLegal] = useState<LegalDoc | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,24 +58,25 @@ export function HomeFooter() {
       </View>
 
       <Text style={styles.heading}>Trade</Text>
-      <FooterLink label="Start a trade" onPress={() => router.push("/sign-in")} />
-      <FooterLink label="Join a trade" onPress={() => router.push("/sign-in")} />
+      <FooterLink label="Start a trade" onPress={() => router.push(user ? "/new-trade" : "/sign-in")} />
+      <FooterLink label="Join a trade" onPress={() => router.push(user ? "/join-trade" : "/sign-in")} />
       <FooterLink label="Open trades" onPress={() => router.push("/(app)/ledger")} />
-      <FooterLink label="Referrals" onPress={() => void Linking.openURL(`${origin}/referrals`)} />
-      <FooterLink label="FAQ" onPress={() => void Linking.openURL(`${origin}/faq`)} />
+      <FooterLink label="Referrals" onPress={() => router.push(user ? "/(app)/referrals" : "/sign-in")} />
+      <FooterLink label="FAQ" onPress={() => router.push("/(app)/faq")} />
 
       <Text style={styles.heading}>Read</Text>
       <FooterLink label="Blog" onPress={() => void Linking.openURL(`${origin}/blog`)} />
       <FooterLink label="Etherscan" onPress={() => void Linking.openURL(`https://etherscan.io/address/${factory}`)} />
-      <FooterLink label="Terms" onPress={() => void Linking.openURL(`${origin}/terms`)} />
-      <FooterLink label="Privacy" onPress={() => void Linking.openURL(`${origin}/privacy`)} />
+      <FooterLink label="Terms" onPress={() => setLegal("terms")} />
+      <FooterLink label="Privacy" onPress={() => setLegal("privacy")} />
 
       <Text style={styles.legal}>
         Payments go from the buyer's wallet into an escrow smart contract. 2Pescrow does not hold them. A dispute is settled only by the rules in that contract. 2Pescrow is not a bank.{" "}
-        <Text style={styles.legalLink} onPress={() => void Linking.openURL(`${origin}/terms`)}>
+        <Text style={styles.legalLink} onPress={() => setLegal("terms")}>
           Read the Terms.
         </Text>
       </Text>
+      {legal ? <LegalSheet key={legal} doc={legal} onClose={() => setLegal(null)} /> : null}
     </View>
   );
 }
@@ -112,7 +118,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 4,
   },
-  linkHit: { paddingVertical: 5 },
+  linkHit: { paddingVertical: 12, minHeight: 44, justifyContent: "center" },
   link: { color: "#e8f4f2", fontSize: 15 },
   legal: {
     marginTop: 16,

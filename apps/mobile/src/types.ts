@@ -22,6 +22,19 @@ export type TradeRow = {
   sellerAddress?: string | null;
   updatedAt?: string;
   messages?: TradeMessage[];
+  events?: TradeEvent[];
+  disputes?: TradeDispute[];
+  buyerUserId?: string | null;
+  sellerUserId?: string | null;
+  buyerUser?: { id: string; displayName?: string | null } | null;
+  sellerUser?: { id: string; displayName?: string | null } | null;
+  joinDeadlineAt?: string | null;
+  fundDeadlineAt?: string | null;
+  deliveryDeadlineAt?: string | null;
+  reviewDeadlineAt?: string | null;
+  deliveryWindowHours?: number | null;
+  reviewWindowHours?: number | null;
+  proofHash?: string | null;
 };
 
 export type TradeMessage = {
@@ -30,6 +43,17 @@ export type TradeMessage = {
   kind: string;
   body: string;
   createdAt: string;
+  fileName?: string | null;
+  fileAvailable?: boolean;
+};
+
+export type TradeEvent = { id: string; eventName: string; createdAt?: string; txHash?: string | null };
+export type TradeDispute = {
+  id: string; status: string; createdAt?: string; openedBy?: string | null;
+  rulingNote?: string | null; resolution?: string | null; appealDeadlineAt?: string | null;
+  assignedModerator?: { displayName?: string | null } | null;
+  appeal?: { status: string; reason?: string; decisionNote?: string | null } | null;
+  evidence?: { id: string; fileName?: string | null; note?: string | null; createdAt?: string }[];
 };
 
 export type FaqItem = { id: string; question: string; answer: string };

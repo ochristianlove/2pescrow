@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from "react-native";
+// Android debug builds can throw on non-monotonic native frame timestamps; use JS-driven motion there.
+import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View } from "react-native";
 
 export function PageWash() {
   const [motion, setMotion] = useState(true);
@@ -46,8 +47,8 @@ function Drift({
     if (!motion) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(drift, { toValue: 1, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(drift, { toValue: 0, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(drift, { toValue: 1, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== "android" }),
+        Animated.timing(drift, { toValue: 0, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== "android" }),
       ]),
     );
     loop.start();

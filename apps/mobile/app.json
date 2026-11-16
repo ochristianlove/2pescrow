@@ -2,7 +2,7 @@
   "expo": {
     "name": "2Pescrow",
     "slug": "2pescrow",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "scheme": "twopescrow",
     "icon": "./assets/icon.png",
@@ -16,17 +16,25 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.twopescrow.app",
-      "buildNumber": "1",
-      "associatedDomains": ["applinks:2pescrow.com"],
+      "buildNumber": "4",
+      "appleTeamId": "T4Y9L72F8B",
+      "associatedDomains": [
+        "applinks:2pescrow.com"
+      ],
       "infoPlist": {
         "NSAllowsLocalNetworking": true,
         "ITSAppUsesNonExemptEncryption": false,
-        "LSApplicationQueriesSchemes": ["metamask", "trust", "rainbow", "safe"]
+        "LSApplicationQueriesSchemes": [
+          "metamask",
+          "trust",
+          "rainbow",
+          "safe"
+        ]
       }
     },
     "android": {
       "package": "com.twopescrow.app",
-      "versionCode": 1,
+      "versionCode": 2,
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -35,25 +43,55 @@
       "intentFilters": [
         {
           "action": "VIEW",
-          "data": [{ "scheme": "twopescrow" }],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "data": [
+            {
+              "scheme": "twopescrow"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         },
         {
           "action": "VIEW",
           "autoVerify": true,
-          "data": [{ "scheme": "https", "host": "2pescrow.com", "pathPrefix": "/auth/verify" }],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "data": [
+            {
+              "scheme": "https",
+              "host": "2pescrow.com",
+              "pathPrefix": "/auth/verify"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
-    "plugins": ["expo-router", "expo-secure-store", "./queries.js"],
-    "experiments": { "typedRoutes": false },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "./queries.js",
+      "./plugins/withEmbeddedAndroidBundle.js"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    },
     "extra": {
-      "apiUrl": "http://10.148.130.68:3002",
-      "webOrigin": "http://10.148.130.68:3003",
+      "apiUrl": "https://api.45.90.223.177.sslip.io",
+      "webOrigin": "https://2pescrow.com",
       "privacyPolicyUrl": "https://2pescrow.com/privacy",
       "supportEmail": "support@2pescrow.com",
-      "walletConnectProjectId": "99700e35ab779a3fdd3918084d55bd02"
-    }
+      "walletConnectProjectId": "99700e35ab779a3fdd3918084d55bd02",
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "787dba3c-e58b-41d0-a25b-c6d72769a6aa"
+      }
+    },
+    "owner": "ochris"
   }
 }

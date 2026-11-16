@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Text } from "./language";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
@@ -12,7 +13,7 @@ export function AppBottomNav({ active }: { active?: Tab }) {
 
   return (
     <SafeAreaView edges={["bottom"]} style={styles.nav}>
-      <NavItem label="Home" icon="home" active={active === "home"} onPress={() => router.replace("/")} />
+      <NavItem label="Home" icon="home" active={active === "home"} onPress={() => router.replace(user ? "/(app)/dashboard" : "/")} />
       <NavItem
         label="Escrows"
         icon="escrows"
@@ -57,7 +58,7 @@ function NavItem({
 }) {
   const color = active ? "#3ecf8e" : "#8aa3ad";
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.navItem}>
+    <Pressable accessibilityRole="button" hitSlop={8} onPress={onPress} style={styles.navItem}>
       <View style={[styles.navIconSlot, fab && styles.navFab]}>
         <NavIcon name={icon} color={fab ? "#04130d" : color} active={Boolean(active)} />
       </View>
@@ -113,6 +114,7 @@ const styles = StyleSheet.create({
     borderTopColor: "#1f3440",
     backgroundColor: "rgba(7, 16, 24, 0.96)",
     paddingTop: 6,
+    paddingBottom: 4,
     paddingHorizontal: 4,
   },
   navItem: { flex: 1, alignItems: "center", justifyContent: "flex-end", minHeight: 58, gap: 2 },

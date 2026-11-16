@@ -1,11 +1,10 @@
 import { ActivityIndicator, View } from "react-native";
-import { Redirect } from "expo-router";
 import { useAuth } from "../src/auth";
 import { IntroHome } from "../src/IntroHome";
 import { colors } from "../src/theme";
 
 export default function Index() {
-  const { ready, user } = useAuth();
+  const { ready } = useAuth();
   if (!ready) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
@@ -13,6 +12,5 @@ export default function Index() {
       </View>
     );
   }
-  if (!user) return <IntroHome />;
-  return <Redirect href="/(app)/trades" />;
+  return <IntroHome />;
 }

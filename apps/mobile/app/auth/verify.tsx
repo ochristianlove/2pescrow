@@ -1,7 +1,9 @@
+import { Text } from "../../src/language";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { api, ApiError, tokenFromInput } from "../../src/api";
+import { AppTopBar } from "../../src/AppTopBar";
 import { useAuth } from "../../src/auth";
 import { colors } from "../../src/theme";
 
@@ -29,7 +31,7 @@ export default function VerifyScreen() {
           body: JSON.stringify({ token }),
         });
         await signInWithToken(session.token);
-        if (!cancelled) router.replace("/");
+        if (!cancelled) router.replace("/(app)/dashboard");
       } catch (err) {
         if (!cancelled) setError(err instanceof ApiError ? err.message : "That sign-in link did not work.");
       }
@@ -40,8 +42,11 @@ export default function VerifyScreen() {
   }, [token, signInWithToken, router]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center", padding: 24 }}>
-      {error ? <Text style={{ color: colors.danger, textAlign: "center" }}>{error}</Text> : <ActivityIndicator color={colors.accent} />}
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <AppTopBar />
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+        {error ? <Text style={{ color: colors.danger, textAlign: "center" }}>{error}</Text> : <ActivityIndicator color={colors.accent} />}
+      </View>
     </View>
   );
 }
