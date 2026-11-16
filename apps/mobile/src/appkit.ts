@@ -64,7 +64,7 @@ export const appKit = walletConnectReady
         name: "2Pescrow",
         description: "Buyer-funded P2P escrow on Ethereum",
         url: "https://2pescrow.com",
-        icons: ["https://2pescrow.com/favicon.ico"],
+        icons: ["https://2pescrow.com/brand/favicon.png"],
         redirect: {
           native: "twopescrow://",
           universal: "https://2pescrow.com",

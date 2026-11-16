@@ -1,0 +1,55 @@
+# EAS uses this file instead of .gitignore. Keep the gitignore rules here,
+# or a Windows android/local.properties (and other local files) get uploaded
+# and break the Linux Gradle build.
+
+node_modules
+dist
+.env
+**/.env
+!**/.env.example
+data/uploads
+contracts/cache
+contracts/artifacts
+coverage
+*.log
+.expo
+.tmp-deploy
+.tmp-deploy-cache
+.vite-runner
+.api-*
+.e2e-*
+
+# Symlinks that break the EAS archive on Windows
+.claude
+.agents
+data/skills
+
+# Machine-local Android files. local.properties points at this PC's SDK.
+**/local.properties
+apps/mobile/android/.gradle
+apps/mobile/android/build
+apps/mobile/android/app/build
+apps/mobile/android/.cxx
+apps/mobile/android/.idea
+tmp-eas
+
+# Regenerate native projects on EAS; never upload Windows autolinking caches.
+apps/mobile/android
+apps/mobile/ios
+apps/mobile/.expo-compile
+
+# Local databases, backups, experiments and agent assets are not app sources.
+data
+backups
+*.sql
+tmp-*
+.tmp-*
+.taste-skill
+agent
+sleek-design
+sleek-run-result.json
+skills-lock.json
+**/*.keystore
+**/*.jks
+**/*.p12
+**/*.mobileprovision

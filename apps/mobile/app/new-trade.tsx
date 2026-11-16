@@ -232,7 +232,7 @@ function NewTradeForm({ buyerAddress }: { buyerAddress?: string }) {
             <Text style={styles.muted}>{terms}</Text>
             <Line label="Amount" value={`${tokenName} ${amount || "0"}`} />
             <Line label="Creation fee" value={`${tokenName} ${formatAmount(creationFee.toString())}`} />
-            <Line label="Wallet approval" value={`${tokenName} ${formatAmount(((dollarsToAtomic(amount || "0") ? BigInt(dollarsToAtomic(amount || "0") as string) : 0n) + creationFee).toString())} (${amount || "0"} trade + ${formatAmount(creationFee.toString())} creation fee)`} />
+            <Line label="Wallet approval" value={`${tokenName} ${formatAmount(approvalAtomic(amount, creationFee))} (${amount || "0"} trade + ${formatAmount(creationFee.toString())} creation fee)`} />
             <Line label="Network" value={chain === "tron" ? "Tron · TRC-20 USDT" : `Ethereum · ${token}`} />
             <Line label="Seller" value="Joins with a code after you create the trade" />
             <Text style={styles.label}>Delivery window</Text>
@@ -304,6 +304,11 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
       <Text style={{ color: selected ? "#3ecf8e" : "#e8f4f2", fontWeight: "700" }}>{label}</Text>
     </Pressable>
   );
+}
+
+function approvalAtomic(amount: string, fee: bigint) {
+  const atomic = dollarsToAtomic(amount || "0");
+  return ((atomic ? BigInt(atomic) : 0n) + fee).toString();
 }
 
 function Line({ label, value }: { label: string; value: string }) {
