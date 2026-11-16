@@ -20,6 +20,8 @@ jobs:
   # Preview is the installable internal build already in eas.json (Android APK, iOS ad hoc).
   # EAS compiles on Expo's free queue. This job waits so the run uploads the APK.
   # Runner env vars are not sent to EAS. The app reads production URLs from app.json extra.
+  # eas-cli 27.10.0 has --non-interactive, --wait, and --json. Major 16 has those flags too,
+  # but it exits in CI instead of creating an Android keystore when the Expo project has none.
   phone-android:
     name: Build Android app (EAS preview)
     runs-on: ubuntu-latest
@@ -43,7 +45,7 @@ jobs:
             echo "Add the EXPO_TOKEN repository secret (an Expo access token) so EAS can authenticate." >&2
             exit 1
           fi
-          npx --yes eas-cli@16 build --platform android --profile preview --non-interactive --wait --json > eas-build.json
+          npx --yes eas-cli@27.10.0 build --platform android --profile preview --non-interactive --wait --json > eas-build.json
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -116,7 +118,7 @@ jobs:
           echo "iOS preview is an internal ad hoc build. This workflow does not submit it or request review."
           echo "No Apple certificate, provisioning profile, or App Store Connect API key is stored in this repo."
           echo "EAS must already have the distribution certificate and ad hoc profile for com.twopescrow.app."
-          npx --yes eas-cli@16 build --platform ios --profile preview --non-interactive --wait --json > eas-build.json
+          npx --yes eas-cli@27.10.0 build --platform ios --profile preview --non-interactive --wait --json > eas-build.json
           python3 - <<'PY'
           import json
           from pathlib import Path
