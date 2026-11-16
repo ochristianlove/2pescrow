@@ -17,52 +17,148 @@ jobs:
   verify:
     uses: ./.github/workflows/ci.yml
 
+  # Preview is the installable internal build already in eas.json (Android APK, iOS ad hoc).
+  # EAS compiles on Expo's free queue. This job waits so the run uploads the APK.
+  # Runner env vars are not sent to EAS. The app reads production URLs from app.json extra.
   phone-android:
-    name: Build Android app
+    name: Build Android app (EAS preview)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 180
     needs: verify
-    env:
-      EXPO_NO_TELEMETRY: "1"
-      EXPO_PUBLIC_API_URL: https://api.45.90.223.177.sslip.io
-      EXPO_PUBLIC_WEB_ORIGIN: https://2pescrow.com
-      EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID: "99700e35ab779a3fdd3918084d55bd02"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: "platform-tools platforms;android-35 build-tools;35.0.0 ndk;26.1.10909125"
       - run: npm ci
-      - name: Generate the Android project
+      - name: Build the Android preview on EAS
         working-directory: apps/mobile
         env:
           EXPO_NO_TELEMETRY: "1"
-          EXPO_PUBLIC_API_URL: https://api.45.90.223.177.sslip.io
-          EXPO_PUBLIC_WEB_ORIGIN: https://2pescrow.com
-          EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID: "99700e35ab779a3fdd3918084d55bd02"
-        run: npx expo prebuild --platform android --non-interactive
-      - name: Build a debug APK
-        working-directory: apps/mobile/android
-        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon --max-workers=2 -Pandroid.kotlinVersion=1.9.24
-      - name: Verify the APK contains the JavaScript bundle
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${EXPO_TOKEN}" ]; then
+            echo "Add the EXPO_TOKEN repository secret (an Expo access token) so EAS can authenticate." >&2
+            exit 1
+          fi
+          npx --yes eas-cli@16 build --platform android --profile preview --non-interactive --wait --json > eas-build.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          raw = Path("eas-build.json").read_text(encoding="utf-8")
+          positions = [p for p in (raw.find("{"), raw.find("[")) if p != -1]
+          if not positions:
+              raise SystemExit("EAS did not return JSON, so there is no APK to download.")
+          build, _ = json.JSONDecoder().raw_decode(raw[min(positions):])
+          if isinstance(build, list):
+              build = build[0]
+          status = str(build.get("status") or "").lower()
+          if status and status != "finished":
+              raise SystemExit("EAS Android build status was %s" % status)
+          artifacts = build.get("artifacts") or {}
+          url = artifacts.get("applicationArchiveUrl") or ""
+          if not url:
+              raise SystemExit("EAS Android build finished without applicationArchiveUrl.")
+          Path("artifact-url.txt").write_text(url, encoding="utf-8")
+          PY
+      - name: Download the EAS APK
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          curl --silent --show-error --fail --location --retry 3 --retry-delay 5 \
+            --output dist/2pescrow-preview.apk \
+            --url "$(cat artifact-url.txt)"
+      - name: Verify the APK is an Android package
+        working-directory: apps/mobile
         run: |
           python3 - <<'PY'
           import zipfile
-          with zipfile.ZipFile('apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk') as apk:
-              assert 'assets/index.android.bundle' in apk.namelist(), 'APK cannot run without Metro'
+          path = "dist/2pescrow-preview.apk"
+          with zipfile.ZipFile(path) as apk:
+              names = apk.namelist()
+          if not any(name == "AndroidManifest.xml" or name.endswith("/AndroidManifest.xml") for name in names):
+              raise SystemExit("Downloaded file is not an Android APK")
           PY
       - uses: actions/upload-artifact@v4
         with:
           name: 2pescrow-android
-          path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
+          path: apps/mobile/dist/2pescrow-preview.apk
+          if-no-files-found: error
+
+  # Separate from the API deploy. An Apple credential failure must not skip Dokploy.
+  # Ad hoc signing is not in the repo. EAS reuses credentials already stored on the Expo project.
+  phone-ios:
+    name: Build iOS app (EAS preview)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build the iOS preview on EAS
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${EXPO_TOKEN}" ]; then
+            echo "Add the EXPO_TOKEN repository secret (an Expo access token) so EAS can authenticate." >&2
+            exit 1
+          fi
+          echo "iOS preview is an internal ad hoc build. This workflow does not submit it or request review."
+          echo "No Apple certificate, provisioning profile, or App Store Connect API key is stored in this repo."
+          echo "EAS must already have the distribution certificate and ad hoc profile for com.twopescrow.app."
+          npx --yes eas-cli@16 build --platform ios --profile preview --non-interactive --wait --json > eas-build.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          raw = Path("eas-build.json").read_text(encoding="utf-8")
+          positions = [p for p in (raw.find("{"), raw.find("[")) if p != -1]
+          if not positions:
+              raise SystemExit("EAS did not return JSON, so there is no IPA to download.")
+          build, _ = json.JSONDecoder().raw_decode(raw[min(positions):])
+          if isinstance(build, list):
+              build = build[0]
+          status = str(build.get("status") or "").lower()
+          if status and status != "finished":
+              raise SystemExit("EAS iOS build status was %s" % status)
+          artifacts = build.get("artifacts") or {}
+          url = artifacts.get("applicationArchiveUrl") or ""
+          if not url:
+              raise SystemExit("EAS iOS build finished without applicationArchiveUrl.")
+          Path("artifact-url.txt").write_text(url, encoding="utf-8")
+          PY
+      - name: Download the EAS IPA
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          curl --silent --show-error --fail --location --retry 3 --retry-delay 5 \
+            --output dist/2pescrow-preview.ipa \
+            --url "$(cat artifact-url.txt)"
+      - name: Verify the IPA is an iOS package
+        working-directory: apps/mobile
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          path = "dist/2pescrow-preview.ipa"
+          with zipfile.ZipFile(path) as ipa:
+              names = ipa.namelist()
+          if not any(name.startswith("Payload/") for name in names):
+              raise SystemExit("Downloaded file is not an iOS IPA")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 2pescrow-ios
+          path: apps/mobile/dist/2pescrow-preview.ipa
           if-no-files-found: error
 
   web:
@@ -139,6 +235,7 @@ jobs:
     name: Deploy API
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Wait for the Android EAS APK, not iOS. Missing Apple credentials must not block Dokploy.
     needs: [verify, phone-android]
     steps:
       - name: Deploy this commit to the live API

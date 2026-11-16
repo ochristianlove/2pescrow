@@ -3,10 +3,12 @@ import { Alert, View } from "react-native";
 import { useAccount, useAppKit, useProvider } from "@reown/appkit-react-native";
 import { api } from "./api";
 import { appKit } from "./appkit";
+import { useAuth } from "./auth";
+import { FundingBreakdown, useFundingQuote, type FundingHint } from "./FundingBreakdown";
 import { Text, useLanguage } from "./language";
 import { colors } from "./theme";
 import type { TradeRow } from "./types";
-import { tradePermissions } from "./tradePresentation";
+import { buyerFundingPending, tradeDisputeAccess, tradePermissions } from "./tradePresentation";
 import { Button, Field } from "./ui";
 import {
   chainError,
@@ -15,9 +17,11 @@ import {
   openDisputeOnChain,
   readCreationFee,
   readDeal,
+  readTronDeal,
   refuseCancel,
   releaseFunds,
   requestCancel,
+  withdrawDisputeOnChain,
   type WalletProvider,
 } from "./tradeChain";
 
@@ -26,6 +30,9 @@ type WalletConfig = {
   factoryAddress?: string | null;
 };
 
+type ChainView = { state: number; buyerCancelRequested: boolean };
+type ActionMode = "ethereum" | "tron" | "website";
+
 export function TradeActions({ trade, userId, onChanged, onError, onWeb }: {
   trade: TradeRow;
   userId?: string;
@@ -33,8 +40,10 @@ export function TradeActions({ trade, userId, onChanged, onError, onWeb }: {
   onError: (message: string) => void;
   onWeb: () => void;
 }) {
-  if (!appKit || trade.chain === "tron") return <RecordedActions trade={trade} userId={userId} onChanged={onChanged} onError={onError} onWeb={onWeb} />;
-  return <EthereumActions trade={trade} userId={userId} onChanged={onChanged} onError={onError} />;
+  if (!appKit || trade.chain === "tron") {
+    return <RecordedActions trade={trade} userId={userId} onChanged={onChanged} onError={onError} onWeb={onWeb} />;
+  }
+  return <EthereumActions trade={trade} userId={userId} onChanged={onChanged} onError={onError} onWeb={onWeb} />;
 }
 
 function RecordedActions({ trade, userId, onChanged, onError, onWeb }: {
@@ -48,9 +57,25 @@ function RecordedActions({ trade, userId, onChanged, onError, onWeb }: {
   const permission = tradePermissions(trade, userId);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [chain, setChain] = useState<ChainView | null>(null);
   const lock = useRef(false);
   const open = !["Completed", "Resolved", "Cancelled"].includes(trade.status);
   const disputed = trade.status === "Disputed" || Boolean(trade.disputes?.some((item) => item.status === "open"));
+  const mode: ActionMode = trade.chain === "tron" ? "tron" : "website";
+  const showFunding = buyerFundingPending(trade, permission.buyer, chain?.state);
+  const quote = useFundingQuote(trade, null, showFunding);
+
+  useEffect(() => {
+    if (!trade.contractAddress) return;
+    let cancelled = false;
+    const read = trade.chain === "tron" ? readTronDeal(trade.contractAddress) : readDeal(trade.contractAddress);
+    void read.then((view) => {
+      if (!cancelled && view) setChain(view);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [trade.contractAddress, trade.chain, trade.status, trade.updatedAt, trade.buyerAddress, trade.sellerAddress]);
 
   async function run(name: string, work: () => Promise<void>) {
     if (lock.current) return;
@@ -69,6 +94,14 @@ function RecordedActions({ trade, userId, onChanged, onError, onWeb }: {
 
   return (
     <View style={{ marginTop: 16, gap: 10 }}>
+      {showFunding ? <FundingBreakdown trade={trade} quote={quote} hint={trade.chain === "tron" ? "connect-tron" : "connect-ethereum"} /> : null}
+      {showFunding ? (
+        <Button
+          label="Approve token and fund escrow"
+          disabled={!trade.sellerAddress}
+          onPress={onWeb}
+        />
+      ) : null}
       {permission.seller && open && !disputed ? (
         <Button
           label="Confirm fulfilment"
@@ -80,26 +113,33 @@ function RecordedActions({ trade, userId, onChanged, onError, onWeb }: {
           ])}
         />
       ) : null}
-      {permission.party && !disputed && trade.contractAddress ? (
-        <>
-          <Field label="Raise a dispute" value={reason} editable={!busy} maxLength={2000} onChangeText={setReason} placeholder="Describe the issue for the other party and admin." multiline />
-          <Button label="Open dispute" tone="danger" busy={busy === "dispute"} disabled={Boolean(busy) || !reason.trim()} onPress={() => void run("dispute", async () => {
-            await api(`/v1/escrows/${encodeURIComponent(trade.id)}/disputes`, { method: "POST", body: JSON.stringify({ reason: reason.trim() }) });
-            setReason("");
-          })} />
-        </>
-      ) : null}
-      <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>Wallet signatures for this network continue on the website.</Text>
+      <DisputeAndCancel
+        trade={trade}
+        userId={userId}
+        chain={chain}
+        busy={busy}
+        reason={reason}
+        setReason={setReason}
+        mode={mode}
+        onWeb={onWeb}
+        run={run}
+      />
+      <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
+        {trade.chain === "tron"
+          ? "TRON wallet signatures for funding, cancel, and restoring a frozen dispute continue on the website."
+          : "Wallet signatures for this network continue on the website."}
+      </Text>
       <Button label="Manage trade on website" tone="ghost" onPress={onWeb} />
     </View>
   );
 }
 
-function EthereumActions({ trade, userId, onChanged, onError }: {
+function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
   trade: TradeRow;
   userId?: string;
   onChanged: () => Promise<void>;
   onError: (message: string) => void;
+  onWeb: () => void;
 }) {
   const { t } = useLanguage();
   const { address, isConnected, chainId, chain: walletChain } = useAccount();
@@ -107,7 +147,7 @@ function EthereumActions({ trade, userId, onChanged, onError }: {
   const { provider } = useProvider();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [chain, setChain] = useState<{ state: number; buyerCancelRequested: boolean } | null>(null);
+  const [chain, setChain] = useState<ChainView | null>(null);
   const lock = useRef(false);
   const permission = tradePermissions(trade, userId);
   const openTrade = !["Completed", "Resolved", "Cancelled"].includes(trade.status);
@@ -118,13 +158,21 @@ function EthereumActions({ trade, userId, onChanged, onError }: {
   const walletReady = Boolean(isConnected && address && provider && mainnet && (matches || !linked));
   const fulfilmentReady = trade.status === "InProgress" || Boolean(trade.proofHash) || Boolean(trade.messages?.some((message) => message.kind === "fulfilment" && message.fileName));
   const releaseReady = Boolean(trade.contractAddress) && fulfilmentReady && !disputed && (chain ? chain.state === 2 : trade.status === "InProgress");
+  const showFunding = buyerFundingPending(trade, permission.buyer, chain?.state);
+  const fundingWallet = isConnected && mainnet && address ? address : null;
+  const fundingHint: FundingHint = !isConnected ? "connect-ethereum" : !mainnet ? "switch-ethereum" : null;
+  const quote = useFundingQuote(trade, fundingWallet, showFunding);
 
   useEffect(() => {
     if (!trade.contractAddress || trade.chain === "tron") return;
     let cancelled = false;
-    void readDeal(trade.contractAddress).then((view) => { if (!cancelled) setChain(view); });
-    return () => { cancelled = true; };
-  }, [trade.contractAddress, trade.chain, trade.status]);
+    void readDeal(trade.contractAddress).then((view) => {
+      if (!cancelled && view) setChain(view);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [trade.contractAddress, trade.chain, trade.status, trade.updatedAt, trade.buyerAddress, trade.sellerAddress]);
 
   async function run(name: string, work: () => Promise<void>) {
     if (lock.current) return;
@@ -153,6 +201,7 @@ function EthereumActions({ trade, userId, onChanged, onError }: {
 
   return (
     <View style={{ marginTop: 16, gap: 10 }}>
+      {showFunding ? <FundingBreakdown trade={trade} quote={quote} hint={fundingHint} /> : null}
       {permission.buyer && openTrade && !disputed && !trade.contractAddress ? (
         <Button label={busy === "fund" ? "Approving and depositing…" : "Approve token and fund escrow"} busy={busy === "fund"} disabled={Boolean(busy) || !trade.sellerAddress} onPress={() => void run("fund", async () => {
           const { from, provider: wallet } = requireWallet();
@@ -206,42 +255,192 @@ function EthereumActions({ trade, userId, onChanged, onError }: {
           })}
         />
       ) : null}
-      {permission.seller && openTrade && !disputed && chain?.buyerCancelRequested ? (
-        <Button label="Refuse cancel" tone="ghost" busy={busy === "refuse"} disabled={Boolean(busy) || !trade.contractAddress} onPress={() => void run("refuse", async () => {
-          const { from, provider: wallet } = requireWallet();
-          if (!trade.contractAddress) return;
-          await refuseCancel(wallet, from, trade.contractAddress);
-          await signal(trade.id, "cancel-refused");
-        })} />
-      ) : null}
-      {permission.party && openTrade && !disputed && trade.contractAddress ? (
-        <Button label={permission.seller ? "Cancel trade" : "Request cancel"} tone="ghost" busy={busy === "cancel"} disabled={Boolean(busy) || !["Funded", "InProgress"].includes(trade.status)} onPress={() => void run("cancel", async () => {
-          const { from, provider: wallet } = requireWallet();
-          if (!trade.contractAddress) return;
-          await requestCancel(wallet, from, trade.contractAddress);
-          const view = await readDeal(trade.contractAddress);
-          await signal(trade.id, view?.state === 4 ? "cancelled" : "cancel-requested");
-        })} />
-      ) : null}
-      {permission.party && !disputed && trade.contractAddress && ["Funded", "InProgress", "Completed"].includes(trade.status) ? (
-        <>
-          <Field label="Raise a dispute" value={reason} editable={!busy} maxLength={2000} onChangeText={setReason} placeholder="Describe the issue for the other party and admin." multiline />
-          <Button label="Open dispute" tone="danger" busy={busy === "dispute"} disabled={Boolean(busy) || !reason.trim()} onPress={() => void run("dispute", async () => {
-            const { from, provider: wallet } = requireWallet();
-            if (!trade.contractAddress) return;
-            const view = chain ?? await readDeal(trade.contractAddress);
-            if (view && view.state !== 5 && (view.state === 1 || view.state === 2)) await openDisputeOnChain(wallet, from, trade.contractAddress);
-            await api(`/v1/escrows/${encodeURIComponent(trade.id)}/disputes`, { method: "POST", body: JSON.stringify({ reason: reason.trim() }) });
-            setReason("");
-          })} />
-        </>
-      ) : null}
+      <DisputeAndCancel
+        trade={trade}
+        userId={userId}
+        chain={chain}
+        busy={busy}
+        reason={reason}
+        setReason={setReason}
+        mode="ethereum"
+        onWeb={onWeb}
+        run={run}
+        requireWallet={requireWallet}
+      />
       {!walletReady && permission.party && openTrade ? (
         <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
           {isConnected ? "Connect the wallet linked to this trade on Ethereum to sign." : "Connect your Ethereum wallet to approve, fund, or release this trade."}
         </Text>
       ) : null}
     </View>
+  );
+}
+
+function DisputeAndCancel({
+  trade,
+  userId,
+  chain,
+  busy,
+  reason,
+  setReason,
+  mode,
+  onWeb,
+  run,
+  requireWallet,
+}: {
+  trade: TradeRow;
+  userId?: string;
+  chain: ChainView | null;
+  busy: string | null;
+  reason: string;
+  setReason: (value: string) => void;
+  mode: ActionMode;
+  onWeb: () => void;
+  run: (name: string, work: () => Promise<void>) => Promise<void>;
+  requireWallet?: () => { from: string; provider: WalletProvider };
+}) {
+  const { user } = useAuth();
+  const actorId = userId || user?.id;
+  const access = tradeDisputeAccess(trade, actorId, user?.email, chain?.state);
+  const permission = tradePermissions(trade, actorId);
+  const tradeOpen = !["Completed", "Resolved", "Cancelled"].includes(trade.status);
+  const disputed = trade.status === "Disputed" || access.hasActiveDispute;
+  const funded = chain ? chain.state === 1 || chain.state === 2 : ["Funded", "InProgress"].includes(trade.status);
+  const canCancel = Boolean(permission.party && tradeOpen && !disputed && trade.contractAddress && funded);
+  const buyerWaiting = Boolean(permission.buyer && chain?.buyerCancelRequested);
+
+  async function openDispute() {
+    if (!reason.trim()) throw new Error("Write what went wrong before opening a dispute.");
+    if (!trade.contractAddress) throw new Error("Available after the on-chain escrow exists.");
+    if (mode === "tron") {
+      if (chain && ![1, 2, 5].includes(chain.state)) {
+        throw new Error("The on-chain escrow must be Funded or In Progress before opening a dispute.");
+      }
+    } else {
+      const wallet = requireWallet?.();
+      if (!wallet) throw new Error("Connect the Ethereum wallet linked to this trade.");
+      const view = chain ?? await readDeal(trade.contractAddress);
+      if (!view || (view.state !== 5 && view.state !== 1 && view.state !== 2)) {
+        throw new Error("The on-chain escrow must be Funded or In Progress before opening a dispute.");
+      }
+      if (view.state !== 5) await openDisputeOnChain(wallet.provider, wallet.from, trade.contractAddress);
+    }
+    await api(`/v1/escrows/${encodeURIComponent(trade.id)}/disputes`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason.trim() }),
+    });
+    setReason("");
+  }
+
+  async function withdrawDispute() {
+    if (!access.openDispute) return;
+    let txHash: string | undefined;
+    if (mode === "ethereum") {
+      const wallet = requireWallet?.();
+      if (!wallet) throw new Error("Connect the wallet linked to this trade to close the on-chain dispute.");
+      if (access.frozen && trade.contractAddress) {
+        const receipt = await withdrawDisputeOnChain(wallet.provider, wallet.from, trade.contractAddress);
+        txHash = receipt.hash;
+      }
+    }
+    await api(`/v1/disputes/${encodeURIComponent(access.openDispute.id)}/withdraw`, {
+      method: "POST",
+      body: JSON.stringify(txHash ? { txHash } : {}),
+    });
+  }
+
+  async function cancelTrade() {
+    const wallet = requireWallet?.();
+    if (!wallet || !trade.contractAddress) throw new Error("Connect the Ethereum wallet linked to this trade.");
+    await requestCancel(wallet.provider, wallet.from, trade.contractAddress);
+    const view = await readDeal(trade.contractAddress);
+    await signal(trade.id, view?.state === 4 ? "cancelled" : "cancel-requested");
+  }
+
+  async function refuse() {
+    const wallet = requireWallet?.();
+    if (!wallet || !trade.contractAddress) throw new Error("Connect the Ethereum wallet linked to this trade.");
+    await refuseCancel(wallet.provider, wallet.from, trade.contractAddress);
+    await signal(trade.id, "cancel-refused");
+  }
+
+  const chainOnWebsite = mode !== "ethereum";
+
+  return (
+    <>
+      {permission.seller && tradeOpen && !disputed && chain?.buyerCancelRequested ? (
+        <Button
+          label="Refuse cancel"
+          tone="ghost"
+          busy={busy === "refuse"}
+          disabled={Boolean(busy) || !trade.contractAddress}
+          onPress={() => {
+            if (chainOnWebsite) onWeb();
+            else void run("refuse", refuse);
+          }}
+        />
+      ) : null}
+      {canCancel && !buyerWaiting ? (
+        <Button
+          label={permission.seller ? "Cancel trade" : "Request cancel"}
+          tone="ghost"
+          busy={busy === "cancel"}
+          disabled={Boolean(busy)}
+          onPress={() => {
+            if (chainOnWebsite) onWeb();
+            else void run("cancel", cancelTrade);
+          }}
+        />
+      ) : null}
+      {permission.seller && canCancel ? (
+        <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
+          Cancel trade closes the escrow and refunds the buyer the trade amount minus a $1 cancel commission. The buyer’s $1 creation fee paid at funding is not refunded.
+        </Text>
+      ) : null}
+      {chain?.buyerCancelRequested && tradeOpen && !disputed ? (
+        <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
+          Cancel requested. The seller can refuse it, or cancel the trade to refund the buyer (trade amount minus $1 cancel commission). The creation fee stays with the protocol.
+        </Text>
+      ) : null}
+      {access.canOpen && mode === "website" ? (
+        <Button label="Open dispute" tone="danger" onPress={onWeb} />
+      ) : null}
+      {access.canOpen && mode !== "website" ? (
+        <>
+          <Field label="Raise a dispute" value={reason} editable={!busy} maxLength={2000} onChangeText={setReason} placeholder="Describe the issue for the other party and admin." multiline />
+          <Button
+            label="Open dispute"
+            tone="danger"
+            busy={busy === "dispute"}
+            disabled={Boolean(busy) || !reason.trim()}
+            onPress={() => void run("dispute", openDispute)}
+          />
+        </>
+      ) : null}
+      {access.canWithdraw ? (
+        <>
+          <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
+            {mode === "tron"
+              ? "Settling directly? The opener can withdraw the dispute. If the resolver already froze the escrow, continue on the website so your TRON wallet can restore it."
+              : "Settling directly? The party who opened this dispute can withdraw it. The wallet must sign to restore the escrow's previous on-chain state."}
+          </Text>
+          <Button
+            label={busy === "withdraw" ? "Closing…" : "Close dispute"}
+            tone="ghost"
+            busy={busy === "withdraw"}
+            disabled={Boolean(busy)}
+            onPress={() => {
+              if (mode === "tron" && access.frozen) onWeb();
+              else if (mode === "website") onWeb();
+              else void run("withdraw", withdrawDispute);
+            }}
+          />
+        </>
+      ) : null}
+      {access.openDispute && access.party && user && !access.isDisputeOpener ? (
+        <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>Only the party who opened this dispute can close it.</Text>
+      ) : null}
+    </>
   );
 }
 

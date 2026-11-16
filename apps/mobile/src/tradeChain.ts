@@ -11,6 +11,7 @@ const deal = new Interface([
   "function requestCancel()",
   "function refuseCancel()",
   "function openDispute()",
+  "function withdrawDispute()",
 ]);
 
 const token = new Interface([
@@ -116,6 +117,52 @@ export async function refuseCancel(provider: WalletProvider, from: string, escro
 
 export async function openDisputeOnChain(provider: WalletProvider, from: string, escrow: string) {
   return send(provider, from, escrow, deal.encodeFunctionData("openDispute"));
+}
+
+export async function withdrawDisputeOnChain(provider: WalletProvider, from: string, escrow: string) {
+  return send(provider, from, escrow, deal.encodeFunctionData("withdrawDispute"));
+}
+
+export async function readTokenBalance(owner: string, tokenAddress: string) {
+  return balanceOf(owner, tokenAddress);
+}
+
+async function tronConstant(contractAddress: string, selector: string) {
+  const response = await fetch("https://api.trongrid.io/wallet/triggerconstantcontract", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      owner_address: contractAddress,
+      contract_address: contractAddress,
+      function_selector: selector,
+      visible: true,
+    }),
+  });
+  if (!response.ok) return null;
+  const body = await response.json() as { constant_result?: string[] };
+  const hex = body.constant_result?.[0];
+  if (!hex || !/^[0-9a-fA-F]+$/.test(hex)) return null;
+  return BigInt(`0x${hex}`);
+}
+
+export async function readTronCreationFee(factoryAddress: string) {
+  try {
+    const fee = await tronConstant(factoryAddress, "creationFee()");
+    return fee == null ? 1_000_000n : fee;
+  } catch {
+    return 1_000_000n;
+  }
+}
+
+export async function readTronDeal(address: string) {
+  try {
+    const state = await tronConstant(address, "state()");
+    const cancel = await tronConstant(address, "buyerCancelRequested()");
+    if (state == null) return null;
+    return { state: Number(state), buyerCancelRequested: cancel === 1n };
+  } catch {
+    return null;
+  }
 }
 
 export async function fundExisting(provider: WalletProvider, from: string, escrow: string, tokenAddress: string, amount: bigint) {

@@ -37,7 +37,6 @@ function ConnectedTradeWallet({ trade, onLinked }: { trade: TradeRow; onLinked: 
     finally { lock.current = false; setBusy(false); }
   }
   return <View style={{ marginBottom: 20, gap: 12 }}>
-    <Text style={{ color: colors.text, fontSize: 19, fontWeight: "700" }}>Wallets for this trade</Text>
     {error ? <Notice text={error} /> : null}
     <Text style={{ color: colors.muted, lineHeight: 21 }}>{matches ? "Your connected wallet is linked to this trade." : fixed ? "Connect the wallet already linked to this trade." : "Connect a wallet, then confirm the wallet you want to use for this trade."}</Text>
     {isConnected && !mainnet ? <Notice text="Switch your EVM wallet to Ethereum before linking it to this trade." /> : null}

@@ -47,9 +47,13 @@ export type TradeMessage = {
   fileAvailable?: boolean;
 };
 
-export type TradeEvent = { id: string; eventName: string; createdAt?: string; txHash?: string | null };
+export type TradeEvent = {
+  id: string; eventName: string; createdAt?: string; txHash?: string | null;
+  payload?: { disputeId?: string } | null;
+};
 export type TradeDispute = {
   id: string; status: string; createdAt?: string; openedBy?: string | null;
+  openedByUserId?: string | null; buyerFavor?: boolean | null;
   rulingNote?: string | null; resolution?: string | null; appealDeadlineAt?: string | null;
   assignedModerator?: { displayName?: string | null } | null;
   appeal?: { status: string; reason?: string; decisionNote?: string | null } | null;

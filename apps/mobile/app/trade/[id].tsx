@@ -20,7 +20,8 @@ export default function TradeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
-  const { trackEscrowId } = useLiveNotifications();
+  const { trackEscrowId, notifications } = useLiveNotifications();
+  const seenNotice = useRef("");
   const [trade, setTrade] = useState<TradeRow | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +39,12 @@ export default function TradeScreen() {
     }
   }, [id, user?.id]);
   useEffect(() => { setTrade(null); setMessage(""); if (id) trackEscrowId(id); }, [id, user?.id, trackEscrowId]);
+  useEffect(() => {
+    const latest = notifications.find((item) => item.escrowId === id);
+    if (!latest || latest.id === seenNotice.current) return;
+    seenNotice.current = latest.id;
+    void load();
+  }, [notifications, id, load]);
   useFocusEffect(useCallback(() => {
     void load();
     const timer = setInterval(() => { if (AppState.currentState === "active" && !actionLock.current) void load(); }, 15000);

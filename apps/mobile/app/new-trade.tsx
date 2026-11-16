@@ -10,7 +10,8 @@ import { useRouter } from "expo-router";
 import { api, ApiError } from "../src/api";
 import { AppBottomNav } from "../src/AppBottomNav";
 import { AppTopBar } from "../src/AppTopBar";
-import { dollarsToAtomic } from "../src/format";
+import { dollarsToAtomic, formatAmount } from "../src/format";
+import { useCreationFee } from "../src/FundingBreakdown";
 import { colors } from "../src/theme";
 import type { TradeRow } from "../src/types";
 import { Button, Field, Notice } from "../src/ui";
@@ -53,6 +54,7 @@ function NewTradeForm({ buyerAddress }: { buyerAddress?: string }) {
   const [created, setCreated] = useState<TradeRow | null>(null);
   const [draftReady, setDraftReady] = useState(false);
   const [restored, setRestored] = useState(false);
+  const creationFee = useCreationFee(chain);
   const draftKey = `trade-draft:${apiUrl()}:${user?.id || "guest"}`;
   const writes = useRef(Promise.resolve());
   const lock = useRef(false);
@@ -229,6 +231,8 @@ function NewTradeForm({ buyerAddress }: { buyerAddress?: string }) {
             <Text style={styles.cardTitle}>{title}</Text>
             <Text style={styles.muted}>{terms}</Text>
             <Line label="Amount" value={`${tokenName} ${amount || "0"}`} />
+            <Line label="Creation fee" value={`${tokenName} ${formatAmount(creationFee.toString())}`} />
+            <Line label="Wallet approval" value={`${tokenName} ${formatAmount(((dollarsToAtomic(amount || "0") ? BigInt(dollarsToAtomic(amount || "0") as string) : 0n) + creationFee).toString())} (${amount || "0"} trade + ${formatAmount(creationFee.toString())} creation fee)`} />
             <Line label="Network" value={chain === "tron" ? "Tron · TRC-20 USDT" : `Ethereum · ${token}`} />
             <Line label="Seller" value="Joins with a code after you create the trade" />
             <Text style={styles.label}>Delivery window</Text>

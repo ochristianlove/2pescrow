@@ -57,6 +57,7 @@ export default function AccountScreen() {
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [legal, setLegal] = useState<LegalDoc | null>(null);
+  const [feedbackEnabled, setFeedbackEnabled] = useState(false);
 
   const loadReferral = useCallback(async () => {
     try {
@@ -66,7 +67,20 @@ export default function AccountScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { void loadReferral(); }, [loadReferral]));
+  useFocusEffect(useCallback(() => {
+    void loadReferral();
+    let cancelled = false;
+    void api<{ feedbackEnabled?: boolean }>("/v1/settings")
+      .then((settings) => {
+        if (!cancelled) setFeedbackEnabled(Boolean(settings.feedbackEnabled));
+      })
+      .catch(() => {
+        if (!cancelled) setFeedbackEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadReferral]));
 
   async function saveName() {
     setBusy("name");
@@ -154,6 +168,14 @@ export default function AccountScreen() {
         <Field label="Wallet address" autoCapitalize="none" autoCorrect={false} value={wallet} onChangeText={setWallet} placeholder="0x… or Tron address" />
         <Button label="Link wallet" tone="ghost" onPress={() => void linkWallet()} busy={busy === "wallet"} />
       </Card>
+      {feedbackEnabled ? (
+        <Card>
+          <Text style={{ color: colors.gold, fontSize: 12, fontWeight: "700", marginBottom: 6 }}>Feedback</Text>
+          <Text style={{ color: colors.text, fontWeight: "700", fontSize: 18, marginBottom: 8 }}>Send feedback</Text>
+          <Text style={{ color: colors.muted, lineHeight: 20, marginBottom: 12 }}>Report bugs, suggest improvements, or tell us how the trade room feels on your device.</Text>
+          <Button label="Open feedback form" tone="ghost" onPress={() => router.push("/(app)/feedback")} />
+        </Card>
+      ) : null}
       <Card>
         <Text style={{ color: colors.text, fontWeight: "700", marginBottom: 8 }}>Live alerts</Text>
         <Pressable onPress={() => setSoundEnabled(!soundEnabled)} style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }}>

@@ -1,5 +1,5 @@
 import { Text, useLanguage } from "./language";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Linking, Pressable, Share, StyleSheet, View } from "react-native";
 import { api } from "./api";
 import { formatAmount, shortAddr, tokenLabel } from "./format";
@@ -7,7 +7,7 @@ import { dateLabel, plainTerms, readableLabel, tradeActivity, tradePermissions }
 import { colors } from "./theme";
 import type { TradeRow } from "./types";
 import { Button, Card } from "./ui";
-import { MessageFile } from "./TradeFiles";
+import { downloadTradeAgreement, MessageFile } from "./TradeFiles";
 import { TradeActions } from "./TradeActions";
 import { TradeRoleTags } from "./TradeRoleTags";
 
@@ -16,10 +16,27 @@ export function TradeRoom({ trade, userId, onWeb, onError, onChanged, composer, 
 }) {
   const { t, language } = useLanguage();
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const downloadLock = useRef(false);
   const date = (value?: string | null) => dateLabel(value, language);
   const permission = tradePermissions(trade, userId);
   const activity = tradeActivity(trade);
   const terms = plainTerms(trade.description || "");
+  const canDownload = Boolean(trade.tradeCode && (permission.buyer || permission.seller || trade.partyRole === "admin"));
+  const canDownloadSigned = Boolean(canDownload && trade.buyerUserId && trade.sellerUserId && trade.contractAddress && (permission.buyer || permission.seller));
+  async function downloadAgreement() {
+    if (downloadLock.current) return;
+    downloadLock.current = true;
+    setDownloading(true);
+    try {
+      await downloadTradeAgreement(trade.id);
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "Could not create the agreement record");
+    } finally {
+      downloadLock.current = false;
+      setDownloading(false);
+    }
+  }
   return <>
     <Text translate={false} style={s.title} accessibilityRole="header">{trade.title}</Text>
     <TradeRoleTags
@@ -37,26 +54,36 @@ export function TradeRoom({ trade, userId, onWeb, onError, onChanged, composer, 
     <Card>
       <Text style={s.heading}>Deal summary</Text>
       {terms ? <Text translate={false} selectable numberOfLines={summaryOpen ? undefined : 4} style={s.body}>{terms}</Text> : null}
-      {summaryOpen ? <>
-        <Detail userContent label="buyer" value={trade.buyerUser?.displayName || shortAddr(trade.buyerAddress)} />
-        <Detail userContent label="seller" value={trade.sellerUser?.displayName || (trade.sellerUserId ? t("Joined") : trade.sellerAddress ? shortAddr(trade.sellerAddress) : t("Waiting for seller"))} />
-        <Detail label="Buyer wallet" value={trade.buyerAddress || "Not linked"} />
-        <Detail label="Seller wallet" value={trade.sellerAddress || "Not linked"} />
-        {trade.deliveryWindowHours ? <Detail label="Delivery window" value={t("{count} days after funding", { count: trade.deliveryWindowHours / 24 })} /> : null}
-        {trade.reviewWindowHours ? <Detail label="Buyer protection period" value={t("{count} days after delivery proof", { count: trade.reviewWindowHours / 24 })} /> : null}
-        {([['Seller joins by', trade.joinDeadlineAt], ['Fund by', trade.fundDeadlineAt], ['Delivery due', trade.deliveryDeadlineAt], ['Review ends', trade.reviewDeadlineAt]] as const).map(([label, value]) => value ? <Detail key={label} label={label} value={date(value)} /> : null)}
-        {trade.contractAddress ? <Detail label="Escrow contract" value={trade.contractAddress} /> : null}
-        {trade.proofHash ? <Detail label="Delivery proof" value={trade.proofHash} /> : null}
-        {trade.tradeCode ? <Text style={s.note}>Windows are reminders. They do not automatically release or refund funds.</Text> : null}
-      </> : null}
-      <Pressable accessibilityRole="button" onPress={() => setSummaryOpen((open) => !open)} style={s.more}>
-        <Text style={s.moreLabel}>{summaryOpen ? "View less" : "View more"}</Text>
-      </Pressable>
+      {terms ? (
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: summaryOpen }} onPress={() => setSummaryOpen((open) => !open)} style={s.more}>
+          <Text style={s.moreLabel}>{summaryOpen ? "View less" : "View more"}</Text>
+        </Pressable>
+      ) : null}
+      <Detail userContent label="buyer" value={trade.buyerUser?.displayName || shortAddr(trade.buyerAddress)} />
+      <Detail userContent label="seller" value={trade.sellerUser?.displayName || (trade.sellerUserId ? t("Joined") : trade.sellerAddress ? shortAddr(trade.sellerAddress) : t("Waiting for seller"))} />
+      {trade.deliveryWindowHours ? <Detail label="Delivery window" value={t("{count} days after funding", { count: trade.deliveryWindowHours / 24 })} /> : null}
+      {trade.reviewWindowHours ? <Detail label="Buyer protection period" value={t("{count} days after delivery proof", { count: trade.reviewWindowHours / 24 })} /> : null}
+      {([["Seller joins by", trade.joinDeadlineAt], ["Fund by", trade.fundDeadlineAt], ["Delivery due", trade.deliveryDeadlineAt], ["Review ends", trade.reviewDeadlineAt]] as const).map(([label, value]) => value ? <Detail key={label} label={label} value={date(value)} /> : null)}
+      {trade.contractAddress ? <Detail label="Escrow contract" value={trade.contractAddress} /> : null}
+      {trade.proofHash ? <Detail label="Delivery proof" value={trade.proofHash} /> : null}
+      {trade.tradeCode ? <Text style={s.note}>Windows are reminders. They do not automatically release or refund funds.</Text> : null}
+      {canDownloadSigned ? (
+        <View style={{ marginTop: 14, gap: 8 }}>
+          <Button label={downloading ? "Preparing agreement…" : "Download signed agreement PDF"} tone="ghost" busy={downloading} onPress={() => void downloadAgreement()} />
+          <Text style={s.note}>Includes the agreed terms, linked wallets, on-chain escrow reference, and a public verification link. It does not include private chat or evidence.</Text>
+        </View>
+      ) : null}
     </Card>
+    {trade.tradeCode ? <WalletLinkStatus trade={trade} /> : null}
     {wallet}
     <Card>
-      <Text style={s.heading}>{trade.tradeCode ? "Shared activity" : "Events"}</Text>
-      {trade.tradeCode ? <Text style={s.muted}>Messages, photos, and documents stay with this trade.</Text> : null}
+      <View style={s.activityHead}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.heading}>{trade.tradeCode ? "Shared activity" : "Events"}</Text>
+          {trade.tradeCode ? <Text style={s.muted}>Messages, photos, and documents stay with this trade.</Text> : null}
+        </View>
+      </View>
+      {canDownload ? <Button label={downloading ? "Preparing agreement…" : "Download agreement PDF"} tone="ghost" busy={downloading} onPress={() => void downloadAgreement()} /> : null}
       {activity.map(item => item.type === "event" ? <View key={item.key} style={s.event}>
         <Text style={s.body}>{readableLabel(item.event.eventName)}</Text><Text style={s.note}>{date(item.at)}</Text>
         {item.event.txHash ? <Text selectable style={s.note}>Transaction {item.event.txHash}</Text> : null}
@@ -85,6 +112,39 @@ export function TradeRoom({ trade, userId, onWeb, onError, onChanged, composer, 
     </Card>)}
   </>;
 }
+function WalletLinkStatus({ trade }: { trade: TradeRow }) {
+  const buyerLinked = Boolean(trade.buyerAddress);
+  const sellerLinked = Boolean(trade.sellerAddress);
+  const sellerLabel = sellerLinked ? "Linked" : trade.sellerUserId ? "Awaiting link" : "Not linked";
+  return (
+    <Card>
+      <Text style={s.heading}>Wallets for this trade</Text>
+      <Text style={s.muted}>Trade wallets are set only when a party connects and confirms “Link my wallet”. Disconnecting does not remove a trade wallet.</Text>
+      <WalletRow label="Buyer" state={buyerLinked ? "Linked" : "Not linked"} linked={buyerLinked} address={trade.buyerAddress} />
+      <WalletRow label="Seller" state={sellerLabel} linked={sellerLinked} address={trade.sellerAddress} />
+      {trade.buyerUserId && trade.sellerUserId && !sellerLinked ? (
+        <Text style={s.note}>The seller has joined but has not linked a receiving wallet yet. Funding stays disabled until they confirm a wallet in this room.</Text>
+      ) : null}
+    </Card>
+  );
+}
+
+function WalletRow({ label, state, linked, address }: { label: string; state: string; linked: boolean; address?: string | null }) {
+  const color = linked ? colors.accent : colors.gold;
+  return (
+    <View style={s.walletRow}>
+      <View style={s.walletHead}>
+        <View style={[s.dot, { backgroundColor: color }]} />
+        <Text style={s.body}>{label}</Text>
+      </View>
+      <View style={{ alignItems: "flex-end", flexShrink: 1 }}>
+        <Text style={[s.walletState, { color }]}>{state}</Text>
+        <Text translate={false} selectable style={s.note}>{address ? shortAddr(address) : "—"}</Text>
+      </View>
+    </View>
+  );
+}
+
 function LeaveFeedback() {
   const [links, setLinks] = useState<{ id: string; label: string; href: string }[]>([
     { id: "x", label: "X", href: "https://x.com/" },
@@ -146,8 +206,13 @@ const s = StyleSheet.create({
   detail: { paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.line, gap: 4 }, note: { color: colors.muted, fontSize: 12, lineHeight: 19, marginTop: 8 },
   event: { paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.line },
   message: { padding: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 12, marginTop: 12, backgroundColor: colors.bg }, author: { color: colors.accent, fontSize: 12, marginBottom: 6, fontWeight: "700" },
-  more: { marginTop: 12, alignSelf: "flex-start" },
+  more: { marginTop: 8, marginBottom: 4, alignSelf: "flex-start" },
   moreLabel: { color: colors.accent, fontSize: 14, fontWeight: "700" },
+  activityHead: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
+  walletRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.line },
+  walletHead: { flexDirection: "row", alignItems: "center", gap: 8 },
+  walletState: { fontSize: 14, fontWeight: "700" },
+  dot: { width: 10, height: 10, borderRadius: 5 },
   nextStep: { marginTop: 16, gap: 4 },
   feedback: { marginTop: 18, gap: 8 },
   feedbackLinks: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

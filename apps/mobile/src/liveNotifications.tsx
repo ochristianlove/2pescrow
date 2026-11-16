@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { Vibration } from "react-native";
+import { playTradeBell } from "./notificationSound";
 import { api } from "./api";
 import { useAuth } from "./auth";
 import { apiUrl } from "./config";
@@ -110,6 +111,7 @@ function playNotificationBell() {
   if (now - lastBellAt < 450) return;
   lastBellAt = now;
   Vibration.vibrate([0, 40, 70, 50]);
+  void playTradeBell().catch(() => undefined);
 }
 
 type LiveNotificationsCtx = {

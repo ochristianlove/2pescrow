@@ -67,6 +67,57 @@ export function EvidenceComposer({ trade, seller, disabled, onBusy, onUploaded }
     </> : <Text style={{ color: colors.muted, fontSize: 12 }}>Photos and PDFs up to 20 MB. Review your file before uploading.</Text>}
   </View>;
 }
+function bytesToBase64(bytes: Uint8Array) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i];
+    const b = i + 1 < bytes.length ? bytes[i + 1] : 0;
+    const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
+    const triple = (a << 16) | (b << 8) | c;
+    out += alphabet[(triple >> 18) & 63];
+    out += alphabet[(triple >> 12) & 63];
+    out += i + 1 < bytes.length ? alphabet[(triple >> 6) & 63] : "=";
+    out += i + 2 < bytes.length ? alphabet[triple & 63] : "=";
+  }
+  return out;
+}
+
+export async function downloadTradeAgreement(tradeId: string) {
+  const token = getToken();
+  if (!token) throw new Error("Sign in to download the agreement.");
+  const directory = FileSystem.cacheDirectory;
+  if (!directory) throw new Error("File sharing is not available on this device.");
+  const response = await fetch(`${apiUrl()}/v1/escrows/${encodeURIComponent(tradeId)}/trade-record`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const type = response.headers.get("content-type") || "";
+  if (!response.ok || type.includes("json")) {
+    let message = "Could not create the agreement record";
+    try {
+      const body = await response.json() as { error?: string };
+      if (body.error) message = body.error;
+    } catch {
+      /* keep fallback */
+    }
+    throw new Error(message);
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.length < 5 || String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== "%PDF") {
+    throw new Error("The agreement file did not come back as a PDF");
+  }
+  const destination = `${directory}2pescrow-agreement-${tradeId.slice(0, 8)}.pdf`;
+  await FileSystem.writeAsStringAsync(destination, bytesToBase64(bytes), { encoding: FileSystem.EncodingType.Base64 });
+  const sharing = await import("expo-sharing");
+  if (!await sharing.isAvailableAsync()) throw new Error("File sharing is not available on this device.");
+  await sharing.shareAsync(destination, {
+    mimeType: "application/pdf",
+    dialogTitle: `2pescrow-agreement-${tradeId.slice(0, 8)}.pdf`,
+    UTI: "com.adobe.pdf",
+  });
+}
+
 export function MessageFile({ tradeId, message }: { tradeId: string; message: TradeMessage }) {
   const { t } = useLanguage();
   const [busy, setBusy] = useState(false);
