@@ -75,7 +75,14 @@
       "expo-secure-store",
       "./queries.js",
       "./plugins/withEmbeddedAndroidBundle.js",
-      "./plugins/withAndroidKotlinVersion.js"
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false
