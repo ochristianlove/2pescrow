@@ -25,7 +25,10 @@ export function normalizeEvmFundingError(
   error: unknown,
   context: { estimatedEthWei?: bigint; tokenSymbol?: string },
 ): string {
-  const raw = error instanceof Error ? error.message : String(error);
+  // EIP-1193 wallets often reject with a plain object, not an Error instance.
+  const raw = error && typeof error === "object" && "message" in error && typeof error.message === "string"
+    ? error.message
+    : String(error);
   const ethHint =
     context.estimatedEthWei != null && context.estimatedEthWei > 0n
       ? ` You need about ${formatEthWei(context.estimatedEthWei)} ETH on Ethereum mainnet for the two network fees (approve + deposit). That is separate from the ${context.tokenSymbol || "token"} trade amount.`

@@ -1,20 +1,17 @@
 import { getAccount, getConnections } from "@wagmi/core";
 import type { Connector } from "wagmi";
 import {
-  createWalletClient,
-  custom,
-  encodeFunctionData,
   getAddress,
   type Abi,
   type Address,
   type Hash,
   type WriteContractParameters,
 } from "viem";
-import { writeContract } from "viem/actions";
 import { mainnet } from "viem/chains";
 import { wagmiConfig } from "../wagmi";
 import { withMobileWalletConnectHandoff } from "./walletConnectMobileHandoff";
 import { normalizeEvmFundingError } from "./evmWalletErrors";
+import { sendMainnetContractTransaction } from "./ethereumTransaction";
 
 type Eip1193Provider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
@@ -46,51 +43,14 @@ export async function writeViaConnector(
   const provider = await resolveSigningProvider(connector, signer);
   await ensureWalletAccount(provider, signer);
 
-  const data = encodeFunctionData({
-    abi: parameters.abi,
-    functionName: parameters.functionName,
-    args: parameters.args as readonly unknown[],
-  });
-
   try {
-    const hash = await withTimeout(
-      provider.request({
-        method: "eth_sendTransaction",
-        params: [
-          {
-            from: signer,
-            to: parameters.address,
-            data,
-          },
-        ],
-      }),
+    return await withTimeout(
+      sendMainnetContractTransaction(provider, signer, parameters),
       SEND_TIMEOUT_MS,
-      "The wallet did not respond. Open your wallet app, approve the transaction, or reconnect on Ethereum mainnet.",
+      "The wallet has not returned a transaction result. Check its activity before trying again; the request may still be pending.",
     );
-    if (typeof hash !== "string" || !/^0x[0-9a-fA-F]+$/.test(hash)) {
-      throw new Error("The wallet did not return a transaction hash.");
-    }
-    return hash as Hash;
-  } catch (sendError) {
-    const walletClient = createWalletClient({
-      account: signer,
-      chain: mainnet,
-      transport: custom(provider),
-    });
-    try {
-      const { type: _type, ...rest } = parameters;
-      return await withTimeout(
-        writeContract(walletClient, {
-          ...rest,
-          account: signer,
-          chain: mainnet,
-        }),
-        SEND_TIMEOUT_MS,
-        "The wallet did not respond. Open your wallet app, approve the transaction, or reconnect on Ethereum mainnet.",
-      );
-    } catch (writeError) {
-      throw new Error(normalizeEvmFundingError(writeError ?? sendError, {}));
-    }
+  } catch (error) {
+    throw new Error(normalizeEvmFundingError(error, {}));
   }
 }
 
