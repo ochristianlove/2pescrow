@@ -1,6 +1,7 @@
 import { prisma } from "./db";
 import { sendTradeDeadlineReminderEmail } from "./email";
 import { broadcast } from "./wsHub";
+import { createTradeNotification } from "./notifications";
 
 const DEFAULT_REMINDER_SUBJECT = "2Pescrow reminder · {{tradeTitle}}";
 const DEFAULT_REMINDER_BODY = [
@@ -127,7 +128,10 @@ async function notifyParties(opts: {
   title: string;
   message: string;
   phase: string;
+  kind: DeadlineKind;
   deadline: string;
+  buyerUserId: string | null;
+  sellerUserId: string | null;
   buyerEmail: string | null;
   sellerEmail: string | null;
   audience: "buyer" | "seller" | "both";
@@ -136,6 +140,29 @@ async function notifyParties(opts: {
   log: LogLike;
 }) {
   broadcast("trade:deadline-reminder", { escrowId: opts.escrowId, message: opts.message });
+
+  if ((opts.audience === "buyer" || opts.audience === "both") && opts.buyerUserId) {
+    void createTradeNotification({
+      recipientUserId: opts.buyerUserId,
+      escrowId: opts.escrowId,
+      type: "trade:deadline-reminder",
+      title: "Trade deadline reminder",
+      message: opts.message,
+      data: { escrowId: opts.escrowId, path: `/trade/${opts.escrowId}` },
+      eventId: `deadline:${opts.escrowId}:${opts.phase}:${opts.kind}:buyer`,
+    }).catch(() => undefined);
+  }
+  if ((opts.audience === "seller" || opts.audience === "both") && opts.sellerUserId) {
+    void createTradeNotification({
+      recipientUserId: opts.sellerUserId,
+      escrowId: opts.escrowId,
+      type: "trade:deadline-reminder",
+      title: "Trade deadline reminder",
+      message: opts.message,
+      data: { escrowId: opts.escrowId, path: `/trade/${opts.escrowId}` },
+      eventId: `deadline:${opts.escrowId}:${opts.phase}:${opts.kind}:seller`,
+    }).catch(() => undefined);
+  }
 
   const recipients: string[] = [];
   if ((opts.audience === "buyer" || opts.audience === "both") && opts.buyerEmail) {
@@ -196,7 +223,10 @@ export async function runDeadlineReminders(log: LogLike) {
         title: escrow.title,
         message,
         phase,
+        kind: target.kind,
         deadline: target.at.toISOString(),
+        buyerUserId: escrow.buyerUserId,
+        sellerUserId: escrow.sellerUserId,
         buyerEmail: escrow.buyerUser?.email ?? null,
         sellerEmail: escrow.sellerUser?.email ?? null,
         audience: target.audience,

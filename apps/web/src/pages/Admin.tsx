@@ -1,3 +1,5 @@
+import { useLanguage as useCopyLanguage } from "../lib/language";
+import { TranslatedText } from "../lib/language";
 import { Fragment, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { mainnet } from "viem/chains";
@@ -106,7 +108,7 @@ function AnalyticsMonthlyChart({
 }) {
   const chartRows = rows.slice(-limit);
   const assets = analyticsAssetTotals(chartRows);
-  if (!assets.length) return <section className="admin-analytics-chart"><h3>{title}</h3><p className="muted">No indexed on-chain amount data for this period.</p></section>;
+  if (!assets.length) return <section className="admin-analytics-chart"><h3>{title}</h3><p className="muted"><TranslatedText text={"No indexed on-chain amount data for this period."} /></p></section>;
   return (
     <section className="admin-analytics-chart">
       <h3>{title}</h3>
@@ -143,6 +145,7 @@ function AnalyticsMonthlyChart({
 }
 
 function AdminOverviewFinancials({ headers }: { headers: () => Record<string, string> }) {
+  const { t: localizeCopy } = useCopyLanguage();
   const [report, setReport] = useState<AnalyticsReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -153,8 +156,8 @@ function AdminOverviewFinancials({ headers }: { headers: () => Record<string, st
     return () => { alive = false; };
   }, [headers]);
 
-  if (error) return <section className="card-surface"><h2>Trade volume & platform earnings</h2><p className="error-banner">{error}</p></section>;
-  if (!report) return <section className="card-surface"><h2>Trade volume & platform earnings</h2><p className="muted">Loading indexed on-chain totals…</p></section>;
+  if (error) return <section className="card-surface"><h2><TranslatedText text={"Trade volume & platform earnings"} /></h2><p className="error-banner"><TranslatedText text={error} /></p></section>;
+  if (!report) return <section className="card-surface"><h2><TranslatedText text={"Trade volume & platform earnings"} /></h2><p className="muted"><TranslatedText text={"Loading indexed on-chain totals…"} /></p></section>;
 
   const assets = analyticsAssetTotals(report.months);
   const totals = report.months.reduce((sum, month) => ({
@@ -164,35 +167,35 @@ function AdminOverviewFinancials({ headers }: { headers: () => Record<string, st
   return (
     <section className="card-surface admin-overview-financials">
       <div>
-        <h2>Trade volume & platform earnings</h2>
-        <p className="muted">All-time indexed totals, with fee revenue broken out by the month it was recorded. Amounts stay separated by network and token.</p>
+        <h2><TranslatedText text={"Trade volume & platform earnings"} /></h2>
+        <p className="muted"><TranslatedText text={"All-time indexed totals, with fee revenue broken out by the month it was recorded. Amounts stay separated by network and token."} /></p>
       </div>
       <div className="admin-stat-row">
-        <div className="admin-stat-chip"><span className="muted">Funded trades</span><strong>{totals.funded.toLocaleString()}</strong></div>
-        <div className="admin-stat-chip"><span className="muted">Completed / resolved</span><strong>{totals.completed.toLocaleString()}</strong></div>
+        <div className="admin-stat-chip"><span className="muted"><TranslatedText text={"Funded trades"} /></span><strong>{totals.funded.toLocaleString()}</strong></div>
+        <div className="admin-stat-chip"><span className="muted"><TranslatedText text={"Completed / resolved"} /></span><strong>{totals.completed.toLocaleString()}</strong></div>
         {assets.map((asset) => <div className="admin-stat-chip" key={`completed:${asset.chain}:${asset.tokenSymbol}`}>
-          <span className="muted">Completed amount · {asset.chain} · {asset.tokenSymbol}</span>
+          <span className="muted"><TranslatedText text={"Completed amount ·"} /> {asset.chain} · {asset.tokenSymbol}</span>
           <strong>{formatAmount(asset.completedVolumeAtomic)} {asset.tokenSymbol}</strong>
         </div>)}
         {assets.map((asset) => <div className="admin-stat-chip" key={`creation-fees:${asset.chain}:${asset.tokenSymbol}`}>
-          <span className="muted">Creation fees ($1 per funded trade) · {asset.chain} · {asset.tokenSymbol}</span>
+          <span className="muted"><TranslatedText text={"Creation fees ($1 per funded trade) ·"} /> {asset.chain} · {asset.tokenSymbol}</span>
           <strong>{formatAmount(asset.creationFeesAtomic)} {asset.tokenSymbol}</strong>
         </div>)}
         {assets.map((asset) => <div className="admin-stat-chip" key={`success-fees:${asset.chain}:${asset.tokenSymbol}`}>
-          <span className="muted">Successful trade fees (10%) · {asset.chain} · {asset.tokenSymbol}</span>
+          <span className="muted"><TranslatedText text={"Successful trade fees (10%) ·"} /> {asset.chain} · {asset.tokenSymbol}</span>
           <strong>{formatAmount(asset.successfulTradeFeesAtomic)} {asset.tokenSymbol}</strong>
         </div>)}
         {assets.map((asset) => <div className="admin-stat-chip" key={`fees:${asset.chain}:${asset.tokenSymbol}`}>
-          <span className="muted">Gross platform fees · {asset.chain} · {asset.tokenSymbol}</span>
+          <span className="muted"><TranslatedText text={"Gross platform fees ·"} /> {asset.chain} · {asset.tokenSymbol}</span>
           <strong>{formatAmount(asset.feesAtomic)} {asset.tokenSymbol}</strong>
-          <span className="muted">Other/cancellation fees: {formatAmount(asset.otherFeesAtomic)} {asset.tokenSymbol}</span>
-          <span className="muted">Fee fields reported: {asset.feeEventsReported}/{asset.feeEventsCount}{asset.feeEventsMissing > 0 ? ` · ${asset.feeEventsMissing} missing` : ""}</span>
+          <span className="muted"><TranslatedText text={"Other/cancellation fees:"} /> {formatAmount(asset.otherFeesAtomic)} {asset.tokenSymbol}</span>
+          <span className="muted"><TranslatedText text={"Fee fields reported:"} /> {asset.feeEventsReported}/{asset.feeEventsCount}{asset.feeEventsMissing > 0 ? ` · ${asset.feeEventsMissing} missing` : ""}</span>
         </div>)}
       </div>
-      <AnalyticsMonthlyChart rows={report.months} metric="completedVolumeAtomic" title="Completed trade amount · recent months" limit={6} />
-      <AnalyticsMonthlyChart rows={report.months} metric="successfulTradeFeesAtomic" title="Successful trade fees (10%) · recent months" limit={6} />
-      <AnalyticsMonthlyChart rows={report.months} metric="creationFeesAtomic" title="Creation fees ($1 per funded trade) · recent months" limit={6} />
-      <p className="hint">Successful trade fees are the contract fee transferred when funds are released to the seller (or resolved in the seller’s favor). Creation fees are charged when funding succeeds. Gross fees are before referral commission liabilities; missing fee payloads are excluded and shown in the coverage count.</p>
+      <AnalyticsMonthlyChart rows={report.months} metric="completedVolumeAtomic" title={localizeCopy("Completed trade amount · recent months")} limit={6} />
+      <AnalyticsMonthlyChart rows={report.months} metric="successfulTradeFeesAtomic" title={localizeCopy("Successful trade fees (10%) · recent months")} limit={6} />
+      <AnalyticsMonthlyChart rows={report.months} metric="creationFeesAtomic" title={localizeCopy("Creation fees ($1 per funded trade) · recent months")} limit={6} />
+      <p className="hint"><TranslatedText text={"Successful trade fees are the contract fee transferred when funds are released to the seller (or resolved in the seller’s favor). Creation fees are charged when funding succeeds. Gross fees are before referral commission liabilities; missing fee payloads are excluded and shown in the coverage count."} /></p>
     </section>
   );
 }
@@ -267,6 +270,7 @@ const NAV: { id: AdminSection; label: string }[] = [
 ];
 
 function AdminAnalyticsReport({ headers }: { headers: () => Record<string, string> }) {
+  const { t: localizeCopy } = useCopyLanguage();
   const [report, setReport] = useState<AnalyticsReport | null>(null);
   const [range, setRange] = useState<"all" | "12" | "60">("all");
   const [error, setError] = useState<string | null>(null);
@@ -346,54 +350,54 @@ function AdminAnalyticsReport({ headers }: { headers: () => Record<string, strin
     <section className="card-surface">
       <div className="admin-report-head">
         <div>
-          <h2>Platform analytics</h2>
-          <p className="muted">Monthly activity and the platform’s two key fees: $1 when each trade is funded and 10% when a successful trade is paid out.</p>
+          <h2><TranslatedText text={"Platform analytics"} /></h2>
+          <p className="muted"><TranslatedText text={"Monthly activity and the platform’s two key fees: $1 when each trade is funded and 10% when a successful trade is paid out."} /></p>
         </div>
         <div className="hero-actions">
-          <select aria-label="Analytics date range" value={range} onChange={(e) => setRange(e.target.value as typeof range)}>
-            <option value="all">All recorded history</option>
-            <option value="60">Last 5 years</option>
-            <option value="12">Last 12 months</option>
+          <select aria-label={localizeCopy("Analytics date range")} value={range} onChange={(e) => setRange(e.target.value as typeof range)}>
+            <option value="all"><TranslatedText text={"All recorded history"} /></option>
+            <option value="60"><TranslatedText text={"Last 5 years"} /></option>
+            <option value="12"><TranslatedText text={"Last 12 months"} /></option>
           </select>
-          <button type="button" className="primary" onClick={exportCsv} disabled={!report}>Export CSV for Excel</button>
+          <button type="button" className="primary" onClick={exportCsv} disabled={!report}><TranslatedText text={"Export CSV for Excel"} /></button>
         </div>
       </div>
-      {loading && <p className="muted">Loading analytics…</p>}
-      {error && <p className="error-banner">{error}</p>}
+      {loading && <p className="muted"><TranslatedText text={"Loading analytics…"} /></p>}
+      {error && <p className="error-banner"><TranslatedText text={error} /></p>}
       {report && <>
         <div className="admin-stat-row">
-          <div className="admin-stat-chip"><span className="muted">New signups</span><strong>{sums.signups.toLocaleString()}</strong></div>
-          <div className="admin-stat-chip"><span className="muted">Referral visits</span><strong>{sums.visits.toLocaleString()}</strong></div>
-          <div className="admin-stat-chip"><span className="muted">Funded trades</span><strong>{sums.funded.toLocaleString()}</strong></div>
-          <div className="admin-stat-chip"><span className="muted">Completed / resolved trades</span><strong>{sums.completed.toLocaleString()}</strong></div>
+          <div className="admin-stat-chip"><span className="muted"><TranslatedText text={"New signups"} /></span><strong>{sums.signups.toLocaleString()}</strong></div>
+          <div className="admin-stat-chip"><span className="muted"><TranslatedText text={"Referral visits"} /></span><strong>{sums.visits.toLocaleString()}</strong></div>
+          <div className="admin-stat-chip"><span className="muted"><TranslatedText text={"Funded trades"} /></span><strong>{sums.funded.toLocaleString()}</strong></div>
+          <div className="admin-stat-chip"><span className="muted"><TranslatedText text={"Completed / resolved trades"} /></span><strong>{sums.completed.toLocaleString()}</strong></div>
           {assetTotals.map((asset) => <div className="admin-stat-chip" key={`funded:${asset.chain}:${asset.tokenSymbol}`}>
-            <span className="muted">Funded amount · {asset.chain} · {asset.tokenSymbol}</span><strong>{formatAmount(asset.fundedVolumeAtomic)} {asset.tokenSymbol}</strong>
+            <span className="muted"><TranslatedText text={"Funded amount ·"} /> {asset.chain} · {asset.tokenSymbol}</span><strong>{formatAmount(asset.fundedVolumeAtomic)} {asset.tokenSymbol}</strong>
           </div>)}
           {assetTotals.map((asset) => <div className="admin-stat-chip" key={`completed:${asset.chain}:${asset.tokenSymbol}`}>
-            <span className="muted">Completed amount · {asset.chain} · {asset.tokenSymbol}</span><strong>{formatAmount(asset.completedVolumeAtomic)} {asset.tokenSymbol}</strong>
+            <span className="muted"><TranslatedText text={"Completed amount ·"} /> {asset.chain} · {asset.tokenSymbol}</span><strong>{formatAmount(asset.completedVolumeAtomic)} {asset.tokenSymbol}</strong>
           </div>)}
           {assetTotals.map((asset) => <div className="admin-stat-chip" key={`creation-fees:${asset.chain}:${asset.tokenSymbol}`}>
-            <span className="muted">Creation fees ($1 per funded trade) · {asset.chain} · {asset.tokenSymbol}</span><strong>{formatAmount(asset.creationFeesAtomic)} {asset.tokenSymbol}</strong>
+            <span className="muted"><TranslatedText text={"Creation fees ($1 per funded trade) ·"} /> {asset.chain} · {asset.tokenSymbol}</span><strong>{formatAmount(asset.creationFeesAtomic)} {asset.tokenSymbol}</strong>
           </div>)}
           {assetTotals.map((asset) => <div className="admin-stat-chip" key={`success-fees:${asset.chain}:${asset.tokenSymbol}`}>
-            <span className="muted">Successful trade fees (10%) · {asset.chain} · {asset.tokenSymbol}</span><strong>{formatAmount(asset.successfulTradeFeesAtomic)} {asset.tokenSymbol}</strong>
+            <span className="muted"><TranslatedText text={"Successful trade fees (10%) ·"} /> {asset.chain} · {asset.tokenSymbol}</span><strong>{formatAmount(asset.successfulTradeFeesAtomic)} {asset.tokenSymbol}</strong>
           </div>)}
           {assetTotals.map((asset) => <div className="admin-stat-chip" key={`fees:${asset.chain}:${asset.tokenSymbol}`}>
-            <span className="muted">Gross platform fees · {asset.chain} · {asset.tokenSymbol}</span><strong>{formatAmount(asset.feesAtomic)} {asset.tokenSymbol}</strong>
-            <span className="muted">Other/cancellation fees: {formatAmount(asset.otherFeesAtomic)} {asset.tokenSymbol}</span>
-            <span className="muted">Fee fields reported: {asset.feeEventsReported}/{asset.feeEventsCount}{asset.feeEventsMissing > 0 ? ` · ${asset.feeEventsMissing} missing` : ""}</span>
+            <span className="muted"><TranslatedText text={"Gross platform fees ·"} /> {asset.chain} · {asset.tokenSymbol}</span><strong>{formatAmount(asset.feesAtomic)} {asset.tokenSymbol}</strong>
+            <span className="muted"><TranslatedText text={"Other/cancellation fees:"} /> {formatAmount(asset.otherFeesAtomic)} {asset.tokenSymbol}</span>
+            <span className="muted"><TranslatedText text={"Fee fields reported:"} /> {asset.feeEventsReported}/{asset.feeEventsCount}{asset.feeEventsMissing > 0 ? ` · ${asset.feeEventsMissing} missing` : ""}</span>
           </div>)}
         </div>
-        <p className="hint">The Month column is when the platform recorded each on-chain event (UTC). The $1 creation fee is counted in the month the trade is funded; the 10% successful-trade fee is counted in the month funds are released or a dispute is resolved in the seller’s favor. Amounts are grouped by Ethereum or Tron and token. Missing fee data is excluded and counted, so historical totals may be incomplete.</p>
+        <p className="hint"><TranslatedText text={"The Month column is when the platform recorded each on-chain event (UTC). The $1 creation fee is counted in the month the trade is funded; the 10% successful-trade fee is counted in the month funds are released or a dispute is resolved in the seller’s favor. Amounts are grouped by Ethereum or Tron and token. Missing fee data is excluded and counted, so historical totals may be incomplete."} /></p>
         <div className="admin-analytics-chart-grid">
-          <AnalyticsMonthlyChart rows={rows} metric="completedVolumeAtomic" title="Completed trade amount by month" limit={12} />
-          <AnalyticsMonthlyChart rows={rows} metric="successfulTradeFeesAtomic" title="Successful trade fees (10%) by month" limit={12} />
-          <AnalyticsMonthlyChart rows={rows} metric="creationFeesAtomic" title="Creation fees ($1 per funded trade) by month" limit={12} />
-          <AnalyticsMonthlyChart rows={rows} metric="feesAtomic" title="Reported gross platform fees by month" limit={12} />
+          <AnalyticsMonthlyChart rows={rows} metric="completedVolumeAtomic" title={localizeCopy("Completed trade amount by month")} limit={12} />
+          <AnalyticsMonthlyChart rows={rows} metric="successfulTradeFeesAtomic" title={localizeCopy("Successful trade fees (10%) by month")} limit={12} />
+          <AnalyticsMonthlyChart rows={rows} metric="creationFeesAtomic" title={localizeCopy("Creation fees ($1 per funded trade) by month")} limit={12} />
+          <AnalyticsMonthlyChart rows={rows} metric="feesAtomic" title={localizeCopy("Reported gross platform fees by month")} limit={12} />
         </div>
         <div className="admin-table-wrap">
           <table className="admin-table">
-            <thead><tr><th>Month</th><th>Signups</th><th>Referral visits</th><th>Created</th><th>Funded</th><th>Completed / resolved</th><th>Network / token</th><th>Funded amount</th><th>Completed amount</th><th>Creation fees ($1)</th><th>Successful trade fees (10%)</th><th>Other fees</th><th>Gross fees reported</th><th>Fee fields reported</th><th>Fee fields missing</th></tr></thead>
+            <thead><tr><th><TranslatedText text={"Month"} /></th><th><TranslatedText text={"Signups"} /></th><th><TranslatedText text={"Referral visits"} /></th><th><TranslatedText text={"Created"} /></th><th><TranslatedText text={"Funded"} /></th><th><TranslatedText text={"Completed / resolved"} /></th><th><TranslatedText text={"Network / token"} /></th><th><TranslatedText text={"Funded amount"} /></th><th><TranslatedText text={"Completed amount"} /></th><th><TranslatedText text={"Creation fees ($1)"} /></th><th><TranslatedText text={"Successful trade fees (10%)"} /></th><th><TranslatedText text={"Other fees"} /></th><th><TranslatedText text={"Gross fees reported"} /></th><th><TranslatedText text={"Fee fields reported"} /></th><th><TranslatedText text={"Fee fields missing"} /></th></tr></thead>
             <tbody>{rows.slice().reverse().map((month) => month.assets.length
               ? month.assets.map((asset, index) => <tr key={`${month.month}-${asset.chain}-${asset.tokenSymbol}`}>
                   <td>{index === 0 ? month.month : ""}</td><td>{index === 0 ? month.newUsers : ""}</td><td>{index === 0 ? month.referralVisits : ""}</td><td>{index === 0 ? month.tradesCreated : ""}</td><td>{index === 0 ? month.tradesFunded : ""}</td><td>{index === 0 ? month.tradesCompleted : ""}</td>
@@ -409,6 +413,7 @@ function AdminAnalyticsReport({ headers }: { headers: () => Record<string, strin
 }
 
 export function AdminPage() {
+  const { t: localizeCopy } = useCopyLanguage();
   const { address, chainId } = useAccount();
   const publicClient = usePublicClient();
   const { navigate } = useRouter();
@@ -1470,7 +1475,7 @@ export function AdminPage() {
   }
 
   if (loading || !user || (user.role !== "admin" && user.role !== "moderator" && !(user.role === "agent" && user.permissions?.includes("disputes")))) {
-    return <p className="muted">Checking admin session…</p>;
+    return <p className="muted"><TranslatedText text={"Checking admin session…"} /></p>;
   }
 
   function accessFor(row: AdminUserRow) {
@@ -1538,33 +1543,28 @@ export function AdminPage() {
     <div className="page admin-cms-page">
       <div className="page-head">
         <div>
-          <p className="eyebrow">CMS</p>
-          <h1>{isSuper ? "Admin dashboard" : "Staff desk"}</h1>
-          <p className="muted">
-            Signed in as <strong>{user.email}</strong>
-            {isSuper ? " · super admin" : isDisputeAgent ? " · agent" : " · moderator"}
+          <p className="eyebrow"><TranslatedText text={"CMS"} /></p>
+          <h1><TranslatedText text={isSuper ? "Admin dashboard" : "Staff desk"} /></h1>
+          <p className="muted"> <TranslatedText text={"Signed in as"} /> <strong>{user.email}</strong>
+            <TranslatedText text={isSuper ? " · super admin" : isDisputeAgent ? " · agent" : " · moderator"} />
           </p>
         </div>
         <div className="hero-actions">
           {isSuper && (
-            <button type="button" className="secondary" onClick={() => seedDemo()}>
-              Seed demo trade
-            </button>
+            <button type="button" className="secondary" onClick={() => seedDemo()}> <TranslatedText text={"Seed demo trade"} /> </button>
           )}
-          <button type="button" className="secondary" onClick={() => signOut()}>
-            Sign out
-          </button>
+          <button type="button" className="secondary" onClick={() => signOut()}> <TranslatedText text={"Sign out"} /> </button>
         </div>
       </div>
 
       {msg && <p className="ok-banner">{msg}</p>}
-      {err && <p className="error-banner">{err}</p>}
+      {err && <p className="error-banner"><TranslatedText text={err} /></p>}
       {loadWarnings.length > 0 && settings && (
-        <p className="admin-load-warn">Some sections failed to refresh: {loadWarnings.join(" · ")}</p>
+        <p className="admin-load-warn"><TranslatedText text={"Some sections failed to refresh:"} /> {loadWarnings.join(" · ")}</p>
       )}
 
       <div className="admin-cms">
-        <nav className="admin-cms-nav" aria-label="Admin sections">
+        <nav className="admin-cms-nav" aria-label={localizeCopy("Admin sections")}>
           {visibleNav.map((item) => (
             <button
               key={item.id}
@@ -1586,72 +1586,72 @@ export function AdminPage() {
           {section === "overview" && (
             <>
             <section className="card-surface">
-              <h2>Overview</h2>
+              <h2><TranslatedText text={"Overview"} /></h2>
               <p className="muted">
-                {isSuper
+                <TranslatedText text={isSuper
                   ? "Quick counts across users, referrals, and operations."
-                  : "You can open the sections assigned to you. Referral payouts and escrow platform changes stay with the super admin."}
+                  : "You can open the sections assigned to you. Referral payouts and escrow platform changes stay with the super admin."} />
               </p>
               <div className="admin-stat-row">
                 <div className="admin-stat-chip">
-                  <span className="muted">API status</span>
-                  <strong aria-live="polite">{apiHealth === undefined ? "Checking…" : apiHealth?.ok ? "Online" : "Offline"}</strong>
-                  {apiHealth?.ok && <span className="muted">Ethereum chain {apiHealth.chainId ?? "—"}</span>}
+                  <span className="muted"><TranslatedText text={"API status"} /></span>
+                  <strong aria-live="polite"><TranslatedText text={apiHealth === undefined ? "Checking…" : apiHealth?.ok ? "Online" : "Offline"} /></strong>
+                  {apiHealth?.ok && <span className="muted"><TranslatedText text={"Ethereum chain"} /> {apiHealth.chainId ?? "—"}</span>}
                 </div>
                 {isSuper && (
                   <div className="admin-stat-chip">
-                    <span className="muted">Referrers</span>
+                    <span className="muted"><TranslatedText text={"Referrers"} /></span>
                     <strong>{referrers.length}</strong>
                   </div>
                 )}
                 {isSuper && (
                   <div className="admin-stat-chip">
-                    <span className="muted">Pending payouts</span>
+                    <span className="muted"><TranslatedText text={"Pending payouts"} /></span>
                     <strong>{pendingPayoutCount}</strong>
                   </div>
                 )}
                 {canDisputes && (
                   <div className="admin-stat-chip">
-                    <span className="muted">Open disputes</span>
+                    <span className="muted"><TranslatedText text={"Open disputes"} /></span>
                     <strong>{disputed.length}</strong>
                   </div>
                 )}
                 {isSuper && (
                   <div className="admin-stat-chip">
-                    <span className="muted">Active agents</span>
+                    <span className="muted"><TranslatedText text={"Active agents"} /></span>
                     <strong>{agents.length}</strong>
                   </div>
                 )}
                 {(isSuper || canEmail) && (
                   <div className="admin-stat-chip">
-                    <span className="muted">Email (SMTP)</span>
-                    <strong>{settings?.emailConfigured || smtpPassConfigured ? "On" : "Off"}</strong>
+                    <span className="muted"><TranslatedText text={"Email (SMTP)"} /></span>
+                    <strong><TranslatedText text={settings?.emailConfigured || smtpPassConfigured ? "On" : "Off"} /></strong>
                   </div>
                 )}
                 {isSuper && (
                   <div className="admin-stat-chip">
-                    <span className="muted">User feedback</span>
-                    <strong>{settingsForm.feedbackEnabled ? `${newFeedbackCount} new` : "Off"}</strong>
+                    <span className="muted"><TranslatedText text={"User feedback"} /></span>
+                    <strong><TranslatedText text={settingsForm.feedbackEnabled ? `${newFeedbackCount} new` : "Off"} /></strong>
                   </div>
                 )}
                 {isSuper && (
                 <div className="admin-stat-chip">
-                  <span className="muted">Mobile apps</span>
+                  <span className="muted"><TranslatedText text={"Mobile apps"} /></span>
                   <strong>
-                    {settingsForm.mobileAppsEnabled &&
+                    <TranslatedText text={settingsForm.mobileAppsEnabled &&
                     (settingsForm.iosAppStoreUrl.trim() || settingsForm.androidPlayStoreUrl.trim())
                       ? "URLs saved"
                       : settingsForm.mobileAppsEnabled
                         ? "No store URLs"
-                        : "Off"}
+                        : "Off"} />
                   </strong>
                 </div>
                 )}
               </div>
               <p className="hint">
-                {isSuper
+                <TranslatedText text={isSuper
                   ? "Use the sidebar to manage users, referral payouts, SMTP, and public site metadata. Only this super admin account can approve referral payouts or change the escrow platform."
-                  : "Assigned sections are in the sidebar. Payout decisions and escrow platform settings are not available on this account."}
+                  : "Assigned sections are in the sidebar. Payout decisions and escrow platform settings are not available on this account."} />
               </p>
             </section>
             {isSuper && <AdminOverviewFinancials headers={headers} />}
@@ -1662,15 +1662,13 @@ export function AdminPage() {
 
           {section === "users" && (
             <section className="card-surface">
-              <h2>Registered users</h2>
-              <p className="muted">Search by email, then choose Regular user or Moderator. A moderator only receives the privileges you turn on.</p>
-              <p className="privilege-lock">Referral payouts and escrow platform changes stay with the super admin. They cannot be assigned here.</p>
-              <label>
-                Search
-                <input
+              <h2><TranslatedText text={"Registered users"} /></h2>
+              <p className="muted"><TranslatedText text={"Search by email, then choose Regular user or Moderator. A moderator only receives the privileges you turn on."} /></p>
+              <p className="privilege-lock"><TranslatedText text={"Referral payouts and escrow platform changes stay with the super admin. They cannot be assigned here."} /></p>
+              <label> <TranslatedText text={"Search"} /> <input
                   value={userSearch}
                   onChange={(e) => setUserSearch(e.target.value)}
-                  placeholder="email or name…"
+                  placeholder={localizeCopy("email or name…")}
                   autoComplete="off"
                 />
               </label>
@@ -1678,13 +1676,13 @@ export function AdminPage() {
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>Email</th>
-                      <th>Name</th>
-                      <th>Role</th>
-                      <th>Privileges</th>
-                      <th>Wallets</th>
-                      <th>Referrer</th>
-                      <th>Joined</th>
+                      <th><TranslatedText text={"Email"} /></th>
+                      <th><TranslatedText text={"Name"} /></th>
+                      <th><TranslatedText text={"Role"} /></th>
+                      <th><TranslatedText text={"Privileges"} /></th>
+                      <th><TranslatedText text={"Wallets"} /></th>
+                      <th><TranslatedText text={"Referrer"} /></th>
+                      <th><TranslatedText text={"Joined"} /></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1709,25 +1707,25 @@ export function AdminPage() {
                         <td>{u.displayName || "—"}</td>
                         <td>
                           <span className={`access-pill ${u.role === "admin" ? "access-pill-admin" : u.role === "moderator" ? "access-pill-mod" : "access-pill-user"}`}>
-                            {u.role === "admin" ? "Super admin" : u.role === "moderator" ? "Moderator" : "Regular user"}
+                            <TranslatedText text={u.role === "admin" ? "Super admin" : u.role === "moderator" ? "Moderator" : "Regular user"} />
                           </span>
                         </td>
                         <td>
                           {u.role === "admin" ? (
-                            <span className="privilege-lock">Payouts, platform, and every staff privilege.</span>
+                            <span className="privilege-lock"><TranslatedText text={"Payouts, platform, and every staff privilege."} /></span>
                           ) : (
                             <div className="access-summary">
                               <div className="access-chips">
                                 {savedPrivileges.length
                                   ? savedPrivileges.map((label) => <span className="access-chip" key={label}>{label}</span>)
-                                  : <span className="muted">No staff privileges</span>}
+                                  : <span className="muted"><TranslatedText text={"No staff privileges"} /></span>}
                               </div>
                               <button
                                 type="button"
                                 className="secondary access-edit"
                                 onClick={() => (editingAccessId === u.id ? closeAccess(u) : setEditingAccessId(u.id))}
                               >
-                                {editingAccessId === u.id ? "Close" : "Edit access"}
+                                <TranslatedText text={editingAccessId === u.id ? "Close" : "Edit access"} />
                               </button>
                             </div>
                           )}
@@ -1744,15 +1742,11 @@ export function AdminPage() {
                         <tr className="access-panel-row">
                           <td colSpan={7}>
                             <div className="access-panel">
-                              <p className="access-panel-kicker">Access for {u.email || "this account"}</p>
-                              <div className="access-role-choice" role="group" aria-label="Role">
-                                <button type="button" className={!draft.moderator ? "is-selected" : ""} aria-pressed={!draft.moderator} onClick={() => chooseRole(u, false)}>
-                                  Regular user
-                                  <small>Trade only. No admin desk.</small>
+                              <p className="access-panel-kicker"><TranslatedText text={"Access for"} /> <TranslatedText text={u.email || "this account"} /></p>
+                              <div className="access-role-choice" role="group" aria-label={localizeCopy("Role")}>
+                                <button type="button" className={!draft.moderator ? "is-selected" : ""} aria-pressed={!draft.moderator} onClick={() => chooseRole(u, false)}> <TranslatedText text={"Regular user"} /> <small><TranslatedText text={"Trade only. No admin desk."} /></small>
                                 </button>
-                                <button type="button" className={draft.moderator ? "is-selected" : ""} aria-pressed={draft.moderator} onClick={() => chooseRole(u, true)}>
-                                  Moderator
-                                  <small>Opens the staff desk for the privileges below.</small>
+                                <button type="button" className={draft.moderator ? "is-selected" : ""} aria-pressed={draft.moderator} onClick={() => chooseRole(u, true)}> <TranslatedText text={"Moderator"} /> <small><TranslatedText text={"Opens the staff desk for the privileges below."} /></small>
                                 </button>
                               </div>
                               <div className="access-priv-list">
@@ -1765,7 +1759,7 @@ export function AdminPage() {
                                     disabled={!draft.moderator}
                                     onClick={() => togglePrivilege(u, key)}
                                   >
-                                    <span className="access-priv-mark" aria-hidden>{draft[key] ? "On" : "Off"}</span>
+                                    <span className="access-priv-mark" aria-hidden><TranslatedText text={draft[key] ? "On" : "Off"} /></span>
                                     <span>
                                       <strong>{title}</strong>
                                       {detail}
@@ -1773,12 +1767,12 @@ export function AdminPage() {
                                   </button>
                                 ))}
                               </div>
-                              <p className="privilege-lock">This account still cannot approve referral payouts or change escrow platform settings.</p>
+                              <p className="privilege-lock"><TranslatedText text={"This account still cannot approve referral payouts or change escrow platform settings."} /></p>
                               <div className="access-actions">
                                 <button type="button" disabled={savingAccessId === u.id} onClick={() => saveAccess(u)}>
-                                  {savingAccessId === u.id ? "Saving…" : "Save access"}
+                                  <TranslatedText text={savingAccessId === u.id ? "Saving…" : "Save access"} />
                                 </button>
-                                <button type="button" className="secondary" onClick={() => closeAccess(u)}>Cancel</button>
+                                <button type="button" className="secondary" onClick={() => closeAccess(u)}><TranslatedText text={"Cancel"} /></button>
                               </div>
                             </div>
                           </td>
@@ -1788,9 +1782,7 @@ export function AdminPage() {
                     );})}
                     {users.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="muted">
-                          No users match your search.
-                        </td>
+                        <td colSpan={7} className="muted"> <TranslatedText text={"No users match your search."} /> </td>
                       </tr>
                     )}
                   </tbody>
@@ -1802,32 +1794,27 @@ export function AdminPage() {
           {section === "referrers" && (
             <>
               <section className="card-surface">
-                <h2>Referral leaderboard</h2>
-                <p className="muted">
-                  Rank referrers by lifetime commission earned. Names use display names only — never emails. Not shown on
-                  trade rooms or public pages today; public visibility during trades is an open product question.
-                </p>
+                <h2><TranslatedText text={"Referral leaderboard"} /></h2>
+                <p className="muted"> <TranslatedText text={"Rank referrers by lifetime commission earned. Names use display names only — never emails. Not shown on trade rooms or public pages today; public visibility during trades is an open product question."} /> </p>
                 <label className="check-row tron-toggle" style={{ marginBottom: "1rem" }}>
                   <input
                     type="checkbox"
                     checked={settingsForm.referralLeaderboardEnabled}
                     onChange={(e) => saveReferralLeaderboardEnabled(e.target.checked)}
                   />
-                  <strong>Show referral leaderboard (admin only)</strong>
-                  <span className="muted" style={{ display: "block", fontWeight: 400, marginTop: "0.25rem" }}>
-                    When off, the ranked list below is hidden everywhere.
-                  </span>
+                  <strong><TranslatedText text={"Show referral leaderboard (admin only)"} /></strong>
+                  <span className="muted" style={{ display: "block", fontWeight: 400, marginTop: "0.25rem" }}> <TranslatedText text={"When off, the ranked list below is hidden everywhere."} /> </span>
                 </label>
                 {settingsForm.referralLeaderboardEnabled ? (
                   <div className="admin-table-wrap">
                     <table className="admin-table">
                       <thead>
                         <tr>
-                          <th>Rank</th>
-                          <th>Referrer</th>
-                          <th>Tier</th>
-                          <th>Earned (USDT eq.)</th>
-                          <th>Successful trades</th>
+                          <th><TranslatedText text={"Rank"} /></th>
+                          <th><TranslatedText text={"Referrer"} /></th>
+                          <th><TranslatedText text={"Tier"} /></th>
+                          <th><TranslatedText text={"Earned (USDT eq.)"} /></th>
+                          <th><TranslatedText text={"Successful trades"} /></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1844,32 +1831,30 @@ export function AdminPage() {
                         ))}
                         {referralLeaderboard.length === 0 && (
                           <tr>
-                            <td colSpan={5} className="muted">
-                              No referrers with earned commission yet.
-                            </td>
+                            <td colSpan={5} className="muted"> <TranslatedText text={"No referrers with earned commission yet."} /> </td>
                           </tr>
                         )}
                       </tbody>
                     </table>
                   </div>
                 ) : (
-                  <p className="muted">Enable the toggle above to view the ranked leaderboard.</p>
+                  <p className="muted"><TranslatedText text={"Enable the toggle above to view the ranked leaderboard."} /></p>
                 )}
               </section>
 
               <section className="card-surface" style={{ marginTop: "1rem" }}>
-                <h2>Referrers</h2>
-                <p className="muted">Commission balances and successful referral counts.</p>
+                <h2><TranslatedText text={"Referrers"} /></h2>
+                <p className="muted"><TranslatedText text={"Commission balances and successful referral counts."} /></p>
                 <div className="admin-table-wrap">
                   <table className="admin-table">
                     <thead>
                       <tr>
-                        <th>Referrer</th>
-                        <th>Tier</th>
-                        <th>Trades</th>
-                        <th>Earned</th>
-                        <th>Pending</th>
-                        <th>Code</th>
+                        <th><TranslatedText text={"Referrer"} /></th>
+                        <th><TranslatedText text={"Tier"} /></th>
+                        <th><TranslatedText text={"Trades"} /></th>
+                        <th><TranslatedText text={"Earned"} /></th>
+                        <th><TranslatedText text={"Pending"} /></th>
+                        <th><TranslatedText text={"Code"} /></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1888,9 +1873,7 @@ export function AdminPage() {
                       ))}
                       {referrers.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="muted">
-                            No referrers enrolled yet.
-                          </td>
+                          <td colSpan={6} className="muted"> <TranslatedText text={"No referrers enrolled yet."} /> </td>
                         </tr>
                       )}
                     </tbody>
@@ -1899,33 +1882,28 @@ export function AdminPage() {
               </section>
 
               <section className="card-surface" style={{ marginTop: "1rem" }}>
-                <h2>Payout requests</h2>
-                <p className="muted">Pay manually to the wallet shown in each request, then mark it paid. You can return a request to unpaid if you need to correct its status. Referrers are emailed when SMTP is configured.</p>
-                <label>
-                  Filter
-                  <select value={payoutFilter} onChange={(e) => setPayoutFilter(e.target.value as typeof payoutFilter)}>
-                    <option value="pending">Unpaid</option>
-                    <option value="sent">Paid</option>
-                    <option value="rejected">Rejected</option>
-                    <option value="all">All (recent)</option>
+                <h2><TranslatedText text={"Payout requests"} /></h2>
+                <p className="muted"><TranslatedText text={"Pay manually to the wallet shown in each request, then mark it paid. You can return a request to unpaid if you need to correct its status. Referrers are emailed when SMTP is configured."} /></p>
+                <label> <TranslatedText text={"Filter"} /> <select value={payoutFilter} onChange={(e) => setPayoutFilter(e.target.value as typeof payoutFilter)}>
+                    <option value="pending"><TranslatedText text={"Unpaid"} /></option>
+                    <option value="sent"><TranslatedText text={"Paid"} /></option>
+                    <option value="rejected"><TranslatedText text={"Rejected"} /></option>
+                    <option value="all"><TranslatedText text={"All (recent)"} /></option>
                   </select>
                 </label>
-                {payoutQueue.length === 0 && <p className="muted">No payout requests in this filter.</p>}
+                {payoutQueue.length === 0 && <p className="muted"><TranslatedText text={"No payout requests in this filter."} /></p>}
                 {payoutQueue.map((req) => (
                   <div key={req.id} className="admin-referrer-row">
                     <div className="trade-card-top">
                       <strong>{req.referrer.email}</strong>
                       <StatusBadge status={req.status === "sent" ? "Paid" : req.status === "pending" ? "Unpaid" : req.status} />
                     </div>
-                    {req.referrer.displayName ? ` (${req.referrer.displayName})` : ""} · tier {req.referrer.tier} ·{" "}
-                    {req.referrer.successfulReferrals} trades
-                    <div className="muted">
-                      Requested amount: <strong>{formatAmount(req.amountAtomic)}</strong> · {new Date(req.createdAt).toLocaleString()}
+                    {req.referrer.displayName ? ` (${req.referrer.displayName})` : ""} <TranslatedText text={"· tier"} /> {req.referrer.tier} ·{" "}
+                    {req.referrer.successfulReferrals} <TranslatedText text={"trades"} /> <div className="muted"> <TranslatedText text={"Requested amount:"} /> <strong>{formatAmount(req.amountAtomic)}</strong> · {new Date(req.createdAt).toLocaleString()}
                     </div>
-                    <div className="muted">
-                      Requested wallet ({req.payoutChain}): <span className="mono">{req.payoutAddress}</span>
+                    <div className="muted"> <TranslatedText text={"Requested wallet ("} />{req.payoutChain}): <span className="mono">{req.payoutAddress}</span>
                     </div>
-                    {req.adminNote && <p className="hint">Admin note: {req.adminNote}</p>}
+                    {req.adminNote && <p className="hint"><TranslatedText text={"Admin note:"} /> {req.adminNote}</p>}
                     <div className="action-row" style={{ marginTop: "0.5rem" }}>
                       {req.status === "sent" ? (
                         <button
@@ -1941,9 +1919,7 @@ export function AdminPage() {
                             setMsg(`Payout marked unpaid for ${req.referrer.email}`);
                             await refresh();
                           }}
-                        >
-                          Mark unpaid
-                        </button>
+                        > <TranslatedText text={"Mark unpaid"} /> </button>
                       ) : (
                         <button
                           type="button"
@@ -1957,9 +1933,7 @@ export function AdminPage() {
                             setMsg(`Payout marked paid for ${req.referrer.email}`);
                             await refresh();
                           }}
-                        >
-                          Mark paid
-                        </button>
+                        > <TranslatedText text={"Mark paid"} /> </button>
                       )}
                       {req.status === "rejected" && (
                         <button
@@ -1975,9 +1949,7 @@ export function AdminPage() {
                             setMsg(`Payout request reopened for ${req.referrer.email}`);
                             await refresh();
                           }}
-                        >
-                          Reopen as unpaid
-                        </button>
+                        > <TranslatedText text={"Reopen as unpaid"} /> </button>
                       )}
                       {req.status === "pending" && (
                         <button
@@ -1994,9 +1966,7 @@ export function AdminPage() {
                             setMsg(`Payout request rejected for ${req.referrer.email}`);
                             await refresh();
                           }}
-                        >
-                          Reject request
-                        </button>
+                        > <TranslatedText text={"Reject request"} /> </button>
                       )}
                     </div>
                   </div>
@@ -2007,20 +1977,20 @@ export function AdminPage() {
 
           {section === "operations" && (
             <section className="card-surface">
-              <h2>Open disputes</h2>
+              <h2><TranslatedText text={"Open disputes"} /></h2>
               {isSuper && (
                 <section className="card-surface" style={{ marginBottom: "1rem" }}>
-                  <h3>Pending agent applications</h3>
-                  <p className="muted">Applicants must meet ~$30k completed trade volume. Approve grants agent role and dispute access via the same path as manual staff assignment.</p>
+                  <h3><TranslatedText text={"Pending agent applications"} /></h3>
+                  <p className="muted"><TranslatedText text={"Applicants must meet ~$30k completed trade volume. Approve grants agent role and dispute access via the same path as manual staff assignment."} /></p>
                   {agentApplications.length === 0 ? (
-                    <p className="muted">No pending applications.</p>
+                    <p className="muted"><TranslatedText text={"No pending applications."} /></p>
                   ) : (
                     <ul className="activity-list">
                       {agentApplications.map((app) => (
                         <li key={app.id} className="admin-referrer-row">
                           <strong>{app.user.displayName || app.user.email || app.user.id.slice(0, 8)}</strong>
-                          <span className="muted"> · applied {new Date(app.createdAt).toLocaleString()}</span>
-                          <p className="muted">Volume at apply: {formatAmount(app.volumeAtomicAtApply)} USDT eq.</p>
+                          <span className="muted"> <TranslatedText text={"· applied"} /> {new Date(app.createdAt).toLocaleString()}</span>
+                          <p className="muted"><TranslatedText text={"Volume at apply:"} /> {formatAmount(app.volumeAtomicAtApply)} <TranslatedText text={"USDT eq."} /></p>
                           {app.applicantNote && <p className="hint">{app.applicantNote}</p>}
                           <div className="action-row">
                             <button
@@ -2028,16 +1998,14 @@ export function AdminPage() {
                               disabled={decidingApplicationId === app.id}
                               onClick={() => void decideAgentApplication(app.id, true)}
                             >
-                              {decidingApplicationId === app.id ? "Saving…" : "Approve agent"}
+                              <TranslatedText text={decidingApplicationId === app.id ? "Saving…" : "Approve agent"} />
                             </button>
                             <button
                               type="button"
                               className="secondary"
                               disabled={decidingApplicationId === app.id}
                               onClick={() => void decideAgentApplication(app.id, false)}
-                            >
-                              Reject
-                            </button>
+                            > <TranslatedText text={"Reject"} /> </button>
                           </div>
                         </li>
                       ))}
@@ -2047,16 +2015,16 @@ export function AdminPage() {
               )}
               {isSuper && (
                 <section className="agent-activity-feed card-surface" style={{ marginBottom: "1rem" }}>
-                  <h3>Agent activity feed</h3>
-                  <p className="muted">Auditable log of agent dispute work (assignments, chat, evidence, escalations, resolutions).</p>
+                  <h3><TranslatedText text={"Agent activity feed"} /></h3>
+                  <p className="muted"><TranslatedText text={"Auditable log of agent dispute work (assignments, chat, evidence, escalations, resolutions)."} /></p>
                   {agentActivity.length === 0 ? (
-                    <p className="muted">No agent actions logged yet.</p>
+                    <p className="muted"><TranslatedText text={"No agent actions logged yet."} /></p>
                   ) : (
                     <ul className="activity-list">
                       {agentActivity.map((row) => (
                         <li key={row.id}>
                           <span>
-                            <strong>{row.agent?.displayName || row.agent?.email || "Agent"}</strong>
+                            <strong><TranslatedText text={row.agent?.displayName || row.agent?.email || "Agent"} /></strong>
                             {" · "}
                             <code>{row.action}</code>
                             {" — "}
@@ -2064,9 +2032,7 @@ export function AdminPage() {
                             {row.escrowId && (
                               <>
                                 {" "}
-                                <button type="button" className="linkish" onClick={() => navigate(`/trades/${row.escrowId}`)}>
-                                  Open trade
-                                </button>
+                                <button type="button" className="linkish" onClick={() => navigate(`/trades/${row.escrowId}`)}> <TranslatedText text={"Open trade"} /> </button>
                               </>
                             )}
                           </span>
@@ -2078,14 +2044,12 @@ export function AdminPage() {
                 </section>
               )}
               {canDisputes && (
-                <p className="muted">
-                  Shared queue. Available cases can be claimed. You can see who is handling each case. Only an admin can take over a case someone else owns.
-                </p>
+                <p className="muted"> <TranslatedText text={"Shared queue. Available cases can be claimed. You can see who is handling each case. Only an admin can take over a case someone else owns."} /> </p>
               )}
               {isSuper && disputeModerators.length === 0 && (
-                <p className="muted">Grant a user Moderator + Disputes under Users, then assign them to a case below.</p>
+                <p className="muted"><TranslatedText text={"Grant a user Moderator + Disputes under Users, then assign them to a case below."} /></p>
               )}
-              {disputed.length === 0 && <p className="muted">No disputed trades.</p>}
+              {disputed.length === 0 && <p className="muted"><TranslatedText text={"No disputed trades."} /></p>}
               {disputed.map((e) => (
                 <div key={e.id} className="dispute-card">
                   <div className="trade-card-top">
@@ -2097,7 +2061,7 @@ export function AdminPage() {
                   <p className="muted">
                     {formatAmount(e.amountAtomic)} {e.tokenSymbol} · {shortAddr(e.contractAddress)}
                   </p>
-                  <p className="hint">{e.messages?.length ?? 0} chat entries · {e.disputes?.reduce((count, dispute) => count + (dispute.evidence?.length ?? 0), 0) ?? 0} dispute files</p>
+                  <p className="hint">{e.messages?.length ?? 0} <TranslatedText text={"chat entries ·"} /> {e.disputes?.reduce((count, dispute) => count + (dispute.evidence?.length ?? 0), 0) ?? 0} <TranslatedText text={"dispute files"} /></p>
                   {(() => {
                     const openDispute = activeDisputeForEscrow(e);
                     if (!openDispute) return null;
@@ -2113,8 +2077,7 @@ export function AdminPage() {
                     const recommendation = recommendationDraft[openDispute.id] ?? { buyerFavor: true, note: "", handTo: "moderator" as const };
                     return (
                       <>
-                        <p className="muted">
-                          Handling: <strong>{mine ? "You" : handlerLabel}</strong>
+                        <p className="muted"> <TranslatedText text={"Handling:"} /> <strong><TranslatedText text={mine ? "You" : handlerLabel} /></strong>
                           {handler?.role ? ` · ${handler.role}` : ""}
                           {openDispute.claimedAt ? ` · since ${new Date(openDispute.claimedAt).toLocaleString()}` : ""}
                           {openDispute.awaitingRulingTier && !openDispute.ownerUserId
@@ -2125,56 +2088,49 @@ export function AdminPage() {
                           <div className="action-row">
                             {canClaim && (
                               <button type="button" disabled={claimingDisputeId === openDispute.id} onClick={() => void claimDispute(openDispute.id, false)}>
-                                {claimingDisputeId === openDispute.id ? "Claiming…" : "Claim case"}
+                                <TranslatedText text={claimingDisputeId === openDispute.id ? "Claiming…" : "Claim case"} />
                               </button>
                             )}
                             {canTakeOver && (
                               <button type="button" className="secondary" disabled={claimingDisputeId === openDispute.id} onClick={() => void claimDispute(openDispute.id, true)}>
-                                {claimingDisputeId === openDispute.id ? "Taking over…" : "Take over case"}
+                                <TranslatedText text={claimingDisputeId === openDispute.id ? "Taking over…" : "Take over case"} />
                               </button>
                             )}
                           </div>
                         )}
                         {openDispute.recommendationNote && (
-                          <p className="hint">
-                            Agent recommendation: <strong>{openDispute.recommendationBuyerFavor ? "buyer favor" : "seller favor"}</strong>
+                          <p className="hint"> <TranslatedText text={"Agent recommendation:"} /> <strong><TranslatedText text={openDispute.recommendationBuyerFavor ? "buyer favor" : "seller favor"} /></strong>
                             {openDispute.recommendedBy ? ` · ${staffLabel(openDispute.recommendedBy)}` : ""}
                             . {openDispute.recommendationNote}
                           </p>
                         )}
                         {user?.role === "agent" && mine && openDispute.status === "open" && (
                           <div className="role-box">
-                            <h3>Recommendation</h3>
-                            <p className="muted">Hand this case to a moderator or admin. They issue the ruling. You do not release the funds.</p>
-                            <label>
-                              Recommend
-                              <select
+                            <h3><TranslatedText text={"Recommendation"} /></h3>
+                            <p className="muted"><TranslatedText text={"Hand this case to a moderator or admin. They issue the ruling. You do not release the funds."} /></p>
+                            <label> <TranslatedText text={"Recommend"} /> <select
                                 value={recommendation.buyerFavor ? "buyer" : "seller"}
                                 onChange={(ev) => setRecommendationDraft((current) => ({
                                   ...current,
                                   [openDispute.id]: { ...recommendation, buyerFavor: ev.target.value === "buyer" },
                                 }))}
                               >
-                                <option value="buyer">Buyer favor</option>
-                                <option value="seller">Seller favor</option>
+                                <option value="buyer"><TranslatedText text={"Buyer favor"} /></option>
+                                <option value="seller"><TranslatedText text={"Seller favor"} /></option>
                               </select>
                             </label>
-                            <label>
-                              Hand to
-                              <select
+                            <label> <TranslatedText text={"Hand to"} /> <select
                                 value={recommendation.handTo}
                                 onChange={(ev) => setRecommendationDraft((current) => ({
                                   ...current,
                                   [openDispute.id]: { ...recommendation, handTo: ev.target.value as "moderator" | "admin" },
                                 }))}
                               >
-                                <option value="moderator">Moderator</option>
-                                <option value="admin">Admin</option>
+                                <option value="moderator"><TranslatedText text={"Moderator"} /></option>
+                                <option value="admin"><TranslatedText text={"Admin"} /></option>
                               </select>
                             </label>
-                            <label>
-                              Note
-                              <textarea
+                            <label> <TranslatedText text={"Note"} /> <textarea
                                 rows={3}
                                 maxLength={4000}
                                 value={recommendation.note}
@@ -2182,18 +2138,18 @@ export function AdminPage() {
                                   ...current,
                                   [openDispute.id]: { ...recommendation, note: ev.target.value },
                                 }))}
-                                placeholder="Why this party should win…"
+                                placeholder={localizeCopy("Why this party should win…")}
                               />
                             </label>
                             <button type="button" disabled={claimingDisputeId === openDispute.id} onClick={() => void submitRecommendation(openDispute.id)}>
-                              {claimingDisputeId === openDispute.id ? "Sending…" : "Submit recommendation and hand off"}
+                              <TranslatedText text={claimingDisputeId === openDispute.id ? "Sending…" : "Submit recommendation and hand off"} />
                             </button>
                           </div>
                         )}
                         <div className="role-box staff-case-chat">
-                          <h3>Staff case chat</h3>
-                          <p className="muted">Only staff can see this. The buyer and seller cannot.</p>
-                          {(openDispute.staffMessages?.length ?? 0) === 0 && <p className="muted">No staff messages yet.</p>}
+                          <h3><TranslatedText text={"Staff case chat"} /></h3>
+                          <p className="muted"><TranslatedText text={"Only staff can see this. The buyer and seller cannot."} /></p>
+                          {(openDispute.staffMessages?.length ?? 0) === 0 && <p className="muted"><TranslatedText text={"No staff messages yet."} /></p>}
                           <ul className="activity-list">
                             {(openDispute.staffMessages || []).map((message) => (
                               <li key={message.id}>
@@ -2206,22 +2162,19 @@ export function AdminPage() {
                               </li>
                             ))}
                           </ul>
-                          <label>
-                            Message staff
-                            <textarea
+                          <label> <TranslatedText text={"Message staff"} /> <textarea
                               rows={2}
                               maxLength={4000}
                               value={staffChatDraft[openDispute.id] || ""}
                               onChange={(ev) => setStaffChatDraft((current) => ({ ...current, [openDispute.id]: ev.target.value }))}
-                              placeholder="Coordinate on this case…"
+                              placeholder={localizeCopy("Coordinate on this case…")}
                             />
                           </label>
                           <button type="button" disabled={sendingStaffChatId === openDispute.id || !staffChatDraft[openDispute.id]?.trim()} onClick={() => void sendStaffChat(openDispute.id)}>
-                            {sendingStaffChatId === openDispute.id ? "Sending…" : "Send to staff"}
+                            <TranslatedText text={sendingStaffChatId === openDispute.id ? "Sending…" : "Send to staff"} />
                           </button>
                         </div>
-                        <p className="muted">
-                          Case status: <strong>{openDispute.status.replace(/_/g, " ")}</strong>
+                        <p className="muted"> <TranslatedText text={"Case status:"} /> <strong>{openDispute.status.replace(/_/g, " ")}</strong>
                           {e.chain === "tron" && e.contractAddress && openDispute.status === "open"
                             ? ` · ${hasResolverFreezeRecord(e, openDispute) ? "escrow frozen on-chain" : "awaiting resolver freeze"}`
                             : ""}
@@ -2233,7 +2186,7 @@ export function AdminPage() {
                             : ""}
                         </p>
                         {openDispute.appeal?.reason && (
-                          <p className="hint">Appeal: {openDispute.appeal.reason.slice(0, 280)}{openDispute.appeal.reason.length > 280 ? "…" : ""}</p>
+                          <p className="hint"><TranslatedText text={"Appeal:"} /> {openDispute.appeal.reason.slice(0, 280)}{openDispute.appeal.reason.length > 280 ? "…" : ""}</p>
                         )}
                       </>
                     );
@@ -2246,21 +2199,17 @@ export function AdminPage() {
                     const targetParty = disputeMessageParty[activeDispute.id] || "buyer";
                     return (
                       <div className="role-box dispute-admin-message">
-                        <h3>Private message to a party</h3>
-                        <p className="muted">Only the selected party and staff can see this message.</p>
-                        <label>
-                          Recipient
-                          <select value={targetParty} onChange={(ev) => setDisputeMessageParty((current) => ({ ...current, [activeDispute.id]: ev.target.value as "buyer" | "seller" }))}>
-                            <option value="buyer">Buyer</option>
-                            <option value="seller">Seller</option>
+                        <h3><TranslatedText text={"Private message to a party"} /></h3>
+                        <p className="muted"><TranslatedText text={"Only the selected party and staff can see this message."} /></p>
+                        <label> <TranslatedText text={"Recipient"} /> <select value={targetParty} onChange={(ev) => setDisputeMessageParty((current) => ({ ...current, [activeDispute.id]: ev.target.value as "buyer" | "seller" }))}>
+                            <option value="buyer"><TranslatedText text={"Buyer"} /></option>
+                            <option value="seller"><TranslatedText text={"Seller"} /></option>
                           </select>
                         </label>
-                        <label>
-                          Message
-                          <textarea rows={3} maxLength={4000} value={disputeMessageDraft[activeDispute.id] || ""} onChange={(ev) => setDisputeMessageDraft((current) => ({ ...current, [activeDispute.id]: ev.target.value }))} placeholder="Write a private message about this dispute…" />
+                        <label> <TranslatedText text={"Message"} /> <textarea rows={3} maxLength={4000} value={disputeMessageDraft[activeDispute.id] || ""} onChange={(ev) => setDisputeMessageDraft((current) => ({ ...current, [activeDispute.id]: ev.target.value }))} placeholder={localizeCopy("Write a private message about this dispute…")} />
                         </label>
                         <button type="button" disabled={sendingDisputeMessageId === activeDispute.id || !disputeMessageDraft[activeDispute.id]?.trim()} onClick={() => void sendDisputeMessage(activeDispute.id)}>
-                          {sendingDisputeMessageId === activeDispute.id ? "Sending…" : "Send private message"}
+                          <TranslatedText text={sendingDisputeMessageId === activeDispute.id ? "Sending…" : "Send private message"} />
                         </button>
                       </div>
                     );
@@ -2271,14 +2220,12 @@ export function AdminPage() {
                     const draft = assignDraft[openDispute.id] ?? openDispute.assignedModeratorUserId ?? "";
                     return (
                       <div className="action-row assign-mod-row">
-                        <label className="assign-mod-label">
-                          Assign moderator
-                          <select
+                        <label className="assign-mod-label"> <TranslatedText text={"Assign moderator"} /> <select
                             value={draft}
                             disabled={assigningDisputeId === openDispute.id}
                             onChange={(ev) => setAssignDraft((prev) => ({ ...prev, [openDispute.id]: ev.target.value }))}
                           >
-                            <option value="">— Unassigned —</option>
+                            <option value=""><TranslatedText text={"— Unassigned —"} /></option>
                             {disputeModerators.map((m) => (
                               <option key={m.id} value={m.id}>
                                 {m.displayName || m.email || m.id.slice(0, 8)}
@@ -2292,41 +2239,39 @@ export function AdminPage() {
                           disabled={assigningDisputeId === openDispute.id}
                           onClick={() => assignDisputeModerator(openDispute.id, draft || null)}
                         >
-                          {assigningDisputeId === openDispute.id ? "Saving…" : "Save assignment"}
+                          <TranslatedText text={assigningDisputeId === openDispute.id ? "Saving…" : "Save assignment"} />
                         </button>
                       </div>
                     );
                   })()}
                   <div className="action-row">
-                    <button type="button" className="secondary" onClick={() => navigate(`/trades/${e.id}`)}>
-                      Review agreement, chat & evidence
-                    </button>
+                    <button type="button" className="secondary" onClick={() => navigate(`/trades/${e.id}`)}> <TranslatedText text={"Review agreement, chat & evidence"} /> </button>
                     {isSuper && e.chain === "tron" && e.contractAddress && activeDisputeForEscrow(e)?.status === "open"
                       && !hasResolverFreezeRecord(e, activeDisputeForEscrow(e)!) && (
                       <div className="action-row">
                         <button type="button" className="secondary" disabled={resolvingId === e.id || !tron.address} onClick={() => void secureTronDispute(e)}>
-                          {resolvingId === e.id ? "Freezing escrow…" : "Freeze escrow on-chain for review"}
+                          <TranslatedText text={resolvingId === e.id ? "Freezing escrow…" : "Freeze escrow on-chain for review"} />
                         </button>
-                        {!tron.address && <span className="hint">Connect the configured resolver wallet. It pays the network fee; the parties do not pay to open the dispute.</span>}
+                        {!tron.address && <span className="hint"><TranslatedText text={"Connect the configured resolver wallet. It pays the network fee; the parties do not pay to open the dispute."} /></span>}
                       </div>
                     )}
                     {isSuper && e.chain === "tron" && activeDisputeForEscrow(e)?.status === "open"
                       && hasResolverFreezeRecord(e, activeDisputeForEscrow(e)!) && (
-                      <p className="admin-handling-banner">Escrow frozen on-chain. Staff can review and rule for either party.</p>
+                      <p className="admin-handling-banner"><TranslatedText text={"Escrow frozen on-chain. Staff can review and rule for either party."} /></p>
                     )}
                     {canFinalizeOnChain && activeDisputeForEscrow(e)?.status === "open" && (
                       <>
                         {e.contractAddress && (e.chain === "tron" ? !tron.address : !address) && (
                           e.chain === "tron" ? (
                             <button type="button" className="secondary" disabled={tron.connecting} onClick={() => void tron.connect()}>
-                              {tron.connecting ? "Connecting TRON wallet…" : "Connect resolver wallet to rule, pay, or withdraw"}
+                              <TranslatedText text={tron.connecting ? "Connecting TRON wallet…" : "Connect resolver wallet to rule, pay, or withdraw"} />
                             </button>
                           ) : (
-                            <ConnectEvmWalletButton className="secondary">Connect resolver wallet to rule, pay, or withdraw</ConnectEvmWalletButton>
+                            <ConnectEvmWalletButton className="secondary"><TranslatedText text={"Connect resolver wallet to rule, pay, or withdraw"} /></ConnectEvmWalletButton>
                           )
                         )}
                         <button type="button" className="secondary" disabled={resolvingId === e.id} onClick={() => withdrawDisputeToNormalState(e)}>
-                          {resolvingId === e.id ? "Withdrawing…" : "Withdraw dispute · return escrow to normal"}
+                          <TranslatedText text={resolvingId === e.id ? "Withdrawing…" : "Withdraw dispute · return escrow to normal"} />
                         </button>
                       </>
                     )}
@@ -2344,10 +2289,10 @@ export function AdminPage() {
                     {isSuper && activeDisputeForEscrow(e)?.status === "ruled_pending_appeal" && (
                       <>
                         <button type="button" disabled={resolvingId === e.id} onClick={() => issueAdminFinalRuling(e, true)}>
-                          {resolvingId === e.id ? "Waiting for resolver transaction…" : "Set final & pay · buyer favor"}
+                          <TranslatedText text={resolvingId === e.id ? "Waiting for resolver transaction…" : "Set final & pay · buyer favor"} />
                         </button>
                         <button type="button" className="secondary" disabled={resolvingId === e.id} onClick={() => issueAdminFinalRuling(e, false)}>
-                          {resolvingId === e.id ? "Waiting for resolver transaction…" : "Set final & pay · seller favor"}
+                          <TranslatedText text={resolvingId === e.id ? "Waiting for resolver transaction…" : "Set final & pay · seller favor"} />
                         </button>
                       </>
                     )}
@@ -2356,31 +2301,27 @@ export function AdminPage() {
                         {e.contractAddress && (e.chain === "tron" ? !tron.address : !address) ? (
                           e.chain === "tron" ? (
                             <button type="button" className="primary" disabled={tron.connecting} onClick={() => void tron.connect()}>
-                              {tron.connecting ? "Connecting TRON wallet…" : "Connect resolver wallet to pay ruling"}
+                              <TranslatedText text={tron.connecting ? "Connecting TRON wallet…" : "Connect resolver wallet to pay ruling"} />
                             </button>
                           ) : (
-                            <ConnectEvmWalletButton className="primary">Connect resolver wallet to pay ruling</ConnectEvmWalletButton>
+                            <ConnectEvmWalletButton className="primary"><TranslatedText text={"Connect resolver wallet to pay ruling"} /></ConnectEvmWalletButton>
                           )
                         ) : (
                           <button type="button" className="primary" disabled={resolvingId === e.id} onClick={() => finalizeDisputePayout(e)}>
-                            {resolvingId === e.id
+                            <TranslatedText text={resolvingId === e.id
                               ? "Waiting for payout confirmation…"
-                              : `Pay ruling on-chain · ${activeDisputeForEscrow(e)!.buyerFavor ? "buyer" : "seller"} favor`}
+                              : `Pay ruling on-chain · ${activeDisputeForEscrow(e)!.buyerFavor ? "buyer" : "seller"} favor`} />
                           </button>
                         )}
                         {e.contractAddress && !(e.chain === "tron" ? tron.address : address) && (
-                          <span className="hint">Connect the resolver wallet first. Then click the payout button to approve the on-chain ruling.</span>
+                          <span className="hint"><TranslatedText text={"Connect the resolver wallet first. Then click the payout button to approve the on-chain ruling."} /></span>
                         )}
                       </>
                     )}
                     {canFinalizeOnChain && activeDisputeForEscrow(e)?.status === "appealed" && (
                       <>
-                        <button type="button" disabled={resolvingId === e.id} onClick={() => decideDisputeAppeal(e, true)}>
-                          Uphold ruling
-                        </button>
-                        <button type="button" className="secondary" disabled={resolvingId === e.id} onClick={() => decideDisputeAppeal(e, false)}>
-                          Overturn ruling
-                        </button>
+                        <button type="button" disabled={resolvingId === e.id} onClick={() => decideDisputeAppeal(e, true)}> <TranslatedText text={"Uphold ruling"} /> </button>
+                        <button type="button" className="secondary" disabled={resolvingId === e.id} onClick={() => decideDisputeAppeal(e, false)}> <TranslatedText text={"Overturn ruling"} /> </button>
                       </>
                     )}
                   </div>
@@ -2389,48 +2330,39 @@ export function AdminPage() {
 
               {isSuper && (
               <>
-              <h2 style={{ marginTop: "1.5rem" }}>Agents</h2>
+              <h2 style={{ marginTop: "1.5rem" }}><TranslatedText text={"Agents"} /></h2>
               <ul className="activity-list">
                 {agents.map((a) => (
                   <li key={a.id}>
-                    <strong>{a.displayName}</strong> · {shortAddr(a.walletAddress)} · {(a.feeBps / 100).toFixed(1)}% fee ·{" "}
-                    {a.disputesResolved} resolved
-                  </li>
+                    <strong>{a.displayName}</strong> · {shortAddr(a.walletAddress)} · {(a.feeBps / 100).toFixed(1)}<TranslatedText text={"% fee ·"} />{" "}
+                    {a.disputesResolved} <TranslatedText text={"resolved"} /> </li>
                 ))}
-                {agents.length === 0 && <li className="muted">No agents registered.</li>}
+                {agents.length === 0 && <li className="muted"><TranslatedText text={"No agents registered."} /></li>}
               </ul>
               <form className="form-stack" onSubmit={addAgent}>
-                <label>
-                  Display name
-                  <input required value={agentForm.displayName} onChange={(e) => setAgentForm({ ...agentForm, displayName: e.target.value })} />
+                <label> <TranslatedText text={"Display name"} /> <input required value={agentForm.displayName} onChange={(e) => setAgentForm({ ...agentForm, displayName: e.target.value })} />
                 </label>
-                <label>
-                  Wallet
-                  <input
+                <label> <TranslatedText text={"Wallet"} /> <input
                     required
                     className="mono"
                     value={agentForm.walletAddress}
                     onChange={(e) => setAgentForm({ ...agentForm, walletAddress: e.target.value })}
                   />
                 </label>
-                <label>
-                  Fee (bps)
-                  <input value={agentForm.feeBps} onChange={(e) => setAgentForm({ ...agentForm, feeBps: e.target.value })} />
+                <label> <TranslatedText text={"Fee (bps)"} /> <input value={agentForm.feeBps} onChange={(e) => setAgentForm({ ...agentForm, feeBps: e.target.value })} />
                 </label>
-                <button type="submit">Register agent</button>
+                <button type="submit"><TranslatedText text={"Register agent"} /></button>
               </form>
-              <h2 style={{ marginTop: "1.5rem" }}>Case commission</h2>
-              <p className="muted">
-                Opted-in agents earn a rate in basis points on future finalized cases. Blank saves the platform default (50 bps, 0.5% of platform profit). The cap is 500 bps (5%).
-              </p>
+              <h2 style={{ marginTop: "1.5rem" }}><TranslatedText text={"Case commission"} /></h2>
+              <p className="muted"> <TranslatedText text={"Opted-in agents earn a rate in basis points on future finalized cases. Blank saves the platform default (50 bps, 0.5% of platform profit). The cap is 500 bps (5%)."} /> </p>
               {agentPayouts.length > 0 && (
                 <ul className="activity-list">
                   {agentPayouts.map((payout) => (
                     <li key={payout.id}>
                       <strong>{payout.profile.displayName}</strong> · {formatAmount(payout.amountAtomic)} · {payout.profile.payoutChain} · <span className="mono">{payout.profile.payoutAddress}</span>
                       <div className="action-row">
-                        <button type="button" onClick={() => void reviewAgentPayout(payout.id, "sent")}>Mark sent</button>
-                        <button type="button" className="secondary" onClick={() => void reviewAgentPayout(payout.id, "rejected")}>Reject</button>
+                        <button type="button" onClick={() => void reviewAgentPayout(payout.id, "sent")}><TranslatedText text={"Mark sent"} /></button>
+                        <button type="button" className="secondary" onClick={() => void reviewAgentPayout(payout.id, "rejected")}><TranslatedText text={"Reject"} /></button>
                       </div>
                     </li>
                   ))}
@@ -2439,37 +2371,32 @@ export function AdminPage() {
               <ul className="activity-list">
                 {commissionAgents.map((agent) => (
                   <li key={agent.userId}>
-                    <strong>{agent.profile?.displayName || agent.accountName || agent.email || "Agent"}</strong>
+                    <strong><TranslatedText text={agent.profile?.displayName || agent.accountName || agent.email || "Agent"} /></strong>
                     {" · "}
-                    {agent.finalizedCaseCount} finalized cases
-                    {" · "}
-                    {agent.profile ? `${agent.profile.effectiveBps} bps` : "not opted in"}
+                    {agent.finalizedCaseCount} <TranslatedText text={"finalized cases"} /> {" · "}
+                    <TranslatedText text={agent.profile ? `${agent.profile.effectiveBps} bps` : "not opted in"} />
                     {agent.profile && (
                       <div className="action-row assign-mod-row">
-                        <label className="assign-mod-label">
-                          Rate override (bps)
-                          <input
+                        <label className="assign-mod-label"> <TranslatedText text={"Rate override (bps)"} /> <input
                             value={rateDraft[agent.userId] ?? (agent.profile.commissionBps == null ? "" : String(agent.profile.commissionBps))}
                             onChange={(e) => setRateDraft((current) => ({ ...current, [agent.userId]: e.target.value }))}
                             placeholder="50"
                           />
                         </label>
-                        <button type="button" className="secondary" onClick={() => void saveAgentRate(agent.userId)}>Save rate</button>
-                        <label className="assign-mod-label">
-                          Cooling-off ends
-                          <input
+                        <button type="button" className="secondary" onClick={() => void saveAgentRate(agent.userId)}><TranslatedText text={"Save rate"} /></button>
+                        <label className="assign-mod-label"> <TranslatedText text={"Cooling-off ends"} /> <input
                             type="datetime-local"
                             value={coolingDraft[agent.userId] ?? ""}
                             onChange={(e) => setCoolingDraft((current) => ({ ...current, [agent.userId]: e.target.value }))}
                           />
                         </label>
-                        <button type="button" className="secondary" onClick={() => void shortenAgentCoolingOff(agent.userId)}>Shorten cooling-off</button>
-                        <button type="button" className="secondary" onClick={() => void waiveAgentCoolingOff(agent.userId)}>Waive cooling-off</button>
+                        <button type="button" className="secondary" onClick={() => void shortenAgentCoolingOff(agent.userId)}><TranslatedText text={"Shorten cooling-off"} /></button>
+                        <button type="button" className="secondary" onClick={() => void waiveAgentCoolingOff(agent.userId)}><TranslatedText text={"Waive cooling-off"} /></button>
                       </div>
                     )}
                   </li>
                 ))}
-                {commissionAgents.length === 0 && <li className="muted">No approved agents yet.</li>}
+                {commissionAgents.length === 0 && <li className="muted"><TranslatedText text={"No approved agents yet."} /></li>}
               </ul>
               </>
               )}
@@ -2478,7 +2405,7 @@ export function AdminPage() {
 
           {section === "platform" && settings && (
             <section className="card-surface">
-              <h2>Escrow platform</h2>
+              <h2><TranslatedText text={"Escrow platform"} /></h2>
               <form
                 className="form-stack"
                 onSubmit={(e) => {
@@ -2486,31 +2413,25 @@ export function AdminPage() {
                   savePlatformSettings();
                 }}
               >
-                <label>
-                  Fee recipient wallet
-                  <input
+                <label> <TranslatedText text={"Fee recipient wallet"} /> <input
                     className="mono"
                     value={settingsForm.feeRecipientWallet}
                     onChange={(e) => setSettingsForm({ ...settingsForm, feeRecipientWallet: e.target.value })}
                   />
                 </label>
-                <label>
-                  Factory address
-                  <input
+                <label> <TranslatedText text={"Factory address"} /> <input
                     className="mono"
                     value={settingsForm.factoryAddress}
                     onChange={(e) => setSettingsForm({ ...settingsForm, factoryAddress: e.target.value })}
-                    placeholder="0x… EscrowFactory on Ethereum"
+                    placeholder={localizeCopy("0x… EscrowFactory on Ethereum")}
                   />
                 </label>
-                <label>
-                  Resolution mode
-                  <select
+                <label> <TranslatedText text={"Resolution mode"} /> <select
                     value={settingsForm.resolutionMode}
                     onChange={(e) => setSettingsForm({ ...settingsForm, resolutionMode: e.target.value })}
                   >
-                    <option value="admin">Admin resolves disputes</option>
-                    <option value="agent">Agent resolves disputes</option>
+                    <option value="admin"><TranslatedText text={"Admin resolves disputes"} /></option>
+                    <option value="agent"><TranslatedText text={"Agent resolves disputes"} /></option>
                   </select>
                 </label>
                 <label className="check-row">
@@ -2518,20 +2439,13 @@ export function AdminPage() {
                     type="checkbox"
                     checked={settingsForm.agentModeEnabled}
                     onChange={(e) => setSettingsForm({ ...settingsForm, agentModeEnabled: e.target.checked })}
-                  />
-                  Agent mode enabled
-                </label>
+                  /> <TranslatedText text={"Agent mode enabled"} /> </label>
 
                 <hr className="settings-divider" />
-                <h3>TRC-20 availability</h3>
-                <p className="hint">
-                  This controls new TRC-20 trade creation and joining. Turning it off hides TRON for new trades and blocks
-                  pending TRON invites; trades that already have both parties joined remain available for completion and
-                  dispute resolution.
-                </p>
-                <div className="check-row tron-toggle" role="group" aria-label="TRC-20 trade availability">
-                  <strong aria-live="polite">
-                    New TRC-20 trades: {settingsForm.tronSupportEnabled ? "Enabled" : "Disabled — coming soon"}
+                <h3><TranslatedText text={"TRC-20 availability"} /></h3>
+                <p className="hint"> <TranslatedText text={"This controls new TRC-20 trade creation and joining. Turning it off hides TRON for new trades and blocks pending TRON invites; trades that already have both parties joined remain available for completion and dispute resolution."} /> </p>
+                <div className="check-row tron-toggle" role="group" aria-label={localizeCopy("TRC-20 trade availability")}>
+                  <strong aria-live="polite"> <TranslatedText text={"New TRC-20 trades:"} /> <TranslatedText text={settingsForm.tronSupportEnabled ? "Enabled" : "Disabled — coming soon"} />
                   </strong>
                   <button
                     type="button"
@@ -2539,46 +2453,38 @@ export function AdminPage() {
                     aria-pressed={settingsForm.tronSupportEnabled}
                     onClick={() => setTronSupportEnabled(!settingsForm.tronSupportEnabled)}
                   >
-                    {settingsForm.tronSupportEnabled ? "Disable TRC-20" : "Enable TRC-20"}
+                    <TranslatedText text={settingsForm.tronSupportEnabled ? "Disable TRC-20" : "Enable TRC-20"} />
                   </button>
                 </div>
-                <label>
-                  Tron USDT (TRC-20) contract
-                  <input
+                <label> <TranslatedText text={"Tron USDT (TRC-20) contract"} /> <input
                     className="mono"
                     value={settingsForm.tronUsdtAddress}
                     onChange={(e) => setSettingsForm({ ...settingsForm, tronUsdtAddress: e.target.value })}
                   />
                 </label>
-                <label>
-                  Tron escrow factory
-                  <input
+                <label> <TranslatedText text={"Tron escrow factory"} /> <input
                     className="mono"
                     value={settingsForm.tronFactoryAddress}
                     onChange={(e) => setSettingsForm({ ...settingsForm, tronFactoryAddress: e.target.value })}
                   />
                 </label>
-                <label>
-                  Tron fee recipient
-                  <input
+                <label> <TranslatedText text={"Tron fee recipient"} /> <input
                     className="mono"
                     value={settingsForm.tronFeeRecipientWallet}
                     onChange={(e) => setSettingsForm({ ...settingsForm, tronFeeRecipientWallet: e.target.value })}
                   />
                 </label>
-                <label>
-                  Tron dispute resolver
-                  <input
+                <label> <TranslatedText text={"Tron dispute resolver"} /> <input
                     className="mono"
                     value={settingsForm.tronResolverWallet}
                     onChange={(e) => setSettingsForm({ ...settingsForm, tronResolverWallet: e.target.value })}
                   />
                 </label>
-                <button type="submit">Save platform settings</button>
+                <button type="submit"><TranslatedText text={"Save platform settings"} /></button>
               </form>
               {cfg && (
                 <div className="role-box">
-                  <h3>Configured role wallets</h3>
+                  <h3><TranslatedText text={"Configured role wallets"} /></h3>
                   <ul className="kv-list">
                     {Object.entries(cfg.addresses).map(([k, v]) => (
                       <li key={k}>
@@ -2594,10 +2500,8 @@ export function AdminPage() {
 
           {section === "email" && settings && (
             <section className="card-surface">
-              <h2>Email delivery (SMTP)</h2>
-              <p className="hint">
-                Required for magic-link sign-in and referral payout notifications. Port <strong>587</strong> uses STARTTLS;
-                enable implicit TLS for port <strong>465</strong>.
+              <h2><TranslatedText text={"Email delivery (SMTP)"} /></h2>
+              <p className="hint"> <TranslatedText text={"Required for magic-link sign-in and referral payout notifications. Port"} /> <strong>587</strong> <TranslatedText text={"uses STARTTLS; enable implicit TLS for port"} /> <strong>465</strong>.
               </p>
               <form
                 className="form-stack"
@@ -2606,18 +2510,14 @@ export function AdminPage() {
                   saveEmailSettings();
                 }}
               >
-                <label>
-                  SMTP host
-                  <input
+                <label> <TranslatedText text={"SMTP host"} /> <input
                     value={settingsForm.smtpHost}
                     onChange={(e) => setSettingsForm({ ...settingsForm, smtpHost: e.target.value })}
-                    placeholder="smtp.sendgrid.net"
+                    placeholder={localizeCopy("smtp.sendgrid.net")}
                     autoComplete="off"
                   />
                 </label>
-                <label>
-                  SMTP port
-                  <input
+                <label> <TranslatedText text={"SMTP port"} /> <input
                     type="number"
                     min={1}
                     max={65535}
@@ -2625,30 +2525,24 @@ export function AdminPage() {
                     onChange={(e) => setSettingsForm({ ...settingsForm, smtpPort: e.target.value })}
                   />
                 </label>
-                <label>
-                  SMTP user
-                  <input
+                <label> <TranslatedText text={"SMTP user"} /> <input
                     value={settingsForm.smtpUser}
                     onChange={(e) => setSettingsForm({ ...settingsForm, smtpUser: e.target.value })}
                     autoComplete="off"
                   />
                 </label>
-                <label>
-                  SMTP password
-                  <input
+                <label> <TranslatedText text={"SMTP password"} /> <input
                     type="password"
                     value={settingsForm.smtpPass}
                     onChange={(e) => setSettingsForm({ ...settingsForm, smtpPass: e.target.value })}
-                    placeholder={smtpPassConfigured ? "Saved — enter only to replace" : "App password or API key"}
+                    placeholder={localizeCopy(smtpPassConfigured ? "Saved — enter only to replace" : "App password or API key")}
                     autoComplete="new-password"
                   />
                 </label>
-                <label>
-                  From address
-                  <input
+                <label> <TranslatedText text={"From address"} /> <input
                     value={settingsForm.smtpFrom}
                     onChange={(e) => setSettingsForm({ ...settingsForm, smtpFrom: e.target.value })}
-                    placeholder="noreply@yourdomain.com"
+                    placeholder={localizeCopy("noreply@yourdomain.com")}
                     autoComplete="off"
                   />
                 </label>
@@ -2657,9 +2551,7 @@ export function AdminPage() {
                     type="checkbox"
                     checked={settingsForm.smtpSecure}
                     onChange={(e) => setSettingsForm({ ...settingsForm, smtpSecure: e.target.checked })}
-                  />
-                  Implicit TLS (SSL) — typical for port 465
-                </label>
+                  /> <TranslatedText text={"Implicit TLS (SSL) — typical for port 465"} /> </label>
                 <ReminderDesk
                   enabled={settingsForm.remindersEnabled}
                   subject={settingsForm.reminderEmailSubject}
@@ -2668,71 +2560,54 @@ export function AdminPage() {
                   onSubject={(reminderEmailSubject) => setSettingsForm({ ...settingsForm, reminderEmailSubject })}
                   onBody={(reminderEmailBody) => setSettingsForm({ ...settingsForm, reminderEmailBody })}
                 />
-                <button type="submit">Save email settings</button>
+                <button type="submit"><TranslatedText text={"Save email settings"} /></button>
               </form>
               <section className="role-box" style={{ marginTop: "1.25rem" }}>
-                <h3>Automated dispute notifications</h3>
-                <p className="muted">
-                  When enabled, the losing party receives a private trade-room message and an email when a ruling is issued or an appeal is decided. Email delivery needs a configured SMTP server. Placeholders: {"{tradeTitle}"}, {"{favoredParty}"}, {"{appealDays}"}, {"{appealDeadline}"}, {"{tradeUrl}"}.
+                <h3><TranslatedText text={"Automated dispute notifications"} /></h3>
+                <p className="muted"> <TranslatedText text={"When enabled, the losing party receives a private trade-room message and an email when a ruling is issued or an appeal is decided. Email delivery needs a configured SMTP server. Placeholders:"} /> <TranslatedText text={"{tradeTitle}"} />, <TranslatedText text={"{favoredParty}"} />, <TranslatedText text={"{appealDays}"} />, <TranslatedText text={"{appealDeadline}"} />, <TranslatedText text={"{tradeUrl}"} />.
                 </p>
                 <label className="check-row">
                   <input
                     type="checkbox"
                     checked={settingsForm.disputeEmailNotificationsEnabled}
                     onChange={(e) => setSettingsForm({ ...settingsForm, disputeEmailNotificationsEnabled: e.target.checked })}
-                  />
-                  Send automated dispute messages and emails
+                  /> <TranslatedText text={"Send automated dispute messages and emails"} /> </label>
+                <h4><TranslatedText text={"Provisional ruling · appeal window"} /></h4>
+                <label> <TranslatedText text={"Email subject"} /> <input maxLength={180} value={settingsForm.disputeAppealEmailSubject} onChange={(e) => setSettingsForm({ ...settingsForm, disputeAppealEmailSubject: e.target.value })} />
                 </label>
-                <h4>Provisional ruling · appeal window</h4>
-                <label>
-                  Email subject
-                  <input maxLength={180} value={settingsForm.disputeAppealEmailSubject} onChange={(e) => setSettingsForm({ ...settingsForm, disputeAppealEmailSubject: e.target.value })} />
+                <label> <TranslatedText text={"Message"} /> <textarea rows={4} maxLength={4000} value={settingsForm.disputeAppealMessage} onChange={(e) => setSettingsForm({ ...settingsForm, disputeAppealMessage: e.target.value })} />
                 </label>
-                <label>
-                  Message
-                  <textarea rows={4} maxLength={4000} value={settingsForm.disputeAppealMessage} onChange={(e) => setSettingsForm({ ...settingsForm, disputeAppealMessage: e.target.value })} />
+                <h4><TranslatedText text={"Final ruling · no appeal"} /></h4>
+                <label> <TranslatedText text={"Email subject"} /> <input maxLength={180} value={settingsForm.disputeFinalEmailSubject} onChange={(e) => setSettingsForm({ ...settingsForm, disputeFinalEmailSubject: e.target.value })} />
                 </label>
-                <h4>Final ruling · no appeal</h4>
-                <label>
-                  Email subject
-                  <input maxLength={180} value={settingsForm.disputeFinalEmailSubject} onChange={(e) => setSettingsForm({ ...settingsForm, disputeFinalEmailSubject: e.target.value })} />
+                <label> <TranslatedText text={"Message"} /> <textarea rows={3} maxLength={4000} value={settingsForm.disputeFinalMessage} onChange={(e) => setSettingsForm({ ...settingsForm, disputeFinalMessage: e.target.value })} />
                 </label>
-                <label>
-                  Message
-                  <textarea rows={3} maxLength={4000} value={settingsForm.disputeFinalMessage} onChange={(e) => setSettingsForm({ ...settingsForm, disputeFinalMessage: e.target.value })} />
+                <h4><TranslatedText text={"Appeal decision · final outcome"} /></h4>
+                <label> <TranslatedText text={"Email subject"} /> <input maxLength={180} value={settingsForm.disputeAppealDecisionEmailSubject} onChange={(e) => setSettingsForm({ ...settingsForm, disputeAppealDecisionEmailSubject: e.target.value })} />
                 </label>
-                <h4>Appeal decision · final outcome</h4>
-                <label>
-                  Email subject
-                  <input maxLength={180} value={settingsForm.disputeAppealDecisionEmailSubject} onChange={(e) => setSettingsForm({ ...settingsForm, disputeAppealDecisionEmailSubject: e.target.value })} />
+                <label> <TranslatedText text={"Message"} /> <textarea rows={3} maxLength={4000} value={settingsForm.disputeAppealDecisionMessage} onChange={(e) => setSettingsForm({ ...settingsForm, disputeAppealDecisionMessage: e.target.value })} />
                 </label>
-                <label>
-                  Message
-                  <textarea rows={3} maxLength={4000} value={settingsForm.disputeAppealDecisionMessage} onChange={(e) => setSettingsForm({ ...settingsForm, disputeAppealDecisionMessage: e.target.value })} />
-                </label>
-                <button type="button" onClick={() => void saveDisputeMessages()}>Save automated dispute messages</button>
+                <button type="button" onClick={() => void saveDisputeMessages()}><TranslatedText text={"Save automated dispute messages"} /></button>
               </section>
               <section className="role-box" style={{ marginTop: "1.25rem" }}>
-                <h3>Send a personalized email</h3>
-                <p className="muted">Search for a registered user, then send a one-off message through the configured SMTP account. Moderators need the Email privilege to use this panel.</p>
+                <h3><TranslatedText text={"Send a personalized email"} /></h3>
+                <p className="muted"><TranslatedText text={"Search for a registered user, then send a one-off message through the configured SMTP account. Moderators need the Email privilege to use this panel."} /></p>
                 <div className="action-row">
                   <input
-                    aria-label="Search users by name or email"
+                    aria-label={localizeCopy("Search users by name or email")}
                     value={emailUserSearch}
                     onChange={(e) => {
                       setEmailUserSearch(e.target.value);
                       setEmailRecipients([]);
                       setSelectedEmailRecipientId("");
                     }}
-                    placeholder="Search users by name or email"
+                    placeholder={localizeCopy("Search users by name or email")}
                   />
-                  <button type="button" className="secondary" onClick={() => void searchEmailRecipients()}>Search users</button>
+                  <button type="button" className="secondary" onClick={() => void searchEmailRecipients()}><TranslatedText text={"Search users"} /></button>
                 </div>
                 {emailRecipients.length > 0 && (
-                  <label>
-                    Recipient
-                    <select value={selectedEmailRecipientId} onChange={(e) => setSelectedEmailRecipientId(e.target.value)}>
-                      <option value="">Choose a user</option>
+                  <label> <TranslatedText text={"Recipient"} /> <select value={selectedEmailRecipientId} onChange={(e) => setSelectedEmailRecipientId(e.target.value)}>
+                      <option value=""><TranslatedText text={"Choose a user"} /></option>
                       {emailRecipients.map((recipient) => (
                         <option key={recipient.id} value={recipient.id}>
                           {recipient.displayName ? `${recipient.displayName} · ` : ""}{recipient.email}
@@ -2741,16 +2616,12 @@ export function AdminPage() {
                     </select>
                   </label>
                 )}
-                <label>
-                  Subject
-                  <input maxLength={180} value={emailMessageSubject} onChange={(e) => setEmailMessageSubject(e.target.value)} />
+                <label> <TranslatedText text={"Subject"} /> <input maxLength={180} value={emailMessageSubject} onChange={(e) => setEmailMessageSubject(e.target.value)} />
                 </label>
-                <label>
-                  Message
-                  <textarea rows={6} maxLength={8000} value={emailMessageBody} onChange={(e) => setEmailMessageBody(e.target.value)} />
+                <label> <TranslatedText text={"Message"} /> <textarea rows={6} maxLength={8000} value={emailMessageBody} onChange={(e) => setEmailMessageBody(e.target.value)} />
                 </label>
                 <button type="button" disabled={emailSending || !selectedEmailRecipientId} onClick={() => void sendPersonalizedEmail()}>
-                  {emailSending ? "Sending…" : "Send email"}
+                  <TranslatedText text={emailSending ? "Sending…" : "Send email"} />
                 </button>
               </section>
             </section>
@@ -2758,8 +2629,8 @@ export function AdminPage() {
 
           {section === "site" && settings && (
             <section className="card-surface">
-              <h2>Site & SEO</h2>
-              <p className="muted">Public branding shown in the header, browser tab title, and meta tags.</p>
+              <h2><TranslatedText text={"Site & SEO"} /></h2>
+              <p className="muted"><TranslatedText text={"Public branding shown in the header, browser tab title, and meta tags."} /></p>
               <form
                 className="form-stack"
                 onSubmit={(e) => {
@@ -2767,17 +2638,25 @@ export function AdminPage() {
                   saveSiteSettings();
                 }}
               >
-                <label>
-                  Site title
-                  <input
+                <label> <TranslatedText text={"Site title"} /> <input
                     value={settingsForm.siteTitle}
                     onChange={(e) => setSettingsForm({ ...settingsForm, siteTitle: e.target.value })}
-                    placeholder="2Pescrow — P2P Escrow"
+                    placeholder={localizeCopy("2Pescrow — P2P Escrow")}
+                  />
+                </label>
+                <label>
+                  <TranslatedText text={"Field notes on home page"} />
+                  <input
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={settingsForm.fieldNotesLimit}
+                    onChange={(e) => setSettingsForm({ ...settingsForm, fieldNotesLimit: Math.max(1, Math.min(12, Number(e.target.value) || 1)) })}
                   />
                 </label>
                 <div className="brand-slot-row">
                   <BrandSlot
-                    label="Logo"
+                    label={localizeCopy("Logo")}
                     hint="Shown in the header, the footer, emails, and the agreement."
                     value={settingsForm.siteLogoUrl}
                     fallback={DEFAULT_LOGO}
@@ -2785,112 +2664,88 @@ export function AdminPage() {
                     onChange={(siteLogoUrl) => setSettingsForm({ ...settingsForm, siteLogoUrl })}
                   />
                   <BrandSlot
-                    label="Favicon"
+                    label={localizeCopy("Favicon")}
                     hint="The small icon in the browser tab."
                     value={settingsForm.siteFaviconUrl}
                     fallback={DEFAULT_FAVICON}
                     onChange={(siteFaviconUrl) => setSettingsForm({ ...settingsForm, siteFaviconUrl })}
                   />
                 </div>
-                <p className="muted">Replace either image here, then save. Clearing one returns the built-in picture.</p>
-                <label>
-                  Meta description
-                  <textarea
+                <p className="muted"><TranslatedText text={"Replace either image here, then save. Clearing one returns the built-in picture."} /></p>
+                <label> <TranslatedText text={"Meta description"} /> <textarea
                     rows={4}
                     value={settingsForm.metaDescription}
                     onChange={(e) => setSettingsForm({ ...settingsForm, metaDescription: e.target.value })}
-                    placeholder="Short description for search engines and social previews."
+                    placeholder={localizeCopy("Short description for search engines and social previews.")}
                   />
                   <span className={settingsForm.metaDescription.length > 2000 ? "blog-cms-count over" : "blog-cms-count"}>
                     {settingsForm.metaDescription.length} / 2000
                   </span>
                 </label>
-                <label>
-                  Meta keywords (optional)
-                  <textarea
+                <label> <TranslatedText text={"Meta keywords (optional)"} /> <textarea
                     rows={4}
                     value={settingsForm.metaKeywords}
                     onChange={(e) => setSettingsForm({ ...settingsForm, metaKeywords: e.target.value })}
-                    placeholder="escrow, USDT, Ethereum, P2P"
+                    placeholder={localizeCopy("escrow, USDT, Ethereum, P2P")}
                   />
                   <span className={settingsForm.metaKeywords.length > 4000 ? "blog-cms-count over" : "blog-cms-count"}>
                     {settingsForm.metaKeywords.length} / 4000
                   </span>
                 </label>
                 <hr style={{ border: 0, borderTop: "1px solid var(--border)", margin: "1rem 0" }} />
-                <h3 style={{ margin: "0 0 0.35rem" }}>Mobile apps (store links)</h3>
-                <p className="muted" style={{ marginTop: 0 }}>
-                  Save App Store and Google Play URLs for when native app download is wired into the site. The public homepage is unchanged until that is implemented.
-                </p>
+                <h3 style={{ margin: "0 0 0.35rem" }}><TranslatedText text={"Mobile apps (store links)"} /></h3>
+                <p className="muted" style={{ marginTop: 0 }}> <TranslatedText text={"Save App Store and Google Play URLs for when native app download is wired into the site. The public homepage is unchanged until that is implemented."} /> </p>
                 <label className="check-row tron-toggle">
                   <input
                     type="checkbox"
                     checked={settingsForm.mobileAppsEnabled}
                     onChange={(e) => setSettingsForm({ ...settingsForm, mobileAppsEnabled: e.target.checked })}
                   />
-                  <strong>Mobile apps configured (reserved)</strong>
+                  <strong><TranslatedText text={"Mobile apps configured (reserved)"} /></strong>
                 </label>
-                <label>
-                  Apple App Store URL
-                  <input
+                <label> <TranslatedText text={"Apple App Store URL"} /> <input
                     value={settingsForm.iosAppStoreUrl}
                     onChange={(e) => setSettingsForm({ ...settingsForm, iosAppStoreUrl: e.target.value })}
-                    placeholder="https://apps.apple.com/app/id…"
+                    placeholder={localizeCopy("https://apps.apple.com/app/id…")}
                     autoComplete="off"
                   />
                 </label>
-                <label>
-                  Google Play Store URL
-                  <input
+                <label> <TranslatedText text={"Google Play Store URL"} /> <input
                     value={settingsForm.androidPlayStoreUrl}
                     onChange={(e) => setSettingsForm({ ...settingsForm, androidPlayStoreUrl: e.target.value })}
-                    placeholder="https://play.google.com/store/apps/details?id=…"
+                    placeholder={localizeCopy("https://play.google.com/store/apps/details?id=…")}
                     autoComplete="off"
                   />
                 </label>
-                <h3 style={{ margin: "1rem 0 0.35rem" }}>Community links</h3>
-                <p className="muted" style={{ marginTop: 0 }}>
-                  Shown in the footer, the dock, and the home page. Leave blank to use the network homepages until your rooms are ready.
-                </p>
-                <label>
-                  Telegram URL
-                  <input value={settingsForm.telegramUrl} onChange={(e) => setSettingsForm({ ...settingsForm, telegramUrl: e.target.value })} placeholder="https://t.me/yourroom" />
+                <h3 style={{ margin: "1rem 0 0.35rem" }}><TranslatedText text={"Community links"} /></h3>
+                <p className="muted" style={{ marginTop: 0 }}> <TranslatedText text={"Shown in the footer, the dock, and the home page. Leave blank to use the network homepages until your rooms are ready."} /> </p>
+                <label> <TranslatedText text={"Telegram URL"} /> <input value={settingsForm.telegramUrl} onChange={(e) => setSettingsForm({ ...settingsForm, telegramUrl: e.target.value })} placeholder={localizeCopy("https://t.me/yourroom")} />
                 </label>
-                <label>
-                  X URL
-                  <input value={settingsForm.xUrl} onChange={(e) => setSettingsForm({ ...settingsForm, xUrl: e.target.value })} placeholder="https://x.com/yourhandle" />
+                <label> <TranslatedText text={"X URL"} /> <input value={settingsForm.xUrl} onChange={(e) => setSettingsForm({ ...settingsForm, xUrl: e.target.value })} placeholder={localizeCopy("https://x.com/yourhandle")} />
                 </label>
-                <label>
-                  Discord URL
-                  <input value={settingsForm.discordUrl} onChange={(e) => setSettingsForm({ ...settingsForm, discordUrl: e.target.value })} placeholder="https://discord.gg/yourinvite" />
+                <label> <TranslatedText text={"Discord URL"} /> <input value={settingsForm.discordUrl} onChange={(e) => setSettingsForm({ ...settingsForm, discordUrl: e.target.value })} placeholder={localizeCopy("https://discord.gg/yourinvite")} />
                 </label>
                 <hr style={{ border: 0, borderTop: "1px solid var(--border)", margin: "1rem 0" }} />
-                <h3 style={{ margin: "0 0 0.35rem" }}>Wallet connection pop-up</h3>
-                <p className="muted" style={{ marginTop: 0 }}>
-                  Choose which devices see it and how long to wait after a page loads. Mobile means a viewport up to 720px wide. Shown once per browser; saving changes makes the updated notice appear again.
-                </p>
+                <h3 style={{ margin: "0 0 0.35rem" }}><TranslatedText text={"Wallet connection pop-up"} /></h3>
+                <p className="muted" style={{ marginTop: 0 }}> <TranslatedText text={"Choose which devices see it and how long to wait after a page loads. Mobile means a viewport up to 720px wide. Shown once per browser; saving changes makes the updated notice appear again."} /> </p>
                 <label className="check-row tron-toggle">
                   <input
                     type="checkbox"
                     checked={settingsForm.siteNoticeEnabled}
                     onChange={(e) => setSettingsForm({ ...settingsForm, siteNoticeEnabled: e.target.checked })}
                   />
-                  <strong>Show wallet connection pop-up</strong>
+                  <strong><TranslatedText text={"Show wallet connection pop-up"} /></strong>
                 </label>
-                <label>
-                  Show on
-                  <select
+                <label> <TranslatedText text={"Show on"} /> <select
                     value={settingsForm.siteNoticeAudience}
                     onChange={(e) => setSettingsForm({ ...settingsForm, siteNoticeAudience: e.target.value as "all" | "mobile" | "desktop" })}
                   >
-                    <option value="all">Mobile and desktop</option>
-                    <option value="mobile">Mobile only</option>
-                    <option value="desktop">Desktop only</option>
+                    <option value="all"><TranslatedText text={"Mobile and desktop"} /></option>
+                    <option value="mobile"><TranslatedText text={"Mobile only"} /></option>
+                    <option value="desktop"><TranslatedText text={"Desktop only"} /></option>
                   </select>
                 </label>
-                <label>
-                  Delay after page load (seconds)
-                  <input
+                <label> <TranslatedText text={"Delay after page load (seconds)"} /> <input
                     type="number"
                     min={0}
                     max={300}
@@ -2898,32 +2753,28 @@ export function AdminPage() {
                     value={settingsForm.siteNoticeDelaySeconds}
                     onChange={(e) => setSettingsForm({ ...settingsForm, siteNoticeDelaySeconds: Number(e.target.value) })}
                   />
-                  <span className="hint">Set 0 to show immediately, or up to 300 seconds.</span>
+                  <span className="hint"><TranslatedText text={"Set 0 to show immediately, or up to 300 seconds."} /></span>
                 </label>
-                <label>
-                  Pop-up title
-                  <input
+                <label> <TranslatedText text={"Pop-up title"} /> <input
                     value={settingsForm.siteNoticeTitle}
                     maxLength={120}
                     onChange={(e) => setSettingsForm({ ...settingsForm, siteNoticeTitle: e.target.value })}
-                    placeholder="Wallet connection help"
+                    placeholder={localizeCopy("Wallet connection help")}
                   />
                 </label>
-                <label>
-                  Pop-up message
-                  <textarea
+                <label> <TranslatedText text={"Pop-up message"} /> <textarea
                     rows={7}
                     value={settingsForm.siteNoticeBody}
                     maxLength={3000}
                     onChange={(e) => setSettingsForm({ ...settingsForm, siteNoticeBody: e.target.value })}
-                    placeholder="Explain wallet connection guidance to visitors."
+                    placeholder={localizeCopy("Explain wallet connection guidance to visitors.")}
                   />
                   <span className={settingsForm.siteNoticeBody.length > 3000 ? "blog-cms-count over" : "blog-cms-count"}>
                     {settingsForm.siteNoticeBody.length} / 3000
                   </span>
                 </label>
-                <button type="button" onClick={() => void saveSiteNoticeSettings()}>Save wallet connection pop-up</button>
-                <button type="submit">Save site & SEO</button>
+                <button type="button" onClick={() => void saveSiteNoticeSettings()}><TranslatedText text={"Save wallet connection pop-up"} /></button>
+                <button type="submit"><TranslatedText text={"Save site & SEO"} /></button>
               </form>
             </section>
           )}
@@ -2934,44 +2785,37 @@ export function AdminPage() {
 
           {section === "feedback" && settings && (
             <section className="card-surface">
-              <h2>User feedback</h2>
-              <p className="muted">
-                Signed-in buyers and sellers can submit feedback from the site. Each submission is emailed to{" "}
-                the platform admin email (ADMIN_EMAIL) when SMTP is configured.
-              </p>
+              <h2><TranslatedText text={"User feedback"} /></h2>
+              <p className="muted"> <TranslatedText text={"Signed-in buyers and sellers can submit feedback from the site. Each submission is emailed to"} />{" "} <TranslatedText text={"the platform admin email (ADMIN_EMAIL) when SMTP is configured."} /> </p>
               <label className="check-row tron-toggle" style={{ marginBottom: "1rem" }}>
                 <input
                   type="checkbox"
                   checked={settingsForm.feedbackEnabled}
                   onChange={(e) => saveFeedbackEnabled(e.target.checked)}
                 />
-                <strong>Feedback collection enabled</strong>
-                <span className="muted" style={{ display: "block", fontWeight: 400, marginTop: "0.25rem" }}>
-                  When off, the Feedback nav link is hidden and submissions are rejected.
-                </span>
+                <strong><TranslatedText text={"Feedback collection enabled"} /></strong>
+                <span className="muted" style={{ display: "block", fontWeight: 400, marginTop: "0.25rem" }}> <TranslatedText text={"When off, the Feedback nav link is hidden and submissions are rejected."} /> </span>
               </label>
-              <label>
-                Show submissions
-                <select
+              <label> <TranslatedText text={"Show submissions"} /> <select
                   value={feedbackFilter}
                   onChange={(e) => setFeedbackFilter(e.target.value as typeof feedbackFilter)}
                 >
-                  <option value="new">New</option>
-                  <option value="reviewed">Reviewed</option>
-                  <option value="archived">Archived</option>
-                  <option value="all">All</option>
+                  <option value="new"><TranslatedText text={"New"} /></option>
+                  <option value="reviewed"><TranslatedText text={"Reviewed"} /></option>
+                  <option value="archived"><TranslatedText text={"Archived"} /></option>
+                  <option value="all"><TranslatedText text={"All"} /></option>
                 </select>
               </label>
               <div className="admin-table-wrap">
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>When</th>
-                      <th>From</th>
-                      <th>Category</th>
-                      <th>Message</th>
-                      <th>Status</th>
-                      <th>Actions</th>
+                      <th><TranslatedText text={"When"} /></th>
+                      <th><TranslatedText text={"From"} /></th>
+                      <th><TranslatedText text={"Category"} /></th>
+                      <th><TranslatedText text={"Message"} /></th>
+                      <th><TranslatedText text={"Status"} /></th>
+                      <th><TranslatedText text={"Actions"} /></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2982,13 +2826,13 @@ export function AdminPage() {
                           {f.displayName || f.email || "—"}
                           {f.email ? <div className="muted">{f.email}</div> : null}
                           {f.pagePath ? <div className="mono muted">{f.pagePath}</div> : null}
-                          {f.emailSent ? null : <div className="muted">Email not sent</div>}
+                          {f.emailSent ? null : <div className="muted"><TranslatedText text={"Email not sent"} /></div>}
                         </td>
                         <td>{f.category.replace(/_/g, " ")}</td>
                         <td>
                           {f.subject ? <strong>{f.subject}</strong> : null}
                           <div style={{ whiteSpace: "pre-wrap", maxWidth: "28rem" }}>{f.message}</div>
-                          {f.adminNote ? <div className="muted">Note: {f.adminNote}</div> : null}
+                          {f.adminNote ? <div className="muted"><TranslatedText text={"Note:"} /> {f.adminNote}</div> : null}
                         </td>
                         <td>{f.status}</td>
                         <td>
@@ -3006,9 +2850,7 @@ export function AdminPage() {
                                   setMsg("Marked reviewed.");
                                   await refresh();
                                 }}
-                              >
-                                Mark reviewed
-                              </button>
+                              > <TranslatedText text={"Mark reviewed"} /> </button>
                             )}
                             {f.status !== "archived" && (
                               <button
@@ -3023,9 +2865,7 @@ export function AdminPage() {
                                   setMsg("Archived.");
                                   await refresh();
                                 }}
-                              >
-                                Archive
-                              </button>
+                              > <TranslatedText text={"Archive"} /> </button>
                             )}
                             <button
                               type="button"
@@ -3040,9 +2880,7 @@ export function AdminPage() {
                                 });
                                 await refresh();
                               }}
-                            >
-                              Add note
-                            </button>
+                            > <TranslatedText text={"Add note"} /> </button>
                             <button
                               type="button"
                               className="secondary"
@@ -3055,18 +2893,14 @@ export function AdminPage() {
                                 setMsg("Deleted.");
                                 await refresh();
                               }}
-                            >
-                              Delete
-                            </button>
+                            > <TranslatedText text={"Delete"} /> </button>
                           </div>
                         </td>
                       </tr>
                     ))}
                     {feedbackItems.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="muted">
-                          No feedback in this filter.
-                        </td>
+                        <td colSpan={6} className="muted"> <TranslatedText text={"No feedback in this filter."} /> </td>
                       </tr>
                     )}
                   </tbody>

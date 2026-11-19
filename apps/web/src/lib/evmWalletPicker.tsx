@@ -1,3 +1,6 @@
+import { LegalReadDialog } from "../components/LegalReadDialog";
+import { useLanguage as useCopyLanguage } from "./language";
+import { TranslatedText } from "./language";
 import {
   createContext,
   useCallback,
@@ -114,6 +117,7 @@ function EvmWalletPickerModal({
   onConsumeReopenHint: () => void;
   onWalletConnectCancelled: () => void;
 }) {
+  const { t: localizeCopy } = useCopyLanguage();
   const connectors = useConnectors();
   const { connectAsync, isPending, error, variables, reset } = useConnect();
   const { disconnectAsync } = useEvmDisconnect();
@@ -123,6 +127,7 @@ function EvmWalletPickerModal({
   const [options, setOptions] = useState<WalletPickerOption[]>([]);
   const [scanning, setScanning] = useState(false);
   const [localErr, setLocalErr] = useState<string | null>(null);
+  const [legal, setLegal] = useState<"terms" | "privacy" | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -278,15 +283,15 @@ function EvmWalletPickerModal({
         <div className="wallet-picker-head">
           <div>
             <h2 id="wallet-picker-title">
-              {isConnected && activeAddress ? "Wallet" : "Connect Ethereum wallet"}
+              <TranslatedText text={isConnected && activeAddress ? "Wallet" : "Connect Ethereum wallet"} />
             </h2>
             <p className="muted">
-              {isConnected && activeAddress
+              <TranslatedText text={isConnected && activeAddress
                 ? "Switch to another wallet or disconnect. Your address stays the same until you pick a different wallet."
-                : "Connect your wallet for ERC-20 trades on Ethereum mainnet."}
+                : "Connect your wallet for ERC-20 trades on Ethereum mainnet."} />
             </p>
           </div>
-          <button type="button" className="secondary wallet-picker-close" onClick={requestClose} aria-label="Close">
+          <button type="button" className="secondary wallet-picker-close" onClick={requestClose} aria-label={localizeCopy("Close")}>
             ×
           </button>
         </div>
@@ -305,24 +310,21 @@ function EvmWalletPickerModal({
           </p>
         )}
         {isPending && !pendingIsWalletConnect && (
-          <p className="wallet-approval-hint" role="status">
-            Approve the connection in your wallet popup. If no popup appears, unlock the wallet extension and click
-            its icon, then return here and try again.
-          </p>
+          <p className="wallet-approval-hint" role="status"> <TranslatedText text={"Approve the connection in your wallet popup. If no popup appears, unlock the wallet extension and click its icon, then return here and try again."} /> </p>
         )}
         {!walletConnectConfigured && options.some((o) => isWalletConnectConnector(o.connector)) && (
-          <p className="hint">WalletConnect is not configured. Set VITE_WALLETCONNECT_PROJECT_ID and restart the web app.</p>
+          <p className="hint"><TranslatedText text={"WalletConnect is not configured. Set VITE_WALLETCONNECT_PROJECT_ID and restart the web app."} /></p>
         )}
 
         {isConnected && activeAddress && (
           <div className="wallet-picker-current card-surface">
-            <span className="wallet-picker-current-label">Connected</span>
+            <span className="wallet-picker-current-label"><TranslatedText text={"Connected"} /></span>
             <p className="wallet-picker-current-addr mono" title={activeAddress}>
               {activeAddress}
             </p>
             {chainId !== mainnet.id && (
               <div className="wallet-picker-wrong-chain">
-                <p className="warn-banner wallet-picker-warn">This wallet is not on Ethereum yet.</p>
+                <p className="warn-banner wallet-picker-warn"><TranslatedText text={"This wallet is not on Ethereum yet."} /></p>
                 <button
                   type="button"
                   className="secondary wallet-picker-switch-chain"
@@ -335,7 +337,7 @@ function EvmWalletPickerModal({
                       .finally(() => setSwitchingChain(false));
                   }}
                 >
-                  {switchingChain ? "Switching…" : "Switch to Ethereum"}
+                  <TranslatedText text={switchingChain ? "Switching…" : "Switch to Ethereum"} />
                 </button>
               </div>
             )}
@@ -343,13 +345,13 @@ function EvmWalletPickerModal({
         )}
 
         {isConnected && activeAddress && (
-          <p className="wallet-picker-section-title">Switch wallet</p>
+          <p className="wallet-picker-section-title"><TranslatedText text={"Switch wallet"} /></p>
         )}
 
         <ul className="wallet-picker-list">
-          {scanning && <li className="muted wallet-picker-empty">Scanning for installed wallets…</li>}
+          {scanning && <li className="muted wallet-picker-empty"><TranslatedText text={"Scanning for installed wallets…"} /></li>}
           {!scanning && options.length === 0 && (
-            <li className="muted wallet-picker-empty">No connection options available. Install a wallet extension or configure WalletConnect.</li>
+            <li className="muted wallet-picker-empty"><TranslatedText text={"No connection options available. Install a wallet extension or configure WalletConnect."} /></li>
           )}
           {!scanning && options.map((opt) => {
             const busy = isPending && opt.connector && pendingId === opt.connector.id;
@@ -367,22 +369,21 @@ function EvmWalletPickerModal({
                   <span className="wallet-picker-label">
                     <strong>{opt.name}</strong>
                     {isActive && (
-                      <span className="muted wallet-picker-sub">
-                        Connected · {shortAddr(activeAddress)}
+                      <span className="muted wallet-picker-sub"> <TranslatedText text={"Connected ·"} /> {shortAddr(activeAddress)}
                       </span>
                     )}
                     {opt.connector && isWalletConnectConnector(opt.connector) && (
                       <span className="muted wallet-picker-sub">
-                        {isMobileClient()
+                        <TranslatedText text={isMobileClient()
                           ? "Opens WalletConnect — choose MetaMask or another wallet and approve"
-                          : "MetaMask in this browser, or scan the QR with a mobile wallet"}
+                          : "MetaMask in this browser, or scan the QR with a mobile wallet"} />
                       </span>
                     )}
                     {opt.connector && isBaseFallbackConnector(opt.connector) && (
-                      <span className="muted wallet-picker-sub">Sign in with Base (no extension required)</span>
+                      <span className="muted wallet-picker-sub"><TranslatedText text={"Sign in with Base (no extension required)"} /></span>
                     )}
                   </span>
-                  {busy && <span className="muted wallet-picker-busy">Connecting…</span>}
+                  {busy && <span className="muted wallet-picker-busy"><TranslatedText text={"Connecting…"} /></span>}
                 </button>
               </li>
             );
@@ -396,24 +397,19 @@ function EvmWalletPickerModal({
               className="wallet-picker-disconnect"
               disabled={isPending}
               onClick={() => void disconnectWallet()}
-            >
-              Disconnect wallet
-            </button>
+            > <TranslatedText text={"Disconnect wallet"} /> </button>
           </div>
         )}
 
         {!isConnected && (
-          <p className="wallet-picker-agreement">
-            By connecting, you agree to our{" "}
-            <a href="/terms" target="_blank" rel="noopener noreferrer">
-              Terms
-            </a>{" "}
-            and{" "}
-            <a href="/privacy" target="_blank" rel="noopener noreferrer">
-              Privacy Policy
-            </a>
+          <>
+          <p className="wallet-picker-agreement"> <TranslatedText text={"By connecting, you agree to our"} />{" "}
+            <button type="button" onClick={() => setLegal("terms")}> <TranslatedText text={"Terms"} /> </button>{" "} <TranslatedText text={"and"} />{" "}
+            <button type="button" onClick={() => setLegal("privacy")}> <TranslatedText text={"Privacy Policy"} /> </button>
             .
           </p>
+          {legal ? <LegalReadDialog doc={legal} onClose={() => setLegal(null)} /> : null}
+          </>
         )}
       </div>
     </div>
@@ -454,6 +450,7 @@ type ConnectEvmWalletButtonProps = {
 };
 
 export function ConnectEvmWalletButton({ children, className, disabled, title }: ConnectEvmWalletButtonProps) {
+  const { t } = useCopyLanguage();
   const { open } = useEvmWalletPicker();
   const { isPending } = useConnect();
   const { address, isConnected } = useAccount();
@@ -468,7 +465,7 @@ export function ConnectEvmWalletButton({ children, className, disabled, title }:
       className={className}
       disabled={disabled || isPending}
       onClick={open}
-      title={title ?? (isConnected && address ? "Switch or disconnect wallet" : undefined)}
+      title={title ?? (isConnected && address ? t("Switch or disconnect wallet") : undefined)}
     >
       {label}
     </button>

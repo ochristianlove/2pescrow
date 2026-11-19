@@ -480,7 +480,7 @@ export function buildTradeRecordPdf(args: {
     const pageNumber = firstPage + index * 2;
     const contentNumber = pageNumber + 1;
     const imageResource = markImage ? " /XObject << /Im0 5 0 R >>" : "";
-    add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>${imageResource} >> /Contents ${contentNumber} 0 R >>`);
+    add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>${imageResource} >> /Annots [ << /Type /Annot /Subtype /Link /Rect [48 26 420 48] /Border [0 0 0] /A << /Type /Action /S /URI /URI (${pdfSafe(args.verifyUrl)}) >> >> ] /Contents ${contentNumber} 0 R >>`);
     add(Buffer.concat([Buffer.from(`<< /Length ${content.length} >>\nstream\n`, "ascii"), content, Buffer.from("\nendstream", "ascii")]));
   });
 

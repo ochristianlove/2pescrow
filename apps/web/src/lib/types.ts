@@ -190,6 +190,7 @@ export type PlatformSettings = {
   disputeFinalEmailSubject?: string;
   disputeAppealDecisionMessage?: string;
   disputeAppealDecisionEmailSubject?: string;
+  fieldNotesLimit?: number;
 };
 
 export type BlogPost = {

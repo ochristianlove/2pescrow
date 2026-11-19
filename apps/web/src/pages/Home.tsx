@@ -35,7 +35,7 @@ function HomeFaqPreview() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [settings?.fieldNotesLimit]);
 
   return (
     <section className="home-faq" aria-labelledby="home-faq-title">
@@ -76,9 +76,10 @@ export function HomePage() {
     let cancelled = false;
     (async () => {
       try {
-        const postsPromise = api<BlogPost[]>("/v1/blog?limit=6")
+        const limit = settings?.fieldNotesLimit ?? 3;
+        const postsPromise = api<BlogPost[]>(`/v1/blog?limit=${limit}`)
           .then((posts) => {
-            if (!cancelled) setNotes(posts.slice(0, 6));
+            if (!cancelled) setNotes(posts.slice(0, limit));
           })
           .catch(() => {
             if (!cancelled) setNotes([]);
@@ -106,7 +107,7 @@ export function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [settings?.fieldNotesLimit]);
 
   const recent = escrows.slice(0, 4);
   const startTo = user ? "/trades/new" : "/signin?next=%2Ftrades%2Fnew";
@@ -452,8 +453,8 @@ export function HomePage() {
                         })}
                       </time>
                     )}
-                    <h3>{post.title}</h3>
-                    <p>{post.excerpt}</p>
+                    <h3>{t(post.title)}</h3>
+                    <p>{t(post.excerpt || "")}</p>
                   </span>
                 </button>
               </li>
@@ -466,7 +467,7 @@ export function HomePage() {
         <section className="section">
           <div className="section-head">
             <h2>{t("Latest on the ledger")}</h2>
-            <Link to="/trades">{t("See all")}</Link>
+            <Link to="/trades?view=public">{t("See all")}</Link>
           </div>
           {recent.length === 0 && <p className="muted">{t("No trades yet. The first one will show up here.")}</p>}
           <ul className="trade-list">

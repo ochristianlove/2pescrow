@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useEffect, useRef, useState } from "react";
 import { useAccount, useSwitchChain } from "wagmi";
 import { mainnet } from "viem/chains";
@@ -87,10 +88,10 @@ export function WalletControl() {
           {tronEnabled && (
             <section className="wallet-control-network" aria-label={t("TRON wallet")}>
               <div className="wallet-control-network-copy">
-                <span className="wallet-control-chain">TRON</span>
+                <span className="wallet-control-chain"><TranslatedText text={"TRON"} /></span>
                 {tronAddress ? (
                   <>
-                    <span className="mono wallet-control-address">{tronWalletName || "TRON"} · {shortAddr(tronAddress)}</span>
+                    <span className="mono wallet-control-address"><TranslatedText text={tronWalletName || "TRON"} /> · {shortAddr(tronAddress)}</span>
                     <span className="wallet-control-status">{`Connected · TRON ${tronNetworkName} · TRC-20 USDT`}</span>
                   </>
                 ) : <span className="wallet-control-status">{`Connect for TRC-20 USDT trades · TRON ${tronNetworkName}`}</span>}

@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { formatAmount, shortAddr } from "../lib/api";
 import { useTronWallet } from "../lib/tron/TronWalletContext";
 import { useLanguage } from "../lib/language";
@@ -27,14 +28,14 @@ export function TronWalletSlot() {
           </button>
           {error && (
             <p className="error-banner tron-connect-err" role="alert">
-              {error}
+              <TranslatedText text={error} />
             </p>
           )}
         </div>
       ) : (
         <div className="wallet-connected tron-connected">
           <span className="mono" title={address}>
-            {walletName || "TRON"} {shortAddr(address)}
+            <TranslatedText text={walletName || "TRON"} /> {shortAddr(address)}
           </span>
           {usdtBalanceAtomic != null ? (
             <span className="tron-balance">{formatAmount(usdtBalanceAtomic.toString())} USDT</span>

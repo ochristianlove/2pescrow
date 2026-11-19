@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useAccount, usePublicClient } from "wagmi";
-import { sha256, type Address, type Hash } from "viem";
+import { sha256 } from "viem";
 import { mainnet } from "viem/chains";
 import { escrowDealAbi, escrowFactoryAbi } from "@2pescrow/shared";
 import { api, apiBase, apiUpload, formatAmount, shortAddr } from "../lib/api";
@@ -18,17 +18,10 @@ import { fetchTrc20Allowance, tronApproveTrc20, tronCreateAndFundEscrow, tronFac
 import { partyMatches } from "../lib/partyMatch";
 import { writeContractViaConnector } from "../lib/evmContractWrite";
 import { waitForSuccessfulReceipt } from "../lib/ethereumTransaction";
-import { recoverEthereumEscrow, saveCreatedEscrowBeforeFunding, type ExpectedEscrow } from "../lib/ethereumEscrowRecovery";
 import { resolveEthereumFundingTokenAddress } from "../lib/ethereumFundingToken";
 import {
-  ensureMainnetEthBudget,
-  ethBudgetForSecondStep,
-  planDeployFundingGas,
-  planEscrowFundGas,
-  planLegacyDeployFundingGas,
   type DeployFundingGasPlan,
 } from "../lib/ethereumFundingGas";
-import { factorySupportsCreateAndFund } from "../lib/ethereumFactoryCompat";
 import { normalizeEvmFundingError } from "../lib/evmWalletErrors";
 import { requestSwitchToEthereum } from "../lib/switchToEthereum";
 import { ConnectEvmWalletButton } from "../lib/evmWalletPicker";
@@ -43,6 +36,8 @@ import { eventLabel } from "../lib/eventLabel";
 import { TradeTermsSnippet } from "../components/TradeTermsSnippet";
 import { userDisplayLabel } from "../lib/userDisplay";
 import { TradeRoleTags } from "../components/TradeRoleTags";
+import { EthereumFundingProgress } from "../components/EthereumFundingProgress";
+import { useEthereumFunding } from "../lib/useEthereumFunding";
 
 const erc20ReadAbi = [
   { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ name: "owner", type: "address" }], outputs: [{ type: "uint256" }] },
@@ -322,6 +317,11 @@ export function TradeDetailPage({ id }: { id: string }) {
   const isSeller = participatesAsSeller;
   const isTradeParticipant = participatesAsBuyer || participatesAsSeller;
   const isCodeTrade = !!escrow?.tradeCode;
+  const managedFunding = useEthereumFunding(id, Boolean(user && isBuyer && isCodeTrade && escrow?.chain === "ethereum" && escrow?.buyerAddress && escrow?.sellerAddress), authHeaders, load);
+  async function startManagedFunding() {
+    if (!address || chainId !== mainnet.id || !isBuyer) { setError("Connect the buyer wallet on Ethereum mainnet."); return; }
+    await managedFunding.run(address, connector);
+  }
   const chainName = chainView.state !== null && chainView.state >= 0 && chainView.state < CHAIN_STATUS.length ? CHAIN_STATUS[chainView.state] : undefined;
   const hasActiveDispute = Boolean(escrow?.disputes?.some((item) => ACTIVE_DISPUTE_STATUSES.has(item.status)));
   const mergedStatus = escrow ? mergeTradeStatus(escrow.status, chainView.state) : "";
@@ -572,6 +572,7 @@ export function TradeDetailPage({ id }: { id: string }) {
   }
 
   async function chain(fn: "fund" | "approveRelease" | "requestCancel" | "refuseCancel" | "openDispute" | "withdrawDispute" | "submitProof", args: unknown[] = []) {
+    if (fn === "fund" && !isTronEscrow) { await startManagedFunding(); return; }
     if (
       isTronEscrow && isCodeTrade
       && escrow?.disputes?.some((item) => item.status === "open")
@@ -652,80 +653,7 @@ export function TradeDetailPage({ id }: { id: string }) {
         const owner = connectedParty as `0x${string}`;
         await requestSwitchToEthereum(connector);
 
-        if (fn === "fund") {
-          const token = fundingTokenAddress;
-          if (!token) throw new Error("Token contract address is not configured.");
-          const spender = escrow.contractAddress as `0x${string}`;
-          if (!escrow.createTxHash) throw new Error("The escrow creation transaction is missing. Recover its creation record before funding.");
-          const recovered = await recoverEthereumEscrow(publicClient, escrow.createTxHash, expectedEthereumEscrow(owner));
-          if (recovered.contractAddress.toLowerCase() !== spender.toLowerCase()) {
-            throw new Error("The saved contract does not match this trade's creation transaction. Funding was stopped.");
-          }
-          const allowance = await publicClient.readContract({
-            address: token,
-            abi: erc20ReadAbi,
-            functionName: "allowance",
-            args: [owner, spender],
-          });
-          const tokenBalance = await publicClient.readContract({
-            address: token,
-            abi: erc20ReadAbi,
-            functionName: "balanceOf",
-            args: [owner],
-          });
-          if (tokenBalance < requiredFunding) {
-            throw new Error(
-              `Insufficient ${escrow.tokenSymbol} balance. You need ${formatAmount(requiredFunding.toString())} ${escrow.tokenSymbol} for the trade and creation fee.`,
-            );
-          }
-          const fundGasPlan = await planEscrowFundGas(publicClient, {
-            owner,
-            escrow: spender,
-            token,
-            requiredAllowance: requiredFunding,
-            currentAllowance: allowance,
-            fundAbi: escrowDealAbi,
-          });
-          fundingGasBudgetWei = fundGasPlan.bufferedEthWei;
-          await ensureMainnetEthBudget(await publicClient.getBalance({ address: owner }), fundGasPlan.bufferedEthWei);
-
-          if (allowance < requiredFunding) {
-            if (allowance > 0n) {
-              const resetHash = await writeContractViaConnector(connector, owner, {
-                address: token,
-                abi: erc20ApproveAbi,
-                functionName: "approve",
-                args: [spender, 0n],
-              });
-              await waitForSuccessfulReceipt(publicClient, resetHash);
-            }
-            const approvalHash = await writeContractViaConnector(connector, owner, {
-              address: token,
-              abi: erc20ApproveAbi,
-              functionName: "approve",
-              args: [spender, requiredFunding],
-            });
-            await waitForSuccessfulReceipt(publicClient, approvalHash);
-            const secondBudget = await ethBudgetForSecondStep(publicClient, fundGasPlan.fundGas);
-            await ensureMainnetEthBudget(await publicClient.getBalance({ address: owner }), secondBudget);
-            fundingGasBudgetWei = secondBudget;
-          }
-
-          await publicClient.simulateContract({
-            address: spender,
-            abi: escrowDealAbi,
-            functionName: "fund",
-            args: [],
-            account: owner,
-          });
-          const txHash = await writeContractViaConnector(connector, owner, {
-            address: spender,
-            abi: escrowDealAbi,
-            functionName: "fund",
-            args: [],
-          });
-          await waitForSuccessfulReceipt(publicClient, txHash);
-        } else {
+        {
           const linkedBuyer = escrow.buyerAddress || null;
           const linkedSeller = escrow.sellerAddress || null;
           const sessionMatchesTrade =
@@ -844,62 +772,19 @@ export function TradeDetailPage({ id }: { id: string }) {
     }
   }
 
-  function expectedEthereumEscrow(buyer: Address): ExpectedEscrow {
-    const factory = settings?.factoryAddress || cfg?.factoryAddress;
-    if (!factory || !fundingTokenAddress || !escrow?.sellerAddress) throw new Error("Wait for the factory, token and seller wallet to load.");
-    if (escrow.buyerAddress && escrow.buyerAddress.toLowerCase() !== buyer.toLowerCase()) {
-      throw new Error("Connect the buyer wallet linked to this trade.");
-    }
-    return { factory: factory as Address, buyer, seller: escrow.sellerAddress as Address, token: fundingTokenAddress, amount: BigInt(escrow.amountAtomic) };
-  }
-
-  async function rememberCreationHash(hash: Hash) {
-    // Write before waiting for mining so a reload or API failure cannot silently start another deployment.
-    setPendingCreationHash(hash);
-    setRecoveryHash(hash);
-    try { localStorage.setItem(`ethereum-creation:${id}`, hash); }
-    catch { throw new Error(`Creation submitted: ${hash}. Browser storage failed. Save this hash and recover it before creating another escrow.`); }
-    await api(`/v1/escrows/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ createTxHash: hash }),
-    });
-  }
-
-  async function saveEthereumCreation(result: { contractAddress: Address; createTxHash: Hash }) {
-    const updated = await api<Escrow>(`/v1/escrows/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify(result),
-    });
-    setEscrow((current) => current ? { ...current, ...updated, partyRole: current.partyRole ?? updated.partyRole } : updated);
-    setChainView({ state: null, buyerCancelRequested: false, proofSubmitted: false });
-    setPendingCreationHash("");
-    try { localStorage.removeItem(`ethereum-creation:${id}`); } catch { /* The API now owns the confirmed record. */ }
-  }
-
   async function recoverCreation() {
-    if (actionLock.current || !escrow || !isBuyer || !publicClient || !address) return;
-    actionLock.current = true;
-    setBusy(true);
-    setError(null);
+    if (actionLock.current || !isBuyer) return;
+    actionLock.current = true; setBusy(true); setError(null);
     try {
-      const result = await recoverEthereumEscrow(publicClient, (recoveryHash ?? (pendingCreationHash || escrow.createTxHash || "")).trim(), expectedEthereumEscrow(address));
-      if (escrow.contractAddress && escrow.contractAddress.toLowerCase() !== result.contractAddress.toLowerCase()) {
-        throw new Error("This trade already has a different escrow contract. Recovery cannot replace it.");
-      }
-      await saveEthereumCreation(result);
-      setLiveNotice("Existing escrow recovered. Its on-chain status will appear shortly. Recovery did not request a wallet transaction.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not recover this escrow. Check the creation transaction hash.");
-    } finally {
-      actionLock.current = false;
-      setBusy(false);
-    }
+      await managedFunding.recover((recoveryHash ?? (pendingCreationHash || escrow?.createTxHash || "")).trim());
+      setPendingCreationHash("");
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not verify the recovery transaction."); }
+    finally { actionLock.current = false; setBusy(false); }
   }
 
   async function deployEscrow() {
     if (!escrow || !isBuyer) return;
+    if (!isTronEscrow) { await startManagedFunding(); return; }
     if (actionLock.current) return;
     if (escrow.contractAddress) return setError("An escrow already exists. Use Resume funding instead of creating another contract.");
     if (!isTronEscrow && (pendingCreationHash || escrow.createTxHash)) return setError("A creation transaction is already recorded. Recover that escrow before taking another action.");
@@ -973,174 +858,6 @@ export function TradeDetailPage({ id }: { id: string }) {
           headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify({ buyerAddress: walletAddress, createTxHash: txId, contractAddress: escrowAddress, status: "Funded" }),
         });
-        await signalTrade("funded");
-      } else {
-        // Read the server again before sending: another tab/device may already have created this trade.
-        const latest = await api<Escrow>(`/v1/escrows/${id}`, { headers: authHeaders() });
-        if (latest.contractAddress || latest.createTxHash || localStorage.getItem(`ethereum-creation:${id}`)) {
-          setEscrow(latest);
-          throw new Error("A creation transaction is already recorded. Recover or resume the existing escrow.");
-        }
-        localStorage.setItem(`ethereum-creation:${id}`, "");
-        const factory = (settings?.factoryAddress || cfg?.factoryAddress) as `0x${string}` | undefined | null;
-        if (!factory) throw new Error("Set ESCROW_FACTORY_ADDRESS in Admin before deploying the on-chain escrow.");
-        const token = fundingTokenAddress;
-        if (!token) throw new Error("Token contract address is not configured.");
-        if (!publicClient) throw new Error("The Ethereum RPC is not ready.");
-        const owner = walletAddress as `0x${string}`;
-        const expected = expectedEthereumEscrow(owner);
-        const tradeAmount = BigInt(escrow.amountAtomic);
-        const optionalAgent = "0x0000000000000000000000000000000000000000" as `0x${string}`;
-        await requestSwitchToEthereum(connector);
-
-        const onChainTokenBalance = await publicClient.readContract({
-          address: token,
-          abi: erc20ReadAbi,
-          functionName: "balanceOf",
-          args: [owner],
-        });
-        if (onChainTokenBalance < requiredFunding) {
-          throw new Error(
-            `Insufficient ${escrow.tokenSymbol} balance. You need ${formatAmount(requiredFunding.toString())} ${escrow.tokenSymbol} for the trade and creation fee.`,
-          );
-        }
-
-        const seller = escrow.sellerAddress as `0x${string}`;
-        const useCreateAndFund = await factorySupportsCreateAndFund(publicClient, factory);
-        let hash: `0x${string}`;
-
-        if (useCreateAndFund) {
-          const allowance = await publicClient.readContract({
-            address: token,
-            abi: erc20ReadAbi,
-            functionName: "allowance",
-            args: [owner, factory],
-          });
-          deployGasPlan = await planDeployFundingGas(publicClient, {
-            owner,
-            factory,
-            token,
-            seller,
-            amountAtomic: tradeAmount,
-            optionalAgent,
-            approveSpender: factory,
-            requiredAllowance: requiredFunding,
-            currentAllowance: allowance,
-          });
-          await ensureMainnetEthBudget(await publicClient.getBalance({ address: owner }), deployGasPlan.bufferedEthWei);
-
-          if (allowance < requiredFunding) {
-            if (allowance > 0n) {
-              const resetHash = await writeContractViaConnector(connector, owner, {
-                address: token,
-                abi: erc20ApproveAbi,
-                functionName: "approve",
-                args: [factory, 0n],
-              });
-              await waitForSuccessfulReceipt(publicClient, resetHash);
-            }
-            const approvalHash = await writeContractViaConnector(connector, owner, {
-              address: token,
-              abi: erc20ApproveAbi,
-              functionName: "approve",
-              args: [factory, requiredFunding],
-            });
-            await waitForSuccessfulReceipt(publicClient, approvalHash);
-            const secondBudget = await ethBudgetForSecondStep(publicClient, deployGasPlan.createAndFundGas);
-            await ensureMainnetEthBudget(await publicClient.getBalance({ address: owner }), secondBudget);
-            deployGasPlan = { ...deployGasPlan, bufferedEthWei: secondBudget };
-          }
-
-          await publicClient.simulateContract({
-            address: factory,
-            abi: escrowFactoryAbi,
-            functionName: "createAndFund",
-            args: [seller, token, tradeAmount, optionalAgent],
-            account: owner,
-          });
-
-          hash = await writeContractViaConnector(connector, owner, {
-            address: factory,
-            abi: escrowFactoryAbi,
-            functionName: "createAndFund",
-            args: [seller, token, tradeAmount, optionalAgent],
-          });
-          await rememberCreationHash(hash);
-          const receipt = await waitForSuccessfulReceipt(publicClient, hash);
-          await saveCreatedEscrowBeforeFunding(receipt, expected, saveEthereumCreation);
-        } else {
-          deployGasPlan = await planLegacyDeployFundingGas(publicClient, {
-            owner,
-            factory,
-            token,
-            seller,
-            amountAtomic: tradeAmount,
-            optionalAgent,
-            requiredAllowance: requiredFunding,
-          });
-          await ensureMainnetEthBudget(await publicClient.getBalance({ address: owner }), deployGasPlan.bufferedEthWei);
-
-          await publicClient.simulateContract({
-            address: factory,
-            abi: escrowFactoryAbi,
-            functionName: "createEscrow",
-            args: [owner, seller, token, tradeAmount, optionalAgent],
-            account: owner,
-          });
-
-          const createHash = await writeContractViaConnector(connector, owner, {
-            address: factory,
-            abi: escrowFactoryAbi,
-            functionName: "createEscrow",
-            args: [owner, seller, token, tradeAmount, optionalAgent],
-          });
-          await rememberCreationHash(createHash);
-          const createReceipt = await waitForSuccessfulReceipt(publicClient, createHash);
-          const escrowAddr = await saveCreatedEscrowBeforeFunding(createReceipt, expected, saveEthereumCreation);
-          const escrowAllowance = await publicClient.readContract({
-            address: token,
-            abi: erc20ReadAbi,
-            functionName: "allowance",
-            args: [owner, escrowAddr],
-          });
-          if (escrowAllowance < requiredFunding) {
-            if (escrowAllowance > 0n) {
-              const resetHash = await writeContractViaConnector(connector, owner, {
-                address: token,
-                abi: erc20ApproveAbi,
-                functionName: "approve",
-                args: [escrowAddr, 0n],
-              });
-              await waitForSuccessfulReceipt(publicClient, resetHash);
-            }
-            const approvalHash = await writeContractViaConnector(connector, owner, {
-              address: token,
-              abi: erc20ApproveAbi,
-              functionName: "approve",
-              args: [escrowAddr, requiredFunding],
-            });
-            await waitForSuccessfulReceipt(publicClient, approvalHash);
-            await ensureMainnetEthBudget(
-              await publicClient.getBalance({ address: owner }),
-              await ethBudgetForSecondStep(publicClient, 200_000n),
-            );
-          }
-
-          await publicClient.simulateContract({
-            address: escrowAddr,
-            abi: escrowDealAbi,
-            functionName: "fund",
-            args: [],
-            account: owner,
-          });
-          hash = await writeContractViaConnector(connector, owner, {
-            address: escrowAddr,
-            abi: escrowDealAbi,
-            functionName: "fund",
-            args: [],
-          });
-          await waitForSuccessfulReceipt(publicClient, hash);
-        }
         await signalTrade("funded");
       }
       await load();
@@ -1927,9 +1644,14 @@ export function TradeDetailPage({ id }: { id: string }) {
           {tronWalletNotice && (
             <p className="warn-banner" role="status">{tronWalletNotice}</p>
           )}
+          {isBuyer && isCodeTrade && !isTronEscrow && !isLegacyEvm && (
+            <EthereumFundingProgress state={managedFunding.state} error={managedFunding.error} busy={managedFunding.busy}
+              walletReady={Boolean(address && chainId === mainnet.id && escrow.buyerAddress?.toLowerCase() === address.toLowerCase())}
+              onContinue={() => void startManagedFunding()} onRefresh={() => void managedFunding.refresh()} />
+          )}
           {isBuyer && isCodeTrade && !isTronEscrow && !isLegacyEvm && tradeOpen && (!hasOnChainContract || effectiveStatus === "Created") && (
-            <details open={Boolean(!hasOnChainContract && (pendingCreationHash || escrow.createTxHash))}>
-              <summary>{t("Already created an escrow? Recover it")}</summary>
+            <details>
+              <summary>{t("Support recovery with a transaction hash")}</summary>
               <p>{t("If a previous attempt stopped after creating the contract, paste its creation transaction hash. We will check that it matches this trade. Recovery does not move funds or request a wallet signature.")}</p>
               <label htmlFor="escrow-creation-hash">{t("Ethereum creation transaction hash")}</label>
               <input
@@ -1948,7 +1670,7 @@ export function TradeDetailPage({ id }: { id: string }) {
             </details>
           )}
           <div className="action-row trade-room-actions">
-            {isBuyer && isCodeTrade && tradeOpen && !hasOnChainContract && (
+            {isBuyer && isCodeTrade && isTronEscrow && tradeOpen && !hasOnChainContract && (
               <TradeAction
                 label={busy
                   ? isTronEscrow ? t("Approving and funding escrow…") : t("Approving and depositing…")
@@ -1961,7 +1683,7 @@ export function TradeDetailPage({ id }: { id: string }) {
                 onClick={() => void deployEscrow()}
               />
             )}
-            {isBuyer && isCodeTrade && !isLegacyEvm && tradeOpen && hasOnChainContract && (
+            {isBuyer && isCodeTrade && isTronEscrow && tradeOpen && hasOnChainContract && (
               <TradeAction
                 label={busy
                   ? t("Confirming funding…")

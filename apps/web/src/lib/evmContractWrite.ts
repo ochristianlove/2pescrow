@@ -12,6 +12,7 @@ import { wagmiConfig } from "../wagmi";
 import { withMobileWalletConnectHandoff } from "./walletConnectMobileHandoff";
 import { normalizeEvmFundingError } from "./evmWalletErrors";
 import { sendMainnetContractTransaction } from "./ethereumTransaction";
+import { sendPreparedFundingTransaction, type PreparedFunding } from "@2pescrow/shared";
 
 type Eip1193Provider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
@@ -19,6 +20,14 @@ type Eip1193Provider = {
 
 const PROVIDER_TIMEOUT_MS = 12_000;
 const SEND_TIMEOUT_MS = 120_000;
+
+export async function sendSavedFundingViaConnector(connector: Connector | undefined, account: Address, tx: NonNullable<PreparedFunding["send"]>) {
+  return withMobileWalletConnectHandoff(connector, async () => {
+    const provider = await resolveSigningProvider(connector, account);
+    return withTimeout(sendPreparedFundingTransaction(provider, account, tx), SEND_TIMEOUT_MS,
+      "Your wallet has not returned a result. Progress is saved; we will check the request before continuing.");
+  });
+}
 
 /** Contract write with mobile WalletConnect deep-link handoff before signing. */
 export async function writeContractViaConnector(

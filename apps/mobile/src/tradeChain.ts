@@ -1,4 +1,4 @@
-import { Interface, JsonRpcProvider, type TransactionReceipt } from "ethers";
+import { Interface, JsonRpcProvider } from "ethers";
 
 const RPC = "https://ethereum-rpc.publicnode.com";
 const CHAIN = "eip155:1";
@@ -22,8 +22,6 @@ const token = new Interface([
 
 const factory = new Interface([
   "function creationFee() view returns (uint256)",
-  "function createAndFund(address seller, address token, uint256 amount, address optionalAgent) returns (address)",
-  "event EscrowCreated(address indexed escrow, address indexed buyer, address indexed seller, address token, uint256 amount, address optionalAgent)",
 ]);
 
 export type WalletProvider = {
@@ -84,23 +82,9 @@ async function send(provider: WalletProvider, from: string, to: string, data: st
   return receipt;
 }
 
-async function allowance(owner: string, spender: string, tokenAddress: string) {
-  const raw = await read(tokenAddress, token.encodeFunctionData("allowance", [owner, spender]));
-  return token.decodeFunctionResult("allowance", raw)[0] as bigint;
-}
-
 async function balanceOf(owner: string, tokenAddress: string) {
   const raw = await read(tokenAddress, token.encodeFunctionData("balanceOf", [owner]));
   return token.decodeFunctionResult("balanceOf", raw)[0] as bigint;
-}
-
-async function approveSpender(provider: WalletProvider, from: string, tokenAddress: string, spender: string, amount: bigint) {
-  const current = await allowance(from, spender, tokenAddress);
-  if (current >= amount) return;
-  if (current > 0n) {
-    await send(provider, from, tokenAddress, token.encodeFunctionData("approve", [spender, 0n]));
-  }
-  await send(provider, from, tokenAddress, token.encodeFunctionData("approve", [spender, amount]));
 }
 
 export async function releaseFunds(provider: WalletProvider, from: string, escrow: string, proofHash: string) {
@@ -165,36 +149,4 @@ export async function readTronDeal(address: string) {
   }
 }
 
-export async function fundExisting(provider: WalletProvider, from: string, escrow: string, tokenAddress: string, amount: bigint) {
-  const balance = await balanceOf(from, tokenAddress);
-  if (balance < amount) throw new Error("The connected wallet does not have enough of the trade token, including the creation fee.");
-  await approveSpender(provider, from, tokenAddress, escrow, amount);
-  return send(provider, from, escrow, deal.encodeFunctionData("fund"));
-}
-
-export function createdEscrowAddress(receipt: TransactionReceipt) {
-  for (const log of receipt.logs) {
-    try {
-      const parsed = factory.parseLog(log);
-      if (parsed?.name === "EscrowCreated") return String(parsed.args.escrow);
-    } catch {
-      // Unrelated log.
-    }
-  }
-  return null;
-}
-
-export async function createAndFund(provider: WalletProvider, from: string, factoryAddress: string, seller: string, tokenAddress: string, tradeAmount: bigint, required: bigint) {
-  const balance = await balanceOf(from, tokenAddress);
-  if (balance < required) throw new Error("The connected wallet does not have enough of the trade token, including the creation fee.");
-  await approveSpender(provider, from, tokenAddress, factoryAddress, required);
-  const receipt = await send(
-    provider,
-    from,
-    factoryAddress,
-    factory.encodeFunctionData("createAndFund", [seller, tokenAddress, tradeAmount, "0x0000000000000000000000000000000000000000"]),
-  );
-  const escrow = createdEscrowAddress(receipt);
-  if (!escrow) throw new Error("The escrow was funded, but the new contract address was not found. Refresh the trade.");
-  return { receipt, escrow };
-}
+// Ethereum funding uses the durable server-prepared flow in NativeEthereumFunding.tsx.

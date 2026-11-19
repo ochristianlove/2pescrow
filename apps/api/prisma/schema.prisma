@@ -39,6 +39,9 @@ model User {
   agentApplications     AgentApplication[]
   agentApplicationsReviewed AgentApplication[] @relation("AgentApplicationReviewer")
   agentCommissionProfile AgentCommissionProfile?
+  devicePushTokens      DevicePushToken[]
+  notifications         Notification[]
+  notificationPreference NotificationPreference?
 }
 
 model AgentApplication {
@@ -258,6 +261,31 @@ model Escrow {
   notifications    Notification[]
   messages         ChatMessage[]
   tradeRecords     TradeRecord[]
+  fundingAttempts  EthereumFundingAttempt[]
+}
+
+/// Durable wallet intent. Active rows never expire into a new nonce: uncertain sends must reconcile.
+model EthereumFundingAttempt {
+  id            String   @id @default(uuid())
+  requestId     String   @unique @map("request_id")
+  escrowId      String   @map("escrow_id")
+  escrow        Escrow   @relation(fields: [escrowId], references: [id], onDelete: Cascade)
+  buyerAddress  String   @map("buyer_address")
+  kind          String
+  toAddress     String   @map("to_address")
+  data          String   @db.Text
+  nonce         Int
+  startBlock    BigInt   @map("start_block")
+  scanBlock     BigInt   @map("scan_block")
+  txHash        String?  @map("tx_hash")
+  status        String   @default("reserved")
+  active        Boolean  @default(true)
+  gasPaidWei    String?  @map("gas_paid_wei")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([escrowId, createdAt])
+  @@index([buyerAddress, nonce])
 }
 
 model ChatMessage {
@@ -436,14 +464,73 @@ model TradeRecord {
 }
 
 model Notification {
-  id        String   @id @default(uuid())
-  escrowId  String?  @map("escrow_id")
-  escrow    Escrow?  @relation(fields: [escrowId], references: [id])
-  userAddress String @map("user_address")
-  type      String
-  message   String
-  readAt    DateTime? @map("read_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  id          String   @id @default(uuid())
+  userId      String?  @map("user_id")
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  escrowId    String?  @map("escrow_id")
+  escrow      Escrow?  @relation(fields: [escrowId], references: [id], onDelete: Cascade)
+  userAddress String   @default("") @map("user_address")
+  type        String
+  title       String?
+  message     String
+  data        Json?
+  eventId     String?  @map("event_id")
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  pushJobs    PushDeliveryJob[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, readAt])
+  @@index([escrowId])
+  @@unique([userId, eventId])
+}
+
+model DevicePushToken {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String   @unique
+  platform   String   // "ios" | "android"
+  deviceId   String?  @map("device_id")
+  appVersion String?  @map("app_version")
+  isActive   Boolean  @default(true) @map("is_active")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, isActive])
+  @@index([token])
+}
+
+model PushDeliveryJob {
+  id             String       @id @default(uuid())
+  notificationId String       @map("notification_id")
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  token          String
+  status         String       @default("pending") // "pending" | "sent" | "delivered" | "failed"
+  ticketId       String?      @map("ticket_id")
+  attempts       Int          @default(0)
+  lastError      String?      @map("last_error")
+  nextRetryAt    DateTime?    @map("next_retry_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  @@index([status, nextRetryAt])
+  @@index([ticketId])
+}
+
+model NotificationPreference {
+  id                 String   @id @default(uuid())
+  userId             String   @unique @map("user_id")
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pushEnabled        Boolean  @default(true) @map("push_enabled")
+  tradeUpdates       Boolean  @default(true) @map("trade_updates")
+  chatMessages       Boolean  @default(true) @map("chat_messages")
+  deadlineReminders  Boolean  @default(true) @map("deadline_reminders")
+  lockScreenPrivacy  String   @default("private") @map("lock_screen_privacy") // "private" | "detailed"
+  soundEnabled       Boolean  @default(true) @map("sound_enabled")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 }
 
 model PlatformSettings {
@@ -499,6 +586,7 @@ model PlatformSettings {
   disputeFinalEmailSubject String @default("Final dispute ruling") @map("dispute_final_email_subject") @db.VarChar(180)
   disputeAppealDecisionMessage String @default("The appeal for {tradeTitle} has been reviewed. The final ruling favors {favoredParty}. Trade: {tradeUrl}") @map("dispute_appeal_decision_message") @db.Text
   disputeAppealDecisionEmailSubject String @default("Your dispute appeal has been decided") @map("dispute_appeal_decision_email_subject") @db.VarChar(180)
+  fieldNotesLimit       Int      @default(3) @map("field_notes_limit")
   updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
 }
 

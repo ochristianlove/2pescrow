@@ -8,14 +8,11 @@ const projectId =
 export const walletConnectProjectId = projectId;
 export const walletConnectConfigured = Boolean(projectId);
 
-const dappOrigin =
-  typeof window !== "undefined" ? window.location.origin : "https://2pescrow.com";
-
 const walletConnectMetadata = {
   name: "2Pescrow",
   description: "Buyer-funded P2P escrow on Ethereum",
-  url: dappOrigin,
-  icons: [`${dappOrigin}/favicon.ico`],
+  url: "https://2pescrow.com",
+  icons: ["https://2pescrow.com/brand/favicon.png"],
 };
 
 export const wagmiConfig = createConfig({

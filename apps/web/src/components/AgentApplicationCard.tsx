@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useState } from "react";
 import { api } from "../lib/api";
 import { useLanguage } from "../lib/language";
@@ -162,7 +163,7 @@ export function AgentApplicationCard({ context, loading, headers, onUpdated, use
       )}
 
       {localOk && <p className="ok-banner">{localOk}</p>}
-      {localErr && <p className="error-banner">{localErr}</p>}
+      {localErr && <p className="error-banner"><TranslatedText text={localErr} /></p>}
 
       {canApply && (
         <div className="agent-apply-form">

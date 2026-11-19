@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, formatAmount } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -87,7 +88,7 @@ export function AgentCommissionPanel() {
         {t("This is separate from referral earnings. The default is 0.5% of the platform fee on a case, paid only after the on-chain dispute payout is final. You need")}{" "}
         {view.minFinalizedCases} {t("finalized cases and at least $20 before cash-out.")}
       </p>
-      {err && <p className="error-banner">{err}</p>}
+      {err && <p className="error-banner"><TranslatedText text={err} /></p>}
       {msg && <p className="ok-banner">{msg}</p>}
       <dl className="kv">
         <dt>{t("Finalized cases")}</dt>

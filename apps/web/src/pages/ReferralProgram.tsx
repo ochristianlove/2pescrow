@@ -1,3 +1,4 @@
+import { TranslatedText, useLanguage as useCopyLanguage } from "../lib/language";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, formatAmount } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -41,6 +42,7 @@ type ReferralProfile = {
 };
 
 export function ReferralProgramPage() {
+  const { t: localizeCopy } = useCopyLanguage();
   const { authHeaders, user: authUser } = useAuth();
   const { user, ready } = useWorkspaceGuard();
   const { navigate } = useRouter();
@@ -155,7 +157,7 @@ export function ReferralProgramPage() {
         </ul>
       </section>
 
-      {err && <p className="error-banner">{err}</p>}
+      {err && <p className="error-banner"><TranslatedText text={err} /></p>}
       {msg && <p className="ok-banner">{msg}</p>}
 
       {!profile?.enrolled ? (
@@ -163,7 +165,7 @@ export function ReferralProgramPage() {
           <h2>{t("Become a referrer")}</h2>
           <label>
             {t("Public name (optional)")}
-            <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Christian" />
+            <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={localizeCopy("Christian")} />
           </label>
           <button type="submit" disabled={busy}>
             {busy ? t("Creating link…") : t("Get my referral link")}
@@ -284,7 +286,7 @@ export function ReferralProgramPage() {
                 <ul className="activity-list">
                   {(profile.payoutRequests || []).map((r) => (
                     <li key={r.id}>
-                      {formatAmount(r.amountAtomic)} → <span className="mono">{r.payoutAddress}</span> ({r.payoutChain === "tron" ? "Tron" : r.payoutChain === "ethereum" ? "Ethereum" : "Earlier EVM"}) ·{" "}
+                      {formatAmount(r.amountAtomic)} → <span className="mono">{r.payoutAddress}</span> (<TranslatedText text={r.payoutChain === "tron" ? "Tron" : r.payoutChain === "ethereum" ? "Ethereum" : "Earlier EVM"} />) ·{" "}
                       {r.status}
                       {r.adminNote ? ` — ${r.adminNote}` : ""}
                       <span className="muted"> · {new Date(r.createdAt).toLocaleString()}</span>

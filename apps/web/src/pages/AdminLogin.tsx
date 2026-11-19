@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { useAuth, type SessionUser } from "../lib/auth";
@@ -34,16 +35,12 @@ export function AdminLoginPage() {
 
   return (
     <div className="page narrow">
-      <h1>Console</h1>
-      <p className="muted">Restricted access.</p>
+      <h1><TranslatedText text={"Console"} /></h1>
+      <p className="muted"><TranslatedText text={"Restricted access."} /></p>
       <form className="card-surface form-stack" onSubmit={submit}>
-        <label>
-          Username (email)
-          <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
+        <label> <TranslatedText text={"Username (email)"} /> <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
         </label>
-        <label>
-          Password
-          <input
+        <label> <TranslatedText text={"Password"} /> <input
             required
             type="password"
             value={password}
@@ -51,9 +48,9 @@ export function AdminLoginPage() {
             autoComplete="current-password"
           />
         </label>
-        {err && <p className="error-banner">{err}</p>}
+        {err && <p className="error-banner"><TranslatedText text={err} /></p>}
         <button type="submit" disabled={busy}>
-          {busy ? "Signing in…" : "Sign in"}
+          <TranslatedText text={busy ? "Signing in…" : "Sign in"} />
         </button>
       </form>
     </div>

@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "T4Y9L72F8B.com.twopescrow.app",
+        "paths": ["/auth/verify", "/auth/verify/*"]
+      }
+    ]
+  }
+}

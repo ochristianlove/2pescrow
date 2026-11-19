@@ -1,3 +1,5 @@
+import { useLanguage as useCopyLanguage } from "../lib/language";
+import { TranslatedText } from "../lib/language";
 import { useEffect, useRef, useState } from "react";
 import { toEditorHtml } from "./blogBody";
 
@@ -10,6 +12,7 @@ type Props = {
 };
 
 export function BlogEditor({ html, busy, onChange, onUpload, tools = "full" }: Props) {
+  const { t: localizeCopy } = useCopyLanguage();
   const sheet = useRef<HTMLDivElement>(null);
   const saved = useRef<Range | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -121,18 +124,18 @@ export function BlogEditor({ html, busy, onChange, onUpload, tools = "full" }: P
   return (
     <div className="desk-editor">
       <div className="desk-toolbar" onMouseDown={remember}>
-        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => run("bold")}>Bold</button>
+        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => run("bold")}><TranslatedText text={"Bold"} /></button>
         {tools === "full" && (
           <button type="button" className="desk-heading desk-heading-1" onMouseDown={(e) => e.preventDefault()} onClick={() => heading("h1")}>H1</button>
         )}
         <button type="button" className="desk-heading desk-heading-2" onMouseDown={(e) => e.preventDefault()} onClick={() => heading("h2")}>H2</button>
         <button type="button" className="desk-heading desk-heading-3" onMouseDown={(e) => e.preventDefault()} onClick={() => heading("h3")}>H3</button>
-        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => run("italic")}>Italic</button>
-        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { remember(); setLinkOpen((open) => !open); }}>Link</button>
+        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => run("italic")}><TranslatedText text={"Italic"} /></button>
+        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { remember(); setLinkOpen((open) => !open); }}><TranslatedText text={"Link"} /></button>
         {tools === "full" && (
           <>
-            <button type="button" disabled={busy} onMouseDown={(e) => e.preventDefault()} onClick={() => fileRef.current?.click()}>Image</button>
-            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={insertTable}>Table</button>
+            <button type="button" disabled={busy} onMouseDown={(e) => e.preventDefault()} onClick={() => fileRef.current?.click()}><TranslatedText text={"Image"} /></button>
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={insertTable}><TranslatedText text={"Table"} /></button>
           </>
         )}
         {note && <span className="desk-note">{note}</span>}
@@ -142,8 +145,8 @@ export function BlogEditor({ html, busy, onChange, onUpload, tools = "full" }: P
           <input
             value={linkHref}
             onChange={(e) => setLinkHref(e.target.value)}
-            placeholder="https://…"
-            aria-label="Link address"
+            placeholder={localizeCopy("https://…")}
+            aria-label={localizeCopy("Link address")}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -151,7 +154,7 @@ export function BlogEditor({ html, busy, onChange, onUpload, tools = "full" }: P
               }
             }}
           />
-          <button type="button" className="secondary" onClick={applyLink}>Add link</button>
+          <button type="button" className="secondary" onClick={applyLink}><TranslatedText text={"Add link"} /></button>
         </div>
       )}
       <div
@@ -160,7 +163,7 @@ export function BlogEditor({ html, busy, onChange, onUpload, tools = "full" }: P
         contentEditable
         role="textbox"
         aria-multiline="true"
-        aria-label={tools === "terms" ? "Contract terms" : "Post"}
+        aria-label={localizeCopy(tools === "terms" ? "Contract terms" : "Post")}
         data-placeholder={tools === "terms" ? "Write the terms both sides are agreeing to. Headings, bold, and links stay with the trade." : "Write the post. Use Image to put a picture where the cursor is."}
         onFocus={armParagraphs}
         onInput={publishHtml}

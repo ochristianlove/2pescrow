@@ -100,3 +100,27 @@ export function tradeActivity(trade: TradeRow) {
     return time(a.at) - time(b.at) || a.key.localeCompare(b.key);
   });
 }
+
+export function statusColor(status: string): string {
+  switch (status) {
+    case "Created":
+      return "#7dd3fc";
+    case "AwaitingSeller":
+      return "#c4b5fd";
+    case "AwaitingFunding":
+      return "#fde047";
+    case "Funded":
+      return "#fde047";
+    case "InProgress":
+      return "#fdba74";
+    case "Completed":
+    case "Resolved":
+      return "#3ecf8e";
+    case "Cancelled":
+      return "#8aa3ad";
+    case "Disputed":
+      return "#f87171";
+    default:
+      return "#8aa3ad";
+  }
+}

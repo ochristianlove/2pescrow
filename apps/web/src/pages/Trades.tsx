@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAccount } from "wagmi";
 import { api, shortAddr } from "../lib/api";
@@ -11,16 +12,18 @@ import { useLanguage } from "../lib/language";
 import { useAuth } from "../lib/auth";
 import { useTradeListWindow } from "../lib/useTradeListWindow";
 import { TradePartyBadge } from "../components/TradePartyBadge";
+import { TradeRoleTags } from "../components/TradeRoleTags";
+import { userDisplayLabel } from "../lib/userDisplay";
 
 const EMPTY_TRADES: Escrow[] = [];
 
 export function TradesPage() {
   const { address } = useAccount();
   const { user, authHeaders } = useAuth();
-  const { navigate } = useRouter();
+  const { navigate, search } = useRouter();
   const { t } = useLanguage();
   const { syncEscrowIds } = useLiveNotifications();
-  const [showPublicLedger, setShowPublicLedger] = useState(false);
+  const showPublicLedger = new URLSearchParams(search).get("view") === "public";
   const scope = showPublicLedger ? "public" : user ? `mine:${user.id}` : "signed-out";
   const activeScope = useRef(scope);
   activeScope.current = scope;
@@ -81,7 +84,7 @@ export function TradesPage() {
       </div>
 
       <label className="check-row">
-          <input type="checkbox" checked={showPublicLedger} onChange={(e) => setShowPublicLedger(e.target.checked)} />
+          <input type="checkbox" checked={showPublicLedger} onChange={(e) => navigate(e.target.checked ? "/trades?view=public" : "/trades")} />
           {t("Show public platform ledger")}
       </label>
       {!user && !showPublicLedger && (
@@ -90,7 +93,7 @@ export function TradesPage() {
         </p>
       )}
 
-      {error && <p className="error-banner">{error}</p>}
+      {error && <p className="error-banner"><TranslatedText text={error} /></p>}
 
       {(user || showPublicLedger) && escrows.length === 0 && !error && (
         <div className="empty card-surface">
@@ -109,6 +112,10 @@ export function TradesPage() {
               {user && <TradePartyBadge escrow={e} userId={user.id} walletAddresses={user.wallets?.map((wallet) => wallet.address)} />}
             </span>
             <div className="trade-card-badges">
+              <TradeRoleTags
+                buyer={userDisplayLabel(e.buyerUser) || (e.buyerAddress ? shortAddr(e.buyerAddress) : "")}
+                seller={userDisplayLabel(e.sellerUser) || (e.sellerAddress ? shortAddr(e.sellerAddress) : "")}
+              />
               <ChainBadge chain={e.chain} />
               <StatusBadge status={e.status} />
             </div>

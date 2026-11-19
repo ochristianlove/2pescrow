@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -123,48 +124,40 @@ export function FaqCms() {
 
   return (
     <section className="card-surface">
-      <h2>FAQ</h2>
-      <p className="muted">
-        Published entries appear on the FAQ page, in this order. Drafts stay off the page.
-      </p>
-      {err && <p className="error-banner">{err}</p>}
+      <h2><TranslatedText text={"FAQ"} /></h2>
+      <p className="muted"> <TranslatedText text={"Published entries appear on the FAQ page, in this order. Drafts stay off the page."} /> </p>
+      {err && <p className="error-banner"><TranslatedText text={err} /></p>}
       {msg && <p className="ok-banner">{msg}</p>}
       <ul className="activity-list">
         {entries.map((entry, index) => (
           <li key={entry.id}>
             <strong>{entry.question}</strong>
-            <span className="muted"> · {entry.published ? "Published" : "Draft"}</span>
+            <span className="muted"> · <TranslatedText text={entry.published ? "Published" : "Draft"} /></span>
             <p className="muted">{entry.answer}</p>
             <div className="blog-cms-actions">
-              <button type="button" className="secondary" disabled={index === 0} onClick={() => void move(index, -1)}>Move up</button>
-              <button type="button" className="secondary" disabled={index === entries.length - 1} onClick={() => void move(index, 1)}>Move down</button>
-              <button type="button" className="secondary" onClick={() => openEditor(entry)}>Edit</button>
+              <button type="button" className="secondary" disabled={index === 0} onClick={() => void move(index, -1)}><TranslatedText text={"Move up"} /></button>
+              <button type="button" className="secondary" disabled={index === entries.length - 1} onClick={() => void move(index, 1)}><TranslatedText text={"Move down"} /></button>
+              <button type="button" className="secondary" onClick={() => openEditor(entry)}><TranslatedText text={"Edit"} /></button>
               <button type="button" className="secondary" onClick={() => void setPublished(entry, !entry.published)}>
-                {entry.published ? "Unpublish" : "Publish"}
+                <TranslatedText text={entry.published ? "Unpublish" : "Publish"} />
               </button>
-              <button type="button" className="secondary" onClick={() => void remove(entry)}>Delete</button>
+              <button type="button" className="secondary" onClick={() => void remove(entry)}><TranslatedText text={"Delete"} /></button>
             </div>
           </li>
         ))}
-        {entries.length === 0 && <li className="muted">No FAQ entries yet.</li>}
+        {entries.length === 0 && <li className="muted"><TranslatedText text={"No FAQ entries yet."} /></li>}
       </ul>
       <form className="form-stack" onSubmit={submit} style={{ marginTop: "1.25rem" }}>
-        <h3>{editing ? "Edit FAQ" : "New FAQ"}</h3>
-        <label>
-          Question
-          <input required minLength={3} maxLength={240} value={form.question} onChange={(e) => setForm({ ...form, question: e.target.value })} />
+        <h3><TranslatedText text={editing ? "Edit FAQ" : "New FAQ"} /></h3>
+        <label> <TranslatedText text={"Question"} /> <input required minLength={3} maxLength={240} value={form.question} onChange={(e) => setForm({ ...form, question: e.target.value })} />
         </label>
-        <label>
-          Answer
-          <textarea required minLength={10} maxLength={4000} rows={6} value={form.answer} onChange={(e) => setForm({ ...form, answer: e.target.value })} />
+        <label> <TranslatedText text={"Answer"} /> <textarea required minLength={10} maxLength={4000} rows={6} value={form.answer} onChange={(e) => setForm({ ...form, answer: e.target.value })} />
         </label>
         <label className="check-row">
-          <input type="checkbox" checked={form.published} onChange={(e) => setForm({ ...form, published: e.target.checked })} />
-          Published on the homepage
-        </label>
+          <input type="checkbox" checked={form.published} onChange={(e) => setForm({ ...form, published: e.target.checked })} /> <TranslatedText text={"Published on the homepage"} /> </label>
         <div className="blog-cms-actions">
-          <button type="submit" disabled={busy}>{busy ? "Saving…" : editing ? "Save changes" : "Add FAQ"}</button>
-          {editing && <button type="button" className="secondary" onClick={() => openEditor()}>Cancel</button>}
+          <button type="submit" disabled={busy}><TranslatedText text={busy ? "Saving…" : editing ? "Save changes" : "Add FAQ"} /></button>
+          {editing && <button type="button" className="secondary" onClick={() => openEditor()}><TranslatedText text={"Cancel"} /></button>}
         </div>
       </form>
     </section>

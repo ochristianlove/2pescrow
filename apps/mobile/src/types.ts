@@ -18,6 +18,7 @@ export type TradeRow = {
   partyRole?: "buyer" | "seller" | "admin" | "party";
   chain?: string;
   contractAddress?: string | null;
+  createTxHash?: string | null;
   buyerAddress?: string | null;
   sellerAddress?: string | null;
   updatedAt?: string;

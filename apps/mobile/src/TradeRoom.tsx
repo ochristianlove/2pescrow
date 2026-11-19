@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Linking, Pressable, Share, StyleSheet, View } from "react-native";
 import { api } from "./api";
 import { formatAmount, shortAddr, tokenLabel } from "./format";
-import { dateLabel, plainTerms, readableLabel, tradeActivity, tradePermissions } from "./tradePresentation";
+import { dateLabel, plainTerms, readableLabel, statusColor, tradeActivity, tradePermissions } from "./tradePresentation";
 import { colors } from "./theme";
 import type { TradeRow } from "./types";
 import { Button, Card } from "./ui";
@@ -44,7 +44,7 @@ export function TradeRoom({ trade, userId, onWeb, onError, onChanged, composer, 
       seller={trade.sellerUser?.displayName || (trade.sellerAddress ? shortAddr(trade.sellerAddress) : "")}
     />
     <View style={s.meta}><Text style={s.amount}>{formatAmount(trade.amountAtomic)} {tokenLabel(trade.tokenSymbol)}</Text><Text style={s.muted}>{trade.chain === "tron" ? "Tron" : "Ethereum"}</Text></View>
-    <Text style={[s.status, trade.status === "Disputed" && { color: colors.danger }]}>{readableLabel(trade.status)}{permission.buyer ? ` · ${t("You are the buyer")}` : permission.seller ? ` · ${t("You are the seller")}` : ""}</Text>
+    <Text style={[s.status, { color: statusColor(trade.status) }]}>{readableLabel(trade.status)}{permission.buyer ? ` · ${t("You are the buyer")}` : permission.seller ? ` · ${t("You are the seller")}` : ""}</Text>
     <TradeProgress status={trade.status} />
     {trade.tradeCode && permission.buyer && !trade.sellerUserId ? <Card>
       <Text style={s.heading}>Invite the seller</Text><Text style={s.muted}>Share this private code so the seller can join your trade.</Text>
@@ -64,7 +64,42 @@ export function TradeRoom({ trade, userId, onWeb, onError, onChanged, composer, 
       {trade.deliveryWindowHours ? <Detail label="Delivery window" value={t("{count} days after funding", { count: trade.deliveryWindowHours / 24 })} /> : null}
       {trade.reviewWindowHours ? <Detail label="Buyer protection period" value={t("{count} days after delivery proof", { count: trade.reviewWindowHours / 24 })} /> : null}
       {([["Seller joins by", trade.joinDeadlineAt], ["Fund by", trade.fundDeadlineAt], ["Delivery due", trade.deliveryDeadlineAt], ["Review ends", trade.reviewDeadlineAt]] as const).map(([label, value]) => value ? <Detail key={label} label={label} value={date(value)} /> : null)}
-      {trade.contractAddress ? <Detail label="Escrow contract" value={trade.contractAddress} /> : null}
+      {trade.contractAddress ? (
+        <View style={s.detail}>
+          <Text style={s.muted}>{t("Escrow contract")}</Text>
+          <Text selectable style={s.body}>{trade.contractAddress}</Text>
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => {
+              const url = trade.chain === "tron"
+                ? `https://tronscan.org/#/address/${trade.contractAddress}`
+                : `https://etherscan.io/address/${trade.contractAddress}`;
+              void Linking.openURL(url);
+            }}
+            style={{ marginTop: 4, alignSelf: "flex-start" }}
+          >
+            <Text style={s.linkText}>{t("View escrow contract on explorer")} ↗</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {trade.createTxHash ? (
+        <View style={s.detail}>
+          <Text style={s.muted}>{t("Deployment transaction")}</Text>
+          <Text selectable style={s.body}>{trade.createTxHash}</Text>
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => {
+              const url = trade.chain === "tron"
+                ? `https://tronscan.org/#/transaction/${trade.createTxHash}`
+                : `https://etherscan.io/tx/${trade.createTxHash}`;
+              void Linking.openURL(url);
+            }}
+            style={{ marginTop: 4, alignSelf: "flex-start" }}
+          >
+            <Text style={s.linkText}>{t("View deployment transaction")} ↗</Text>
+          </Pressable>
+        </View>
+      ) : null}
       {trade.proofHash ? <Detail label="Delivery proof" value={trade.proofHash} /> : null}
       {trade.tradeCode ? <Text style={s.note}>Windows are reminders. They do not automatically release or refund funds.</Text> : null}
       {canDownloadSigned ? (
@@ -194,8 +229,36 @@ function Detail({ label, value, userContent = false }: { label: string; value: s
   return <View style={s.detail}><Text style={s.muted}>{label}</Text><Text translate={!userContent} selectable style={s.body}>{value}</Text></View>;
 }
 function TradeProgress({ status }: { status: string }) {
-  const active = status === "AwaitingSeller" ? 0 : ["Created", "AwaitingFunding"].includes(status) ? 1 : ["Funded", "InProgress"].includes(status) ? 2 : ["Completed", "Resolved"].includes(status) ? 4 : -1;
-  return <View style={s.steps}>{["Seller joins", "Buyer funds escrow", "Proof / delivery", "Released"].map((label, index) => <View key={label} style={s.step}><Text style={[s.stepNumber, index <= active && { color: colors.accent, borderColor: colors.accent }]}>{index + 1}</Text><Text style={[s.stepLabel, index === active && { color: colors.text }]}>{label}</Text></View>)}</View>;
+  const active =
+    status === "AwaitingSeller" ? 0
+    : ["Created", "AwaitingFunding"].includes(status) ? 1
+    : ["Funded", "InProgress"].includes(status) ? 2
+    : ["Completed", "Resolved"].includes(status) ? 4
+    : -1;
+  const isCancelled = status === "Cancelled";
+  const isDisputed = status === "Disputed";
+  const activeColor = isDisputed ? colors.danger : isCancelled ? colors.muted : statusColor(status);
+
+  return (
+    <View style={s.steps}>
+      {["Seller joins", "Buyer funds escrow", "Proof / delivery", "Released"].map((label, index) => {
+        const isCompletedStep = index <= active && !isCancelled && !isDisputed;
+        const isCurrentStep = index === active;
+        const borderColor = isCompletedStep ? activeColor : colors.line;
+        const textColor = isCompletedStep ? activeColor : colors.muted;
+        return (
+          <View key={label} style={s.step}>
+            <Text style={[s.stepNumber, { borderColor, color: textColor }]}>
+              {index + 1}
+            </Text>
+            <Text style={[s.stepLabel, isCurrentStep && { color: colors.text, fontWeight: "600" }]}>
+              {label}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
 }
 const s = StyleSheet.create({
   title: { color: colors.text, fontSize: 24, fontWeight: "700", lineHeight: 31, marginTop: 20, marginBottom: 8 },
@@ -218,6 +281,7 @@ const s = StyleSheet.create({
   feedbackLinks: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   feedbackLink: { borderWidth: 1, borderColor: colors.line, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   feedbackLabel: { color: colors.text, fontSize: 13, fontWeight: "700" },
+  linkText: { color: colors.accent, fontSize: 13, fontWeight: "600" },
   steps: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginVertical: 16 }, step: { width: "47%", flexDirection: "row", alignItems: "center", gap: 8 },
   stepNumber: { color: colors.muted, borderWidth: 1, borderColor: colors.line, borderRadius: 16, width: 30, height: 30, textAlign: "center", textAlignVertical: "center" }, stepLabel: { color: colors.muted, fontSize: 12, flex: 1, lineHeight: 18 },
 });

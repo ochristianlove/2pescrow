@@ -15,12 +15,13 @@ import { tradePermissions } from "../../src/tradePresentation";
 import { TradeRoom } from "../../src/TradeRoom";
 import { EvidenceComposer } from "../../src/TradeFiles";
 import { TradeWallet } from "../../src/TradeWallet";
+import { LogoLoader } from "../../src/LogoLoader";
 
 export default function TradeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
-  const { trackEscrowId, notifications } = useLiveNotifications();
+  const { trackEscrowId, notifications, subscribeTradeEvents } = useLiveNotifications();
   const seenNotice = useRef("");
   const [trade, setTrade] = useState<TradeRow | null>(null);
   const [message, setMessage] = useState("");
@@ -45,9 +46,16 @@ export default function TradeScreen() {
     seenNotice.current = latest.id;
     void load();
   }, [notifications, id, load]);
+  useEffect(() => {
+    return subscribeTradeEvents((eventEscrowId) => {
+      if (!eventEscrowId || eventEscrowId === id) {
+        void load();
+      }
+    });
+  }, [id, load, subscribeTradeEvents]);
   useFocusEffect(useCallback(() => {
     void load();
-    const timer = setInterval(() => { if (AppState.currentState === "active" && !actionLock.current) void load(); }, 15000);
+    const timer = setInterval(() => { if (AppState.currentState === "active" && !actionLock.current) void load(); }, 4000);
     const listener = AppState.addEventListener("change", state => { if (state === "active" && !actionLock.current) void load(); });
     return () => { generation.current++; clearInterval(timer); listener.remove(); };
   }, [load]));
@@ -72,7 +80,7 @@ export default function TradeScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} tintColor={colors.accent} onRefresh={() => { setRefreshing(true); void load().finally(() => setRefreshing(false)); }} />}>
         <Button label="Back to trades" tone="ghost" onPress={() => router.replace("/(app)/trades")} />
         {error ? <View style={{ marginTop: 16 }}><Notice text={error} /><Button label="Try again" tone="ghost" onPress={() => void load()} /></View> : null}
-        {!trade || !permission ? (!error && <ActivityIndicator style={{ marginTop: 32 }} accessibilityLabel="Loading trade" color={colors.accent} />) :
+        {!trade || !permission ? (!error && <LogoLoader message="Loading trade room…" />) :
           <TradeRoom trade={trade} userId={user?.id} onWeb={() => void openWeb()} onError={setError} onChanged={load}
             wallet={<TradeWallet trade={trade} onLinked={load} />}
             composer={permission.canPost ? <View style={{ marginTop: 16, gap: 10 }}>

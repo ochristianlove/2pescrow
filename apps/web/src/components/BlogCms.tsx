@@ -1,3 +1,5 @@
+import { useLanguage as useCopyLanguage } from "../lib/language";
+import { TranslatedText } from "../lib/language";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { api, apiBase, apiUpload, mediaUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -14,6 +16,7 @@ function when(iso?: string | null) {
 }
 
 export function BlogCms() {
+  const { t: localizeCopy } = useCopyLanguage();
   const { authHeaders } = useAuth();
   const formRef = useRef<HTMLFormElement>(null);
   const [posts, setPosts] = useState<BlogPost[]>([]);
@@ -155,27 +158,25 @@ export function BlogCms() {
 
   return (
     <section className="card-surface">
-      <h2>Blog posts</h2>
-      <p className="muted">
-        These are the posts on the blog. Published ones also show as snippets on the home page. Edit, unpublish, or delete them from this list.
-      </p>
+      <h2><TranslatedText text={"Blog posts"} /></h2>
+      <p className="muted"> <TranslatedText text={"These are the posts on the blog. Published ones also show as snippets on the home page. Edit, unpublish, or delete them from this list."} /> </p>
       {msg && <p className="ok-banner">{msg}</p>}
-      {err && <p className="error-banner">{err}</p>}
+      {err && <p className="error-banner"><TranslatedText text={err} /></p>}
 
       <div className="admin-table-wrap">
         <table className="admin-table">
           <thead>
             <tr>
-              <th>Post</th>
-              <th>Status</th>
-              <th>Updated</th>
+              <th><TranslatedText text={"Post"} /></th>
+              <th><TranslatedText text={"Status"} /></th>
+              <th><TranslatedText text={"Updated"} /></th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {posts.length === 0 && (
               <tr>
-                <td colSpan={4} className="muted">No posts yet.</td>
+                <td colSpan={4} className="muted"><TranslatedText text={"No posts yet."} /></td>
               </tr>
             )}
             {posts.map((post) => (
@@ -189,15 +190,15 @@ export function BlogCms() {
                     </span>
                   </div>
                 </td>
-                <td>{post.published ? "Published" : "Draft"}</td>
+                <td><TranslatedText text={post.published ? "Published" : "Draft"} /></td>
                 <td>{when(post.updatedAt || post.publishedAt || post.createdAt)}</td>
                 <td>
                   <div className="blog-cms-actions">
-                    <button type="button" className="secondary" onClick={() => openEditor(post)}>Edit</button>
+                    <button type="button" className="secondary" onClick={() => openEditor(post)}><TranslatedText text={"Edit"} /></button>
                     <button type="button" className="secondary" onClick={() => setPublished(post, !post.published)}>
-                      {post.published ? "Unpublish" : "Publish"}
+                      <TranslatedText text={post.published ? "Unpublish" : "Publish"} />
                     </button>
-                    <button type="button" className="secondary" onClick={() => remove(post)}>Delete</button>
+                    <button type="button" className="secondary" onClick={() => remove(post)}><TranslatedText text={"Delete"} /></button>
                   </div>
                 </td>
               </tr>
@@ -208,20 +209,16 @@ export function BlogCms() {
 
       <form className="desk" ref={formRef} onSubmit={submit}>
         <div className="desk-main">
-          <h3>{editing ? "Edit post" : "New post"}</h3>
-          <label>
-            Title
-            <input className="desk-title" required minLength={3} maxLength={160} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Post title" />
+          <h3><TranslatedText text={editing ? "Edit post" : "New post"} /></h3>
+          <label> <TranslatedText text={"Title"} /> <input className="desk-title" required minLength={3} maxLength={160} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={localizeCopy("Post title")} />
           </label>
-          <label>
-            Snippet
-            <textarea
+          <label> <TranslatedText text={"Snippet"} /> <textarea
               required
               minLength={10}
               rows={2}
               value={form.excerpt}
               onChange={(e) => setForm({ ...form, excerpt: e.target.value })}
-              placeholder="The short text on the blog list and the home page."
+              placeholder={localizeCopy("The short text on the blog list and the home page.")}
             />
             <span className={excerptOver ? "blog-cms-count over" : "blog-cms-count"}>
               {form.excerpt.trim().length} / {EXCERPT_MAX}
@@ -244,28 +241,26 @@ export function BlogCms() {
         </div>
         <aside className="desk-side">
           <div className="desk-panel">
-            <p className="desk-panel-label">Publish</p>
+            <p className="desk-panel-label"><TranslatedText text={"Publish"} /></p>
             <div className="desk-switch-row">
               <button
                 type="button"
                 className={form.published ? "switch on" : "switch"}
                 aria-pressed={form.published}
-                aria-label={form.published ? "Save as draft instead" : "Publish this post"}
+                aria-label={localizeCopy(form.published ? "Save as draft instead" : "Publish this post")}
                 onClick={() => setForm({ ...form, published: !form.published })}
               >
                 <i />
               </button>
-              <span>{form.published ? "Will publish" : "Save as draft"}</span>
+              <span><TranslatedText text={form.published ? "Will publish" : "Save as draft"} /></span>
             </div>
-            <button type="submit">{editing ? "Save post" : form.published ? "Publish" : "Save draft"}</button>
+            <button type="submit"><TranslatedText text={editing ? "Save post" : form.published ? "Publish" : "Save draft"} /></button>
             {editing && (
-              <button type="button" className="secondary" onClick={() => openEditor()}>
-                Cancel
-              </button>
+              <button type="button" className="secondary" onClick={() => openEditor()}> <TranslatedText text={"Cancel"} /> </button>
             )}
           </div>
           <div className="desk-panel">
-            <p className="desk-panel-label">Featured image</p>
+            <p className="desk-panel-label"><TranslatedText text={"Featured image"} /></p>
             <button
               type="button"
               className="desk-drop"
@@ -277,12 +272,10 @@ export function BlogCms() {
                 if (file) void setCover(file);
               }}
             >
-              {form.coverImageUrl ? <img src={mediaUrl(form.coverImageUrl)} alt="" /> : <span>{uploading ? "Uploading…" : "Choose an image"}</span>}
+              {form.coverImageUrl ? <img src={mediaUrl(form.coverImageUrl)} alt="" /> : <span><TranslatedText text={uploading ? "Uploading…" : "Choose an image"} /></span>}
             </button>
             {form.coverImageUrl && (
-              <button type="button" className="secondary" onClick={() => setForm({ ...form, coverImageUrl: "" })}>
-                Remove image
-              </button>
+              <button type="button" className="secondary" onClick={() => setForm({ ...form, coverImageUrl: "" })}> <TranslatedText text={"Remove image"} /> </button>
             )}
             <input
               ref={coverRef}

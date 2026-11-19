@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store";
 import { api, ApiError } from "./api";
 import { setMemoryToken } from "./session";
 import type { SessionUser } from "./types";
+import { unregisterCurrentPushToken } from "./pushNotifications";
 
 const TOKEN_KEY = "twopescrow.session";
 
@@ -42,7 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [applyToken, refresh]);
 
-  const signOut = useCallback(async () => {
+    const signOut = useCallback(async () => {
+    await unregisterCurrentPushToken().catch(() => undefined);
     await applyToken(null);
     setUser(null);
   }, [applyToken]);

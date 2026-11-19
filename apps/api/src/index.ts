@@ -9,10 +9,11 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { config } from "./config";
 import { registerBlogRoutes } from "./blog";
+import { ethereumFunding, registerEthereumFundingRoutes } from "./ethereumFundingRoutes";
 import { registerFaqRoutes } from "./faq";
 import { readBrandPng, registerBrandRoutes } from "./brand";
 import { prisma } from "./db";
-import { broadcast, registerClient } from "./wsHub";
+import { broadcast, registerClient, associateClient } from "./wsHub";
 import { WALLET_ROLE_TAGS } from "@2pescrow/shared";
 import {
   ensureAdminUser,
@@ -44,6 +45,20 @@ import {
 import { notifyStaffUsers, staffUserIdsForTier } from "./staffNotifications";
 import { sendAdminEmailMessage, sendMagicLinkEmail } from "./email";
 import { runDeadlineReminders } from "./deadlineReminders";
+import {
+  notifySellerJoined,
+  notifyWalletLinked,
+  notifyTradeFunded,
+  notifyDeliverySubmitted,
+  notifyTradeCompleted,
+  notifyCancelRequested,
+  notifyCancelRefused,
+  notifyTradeCancelled,
+  notifyDisputeOpened,
+  notifyDisputeResolved,
+  notifyChatMessage,
+} from "./notifications";
+import { registerNotificationRoutes, startPushNotificationWorkers } from "./notificationRoutes";
 import { handleIndexerIngest, IngestError } from "./indexerIngest";
 import { secretsMatch } from "./secrets";
 import { buildTradeRecordPdf, hashTradeSnapshot, signTradeSnapshot } from "./tradeRecord";
@@ -288,6 +303,7 @@ await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } });
 await app.register(websocket);
 
 fs.mkdirSync(config.uploadDir, { recursive: true });
+registerNotificationRoutes(app);
 
 app.get("/health", async () => ({ ok: true, chainId: config.ethereumChainId }));
 
@@ -1253,6 +1269,7 @@ app.get("/v1/config/wallets", async () => {
 app.get("/v1/settings", async () => publicSettingsView(await ensureSettings()));
 
 registerBlogRoutes(app);
+registerEthereumFundingRoutes(app);
 registerFaqRoutes(app);
 registerBrandRoutes(app);
 
@@ -1906,10 +1923,17 @@ app.post("/v1/escrows/:id/wallet", async (req, reply) => {
     where: { userId: auth.id, address, chainKind: escrow.chain === "tron" ? "tron" : "evm" },
   });
   if (!wallet) return reply.code(403).send({ error: "Connect and link this wallet to your profile first" });
-  const updated = await prisma.escrow.update({
-    where: { id },
-    data: role === "buyer" ? { buyerAddress: address } : { sellerAddress: address },
+  const updated = await prisma.$transaction(async tx => {
+    if (escrow.chain === "ethereum") {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${escrow.buyerAddress?.toLowerCase() || id}, 0))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 1))`;
+      const current = await tx.escrow.findUniqueOrThrow({ where: { id } });
+      const currentAddress = role === "buyer" ? current.buyerAddress : current.sellerAddress;
+      if (currentAddress !== address && (current.contractAddress || current.createTxHash || await tx.ethereumFundingAttempt.count({ where: { escrowId: id } }))) return null;
+    }
+    return tx.escrow.update({ where: { id }, data: role === "buyer" ? { buyerAddress: address } : { sellerAddress: address } });
   });
+  if (!updated) return reply.code(409).send({ error: "Wallets cannot change after funding has started. Continue with the wallets recorded on this trade." });
   const roleLabel = role === "buyer" ? "Buyer" : "Seller";
   await addTradeSystemMessage(escrow.id, `${roleLabel} linked wallet ${address} to this trade.`);
   if (escrow.tradeCode) {
@@ -1941,11 +1965,24 @@ app.patch("/v1/escrows/:id", async (req, reply) => {
     })
     .parse(req.body);
   const data: Record<string, unknown> = {};
+  if (existing.chain === "ethereum" && (body.contractAddress || body.createTxHash !== undefined)) {
+    if (!body.createTxHash || !/^0x[0-9a-fA-F]{64}$/.test(body.createTxHash)) return reply.code(400).send({ error: "Use the verified Ethereum funding recovery flow" });
+    try {
+      const recovered = await ethereumFunding.recover(id, body.createTxHash as `0x${string}`);
+      if (body.contractAddress && body.contractAddress.toLowerCase() !== recovered.contractAddress?.toLowerCase()) return reply.code(409).send({ error: "Contract does not match the creation transaction" });
+      return await prisma.escrow.findUniqueOrThrow({ where: { id } });
+    } catch {
+      return reply.code(409).send({ error: "Creation is pending or could not be verified. Update the app and use saved funding progress." });
+    }
+  }
   if (body.createTxHash !== undefined) {
     data.createTxHash = body.createTxHash;
     if (existing.tradeCode) data.status = "Created";
   }
   if (body.buyerAddress) {
+    if (existing.chain === "ethereum" && body.buyerAddress.toLowerCase() !== existing.buyerAddress?.toLowerCase()) {
+      return reply.code(409).send({ error: "Use the trade wallet-linking action before starting Ethereum funding" });
+    }
     if (existing.tradeCode && existing.buyerUserId !== auth.id && auth.role !== "admin") {
       return reply.code(403).send({ error: "Only the buyer can set the buyer wallet" });
     }
@@ -3211,6 +3248,7 @@ app.put("/v1/admin/settings", async (req, reply) => {
       siteNoticeDelaySeconds: z.number().int().min(0).max(300).optional(),
       disputeAppealMessage: z.string().trim().min(1).max(4000).optional(),
       disputeFinalMessage: z.string().trim().min(1).max(4000).optional(),
+      fieldNotesLimit: z.number().int().min(1).max(24).optional(),
     })
     .safeParse(req.body);
   if (!body.success) {
@@ -3367,6 +3405,16 @@ app.post("/v1/escrows/:id/signals", async (req, reply) => {
     cancelled: "Cancelled",
   };
   const nextStatus = statusForKind[body.kind];
+  if (escrow.chain === "ethereum" && ["funded", "completed", "cancelled"].includes(body.kind)) {
+    try {
+      const confirmed = await ethereumFunding.get(id);
+      const valid = body.kind === "funded" ? [1, 2, 3].includes(confirmed.chainState ?? -1)
+        : body.kind === "completed" ? confirmed.chainState === 3 : confirmed.chainState === 4;
+      if (!valid) return reply.code(409).send({ error: "The Ethereum payment state is not confirmed. Token approval is not payment." });
+    } catch {
+      return reply.code(409).send({ error: "Could not verify the Ethereum payment state. The requested status change was not applied." });
+    }
+  }
   const statusRank: Record<string, number> = {
     AwaitingSeller: 0,
     AwaitingFunding: 0,
@@ -3438,6 +3486,7 @@ app.post("/v1/indexer/ingest", async (req, reply) => {
 
 const start = async () => {
   await build();
+  startPushNotificationWorkers();
   await ensureSettings();
   await ensureAdminUser();
   if (await isSmtpConfigured()) {

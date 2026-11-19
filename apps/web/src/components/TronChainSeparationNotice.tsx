@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useLanguage } from "../lib/language";
 
 export function TronChainSeparationNotice({ compact }: { compact?: boolean }) {
@@ -11,7 +12,7 @@ export function TronChainSeparationNotice({ compact }: { compact?: boolean }) {
   }
   return (
     <div className="tron-separation card-surface" role="note">
-      <span className="chain-network-badge tron">Tron · TRC-20</span>
+      <span className="chain-network-badge tron"><TranslatedText text={"Tron · TRC-20"} /></span>
       <p>
         <strong>{t("Tron trades are isolated from Ethereum.")}</strong>{" "}
         {t("USDT here is TRC-20 on Tron — not ERC-20 on Ethereum. You cannot fund an Ethereum escrow from Tron or move escrow balances between chains inside 2Pescrow.")}

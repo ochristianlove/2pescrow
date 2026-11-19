@@ -13,6 +13,14 @@ const valtioForAppKit = path.join(
 const config = getDefaultConfig(projectRoot);
 // Shared translations and hoisted dependencies live outside the app root.
 config.watchFolders = [...new Set([...config.watchFolders, path.resolve(projectRoot, "../..")])];
+// Generated web bundles, diagnostics and database backups are not mobile source. Avoid crawling
+// them through the monorepo watch folder, including while an export writes new build artifacts.
+const workspacePath = path.resolve(projectRoot, "../..").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const generatedArtifacts = new RegExp(`${workspacePath}[/\\\\](?:data|backups|\\.git)[/\\\\].*`);
+config.resolver.blockList = [
+  ...(Array.isArray(config.resolver.blockList) ? config.resolver.blockList : config.resolver.blockList ? [config.resolver.blockList] : []),
+  generatedArtifacts,
+];
 
 // AppKit packages each ship a separate valtio 2.1.8. A proxy created by one
 // copy is invisible to subscribeKey from the other, which throws

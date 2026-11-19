@@ -1,3 +1,5 @@
+import { useLanguage as useCopyLanguage } from "../lib/language";
+import { TranslatedText } from "../lib/language";
 import { useRef } from "react";
 
 const TOKENS = [
@@ -32,6 +34,7 @@ type Props = {
 };
 
 export function ReminderDesk({ enabled, subject, body, onEnabled, onSubject, onBody }: Props) {
+  const { t: localizeCopy } = useCopyLanguage();
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   function insert(token: string) {
@@ -55,30 +58,24 @@ export function ReminderDesk({ enabled, subject, body, onEnabled, onSubject, onB
     <div className="reminder-desk">
       <div className="reminder-head">
         <div>
-          <h3>Deadline reminders</h3>
-          <p>
-            Two notes go out when this is on: one the day before a deadline, and one the day after it passes. The bell shows the same reminder. Transaction history does not.
-          </p>
+          <h3><TranslatedText text={"Deadline reminders"} /></h3>
+          <p> <TranslatedText text={"Two notes go out when this is on: one the day before a deadline, and one the day after it passes. The bell shows the same reminder. Transaction history does not."} /> </p>
         </div>
         <button
           type="button"
           className={enabled ? "switch on" : "switch"}
           aria-pressed={enabled}
-          aria-label={enabled ? "Turn reminders off" : "Turn reminders on"}
+          aria-label={localizeCopy(enabled ? "Turn reminders off" : "Turn reminders on")}
           onClick={() => onEnabled(!enabled)}
         >
           <i />
         </button>
       </div>
-      <p className="reminder-state">{enabled ? "Reminders are on" : "Reminders are off"}</p>
+      <p className="reminder-state"><TranslatedText text={enabled ? "Reminders are on" : "Reminders are off"} /></p>
 
-      <label>
-        Subject line
-        <input value={subject} onChange={(e) => onSubject(e.target.value)} placeholder={DEFAULT_SUBJECT} />
+      <label> <TranslatedText text={"Subject line"} /> <input value={subject} onChange={(e) => onSubject(e.target.value)} placeholder={DEFAULT_SUBJECT} />
       </label>
-      <label>
-        Letter
-        <textarea
+      <label> <TranslatedText text={"Letter"} /> <textarea
           ref={bodyRef}
           rows={8}
           value={body}
@@ -93,7 +90,7 @@ export function ReminderDesk({ enabled, subject, body, onEnabled, onSubject, onB
           </button>
         ))}
       </div>
-      <p className="reminder-sample-label">Sample of the email</p>
+      <p className="reminder-sample-label"><TranslatedText text={"Sample of the email"} /></p>
       <div className="reminder-sample">
         <p className="reminder-sample-subject">{preview(subject, DEFAULT_SUBJECT)}</p>
         <p>{preview(body, DEFAULT_BODY)}</p>

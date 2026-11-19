@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -96,7 +97,7 @@ export function FeedbackPage() {
       </p>
 
       {ok && <p className="ok-banner">{ok}</p>}
-      {err && <p className="error-banner">{err}</p>}
+      {err && <p className="error-banner"><TranslatedText text={err} /></p>}
 
       <form className="card-surface form-stack" onSubmit={onSubmit}>
         <label>

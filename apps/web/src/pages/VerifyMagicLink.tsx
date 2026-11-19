@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useAuth, type SessionUser } from "../lib/auth";
@@ -89,7 +90,7 @@ export function VerifyMagicLinkPage() {
   return (
     <div className="page narrow">
       <h1>{t("Magic link")}</h1>
-      {err ? <p className="error-banner">{err}</p> : <p className="muted">{status}</p>}
+      {err ? <p className="error-banner"><TranslatedText text={err} /></p> : <p className="muted">{status}</p>}
       {!err && status === t("Opening the 2Pescrow app…") && (
         <button
           type="button"

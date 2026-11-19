@@ -2,11 +2,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 type RouterCtx = {
   path: string;
+  search: string;
   navigate: (to: string) => void;
   params: Record<string, string>;
 };
 
-const Ctx = createContext<RouterCtx>({ path: "/", navigate: () => {}, params: {} });
+const Ctx = createContext<RouterCtx>({ path: "/", search: "", navigate: () => {}, params: {} });
 
 function matchRoute(pattern: string, path: string): Record<string, string> | null {
   const pp = pattern.split("/").filter(Boolean);
@@ -38,9 +39,13 @@ export function normalizePathname(pathname: string): string {
 
 export function Router({ children }: { children: ReactNode }) {
   const [path, setPath] = useState(() => normalizePathname(window.location.pathname || "/"));
+  const [search, setSearch] = useState(() => window.location.search);
 
   useEffect(() => {
-    const onPop = () => setPath(normalizePathname(window.location.pathname || "/"));
+    const onPop = () => {
+      setPath(normalizePathname(window.location.pathname || "/"));
+      setSearch(window.location.search);
+    };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -52,10 +57,11 @@ export function Router({ children }: { children: ReactNode }) {
     const href = `${normalized}${search ? `?${search.split("#")[0]}` : ""}${hash}`;
     window.history.pushState({}, "", href);
     setPath(normalized);
+    setSearch(window.location.search);
     window.scrollTo(0, 0);
   }, []);
 
-  const value = useMemo(() => ({ path, navigate, params: {} }), [path, navigate]);
+  const value = useMemo(() => ({ path, search, navigate, params: {} }), [path, search, navigate]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -73,10 +79,14 @@ export function Link({
   to,
   children,
   className,
+  title,
+  "aria-label": ariaLabel,
 }: {
   to: string;
   children: ReactNode;
   className?: string;
+  title?: string;
+  "aria-label"?: string;
 }) {
   const { navigate, path } = useRouter();
   const dest = normalizePathname(to.split("?")[0].split("#")[0]);
@@ -84,6 +94,8 @@ export function Link({
   return (
     <a
       href={to}
+      title={title}
+      aria-label={ariaLabel}
       className={`${className || ""} ${active ? "nav-active" : ""}`.trim()}
       onClick={(e) => {
         e.preventDefault();

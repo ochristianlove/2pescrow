@@ -1,3 +1,6 @@
+import { LegalReadDialog } from "../../components/LegalReadDialog";
+import { useLanguage as useCopyLanguage } from "../language";
+import { TranslatedText } from "../language";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { BitKeepAdapter, OkxWalletAdapter, TokenPocketAdapter, TronLinkAdapter } from "@tronweb3/tronwallet-adapters";
 import { WalletReadyState, type Adapter as TronAdapter } from "@tronweb3/tronwallet-abstract-adapter";
@@ -74,7 +77,6 @@ function createWalletAdapters(): WalletAdapter[] {
     new OkxWalletAdapter(),
   ];
   if (walletConnectProjectId) {
-    const origin = typeof window === "undefined" ? "https://2pescrow.com" : window.location.origin;
     adapters.push(new WalletConnectAdapter({
       network: tronNetworkName,
       options: {
@@ -82,8 +84,8 @@ function createWalletAdapters(): WalletAdapter[] {
         metadata: {
           name: "2Pescrow",
           description: "TRON USDT escrow",
-          url: origin,
-          icons: [`${origin}/favicon.ico`],
+          url: "https://2pescrow.com",
+          icons: ["https://2pescrow.com/brand/favicon.png"],
         },
       },
       themeMode: "dark",
@@ -105,6 +107,7 @@ function rememberedWalletConnectSession() {
 }
 
 export function TronWalletProvider({ children }: { children: ReactNode }) {
+  const { t: localizeCopy } = useCopyLanguage();
   const { settings, loading: settingsLoading } = usePlatformSettings();
   const enabled = !!settings?.tronSupportEnabled;
   const adapters = useMemo(createWalletAdapters, []);
@@ -118,6 +121,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
   const [usdtTokenAddress, setUsdtTokenAddress] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [legal, setLegal] = useState<"terms" | "privacy" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connectFailureReason, setConnectFailureReason] = useState<TronCtx["connectFailureReason"]>(null);
 
@@ -342,31 +346,30 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
           <div className="wallet-picker-modal card-surface" role="dialog" aria-modal="true" aria-labelledby="tron-wallet-picker-title" onClick={(e) => e.stopPropagation()}>
             <div className="wallet-picker-head">
               <div>
-                <h2 id="tron-wallet-picker-title">Connect a TRON wallet</h2>
-                <p className="muted">Choose a wallet holding TRC-20 USDT. It will sign transactions directly; 2Pescrow never receives your keys.</p>
+                <h2 id="tron-wallet-picker-title"><TranslatedText text={"Connect a TRON wallet"} /></h2>
+                <p className="muted"><TranslatedText text={"Choose a wallet holding TRC-20 USDT. It will sign transactions directly; 2Pescrow never receives your keys."} /></p>
               </div>
-              <button type="button" className="secondary wallet-picker-close" onClick={closePicker} aria-label="Close">×</button>
+              <button type="button" className="secondary wallet-picker-close" onClick={closePicker} aria-label={localizeCopy("Close")}>×</button>
             </div>
-            {error && <p className="error-banner" role="alert">{error}</p>}
-            {connecting && <p className="wallet-approval-hint" role="status">Approve the connection in your wallet, then return to this page.</p>}
+            {error && <p className="error-banner" role="alert"><TranslatedText text={error} /></p>}
+            {connecting && <p className="wallet-approval-hint" role="status"><TranslatedText text={"Approve the connection in your wallet, then return to this page."} /></p>}
             <div className="wallet-picker-list">
               {walletOptions.map((wallet) => (
                 <button key={wallet.name} type="button" className="wallet-picker-option" disabled={connecting} onClick={() => void connectWallet(wallet.name)}>
                   <img src={wallet.icon} alt="" className="wallet-picker-icon" width={32} height={32} onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
-                  <span className="wallet-picker-label"><strong>{wallet.name}</strong><span className="muted wallet-picker-sub">Connect and sign TRON transactions</span></span>
-                  {connecting && <span className="wallet-picker-busy">Connecting…</span>}
+                  <span className="wallet-picker-label"><strong>{wallet.name}</strong><span className="muted wallet-picker-sub"><TranslatedText text={"Connect and sign TRON transactions"} /></span></span>
+                  {connecting && <span className="wallet-picker-busy"><TranslatedText text={"Connecting…"} /></span>}
                 </button>
               ))}
-              {walletOptions.length === 0 && <p className="muted wallet-picker-empty">No TRON wallet extension found. Install a supported wallet, or configure WalletConnect for mobile pairing.</p>}
-              {!walletConnectProjectId && <p className="hint">WalletConnect is not configured for this build. Use a supported wallet app browser or configure VITE_WALLETCONNECT_PROJECT_ID to enable mobile pairing.</p>}
+              {walletOptions.length === 0 && <p className="muted wallet-picker-empty"><TranslatedText text={"No TRON wallet extension found. Install a supported wallet, or configure WalletConnect for mobile pairing."} /></p>}
+              {!walletConnectProjectId && <p className="hint"><TranslatedText text={"WalletConnect is not configured for this build. Use a supported wallet app browser or configure VITE_WALLETCONNECT_PROJECT_ID to enable mobile pairing."} /></p>}
             </div>
-            <p className="wallet-picker-agreement">
-              By connecting, you agree to our{" "}
-              <a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a>{" "}
-              and{" "}
-              <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+            <p className="wallet-picker-agreement"> <TranslatedText text={"By connecting, you agree to our"} />{" "}
+              <button type="button" onClick={() => setLegal("terms")}><TranslatedText text={"Terms"} /></button>{" "} <TranslatedText text={"and"} />{" "}
+              <button type="button" onClick={() => setLegal("privacy")}><TranslatedText text={"Privacy Policy"} /></button>.
             </p>
-            <p className="hint wallet-picker-foot">You may need TRX or available network resources to pay TRON transaction costs.</p>
+            {legal ? <LegalReadDialog doc={legal} onClose={() => setLegal(null)} /> : null}
+            <p className="hint wallet-picker-foot"><TranslatedText text={"You may need TRX or available network resources to pay TRON transaction costs."} /></p>
           </div>
         </div>
       )}

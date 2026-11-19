@@ -1,3 +1,5 @@
+import { useLanguage as useCopyLanguage } from "../lib/language";
+import { TranslatedText } from "../lib/language";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   clearCreateTradeDraft,
@@ -35,6 +37,7 @@ const DELIVERY_PRESET_HOURS = [72, 168, 336, 720] as const;
 const PROTECTION_PRESET_HOURS = [168, 336, 720] as const;
 
 export function CreateTradePage() {
+  const { t: localizeCopy } = useCopyLanguage();
   const { address: evmAddress, isConnected, chainId } = useAccount();
   const tron = useTronWallet();
   const { settings } = usePlatformSettings();
@@ -182,7 +185,7 @@ export function CreateTradePage() {
     }
   }
 
-  if (!ready || !user) return <p className="muted">Loading your trade workspace…</p>;
+  if (!ready || !user) return <p className="muted"><TranslatedText text={"Loading your trade workspace…"} /></p>;
 
   if (created) {
     return (
@@ -212,7 +215,7 @@ export function CreateTradePage() {
           <p className="muted">{t("Set the deal terms, then invite the seller to join your shared trade room.")}</p>
         </div>
         <div className="hero-actions">
-          <span className="step-count">Step {step} of 2</span>
+          <span className="step-count"><TranslatedText text={"Step"} /> {step} <TranslatedText text={"of 2"} /></span>
           {(form.title.trim() || plainText(form.description) || form.amount || step === 2) && (
             <button type="button" className="secondary" onClick={discardDraft}>
               {t("Discard draft")}
@@ -224,15 +227,13 @@ export function CreateTradePage() {
       {draftRestoredBanner && (
         <p className="ok-banner">
           {t("We restored your in-progress trade details from this browser.")}{" "}
-          <button type="button" className="linkish" onClick={() => setDraftRestoredBanner(false)}>
-            OK
-          </button>
+          <button type="button" className="linkish" onClick={() => setDraftRestoredBanner(false)}> <TranslatedText text={"OK"} /> </button>
         </p>
       )}
 
       <div className="trade-create-grid">
         <form className="card-surface form-stack trade-create-form" onSubmit={submit}>
-          <div className="wizard-steps" aria-label="Escrow creation steps">
+          <div className="wizard-steps" aria-label={localizeCopy("Escrow creation steps")}>
             <span className={step === 1 ? "current" : "complete"}>1 <b>{t("Deal details")}</b></span>
             <i />
             <span className={step === 2 ? "current" : ""}>2 <b>{t("Review & invite")}</b></span>
@@ -242,7 +243,7 @@ export function CreateTradePage() {
             <>
               <label>
                 {t("Trade title")}
-                <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Vintage camera" />
+                <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={localizeCopy("e.g. Vintage camera")} />
               </label>
               <div className="terms-field">
                 <span className="terms-field-label">{t("Contract terms")}</span>
@@ -276,7 +277,7 @@ export function CreateTradePage() {
                       onClick={() => setForm({ ...form, chain: "tron", tokenSymbol: "TRON_USDT" })}
                     >
                       <span className="eyebrow">{t("Tron")}</span>
-                      <h3>TRC-20 USDT</h3>
+                      <h3><TranslatedText text={"TRC-20 USDT"} /></h3>
                       <p>{t("The buyer funds with Tron USDT. That balance stays on Tron.")}</p>
                     </button>
                   )}
@@ -314,7 +315,7 @@ export function CreateTradePage() {
               <label>
                 {t("Payment amount")}
                 <div className="amount-field">
-                  <span>{form.tokenSymbol === "USDC" ? "USDC" : "USDT"}</span>
+                  <span><TranslatedText text={form.tokenSymbol === "USDC" ? "USDC" : "USDT"} /></span>
                   <input required inputMode="decimal" min="0.000001" step="0.000001" type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0.00" />
                 </div>
               </label>
@@ -327,7 +328,7 @@ export function CreateTradePage() {
                 <h2>{form.title}</h2>
                 <ContractTerms text={form.description} empty={t("No extra terms added.")} />
                 <dl className="kv">
-                  <dt>Amount</dt><dd>{form.tokenSymbol === "USDC" ? "USDC" : "USDT"} {form.amount || "0"}</dd>
+                  <dt><TranslatedText text={"Amount"} /></dt><dd><TranslatedText text={form.tokenSymbol === "USDC" ? "USDC" : "USDT"} /> {form.amount || "0"}</dd>
                   {form.chain === "tron" && (
                     <>
                       <dt>{t("Wallet approval")}</dt>
@@ -338,7 +339,7 @@ export function CreateTradePage() {
                       </dd>
                     </>
                   )}
-                  <dt>Network</dt><dd>{form.chain === "tron" ? "Tron · TRC-20 USDT" : form.tokenSymbol === "USDC" ? "Ethereum · USDC" : "Ethereum · USDT"}</dd>
+                  <dt><TranslatedText text={"Network"} /></dt><dd><TranslatedText text={form.chain === "tron" ? "Tron · TRC-20 USDT" : form.tokenSymbol === "USDC" ? "Ethereum · USDC" : "Ethereum · USDT"} /></dd>
                   <dt>{t("Seller")}</dt><dd>{t("Joins with a code after you create the trade")}</dd>
                   <dt>{t("Delivery window")}</dt>
                   <dd>{formatTradeWindowHours(form.deliveryWindowHours, t)}</dd>
@@ -360,31 +361,31 @@ export function CreateTradePage() {
                 onChange={(reviewWindowHours) => setForm({ ...form, reviewWindowHours })}
                 presets={protectionPresets}
               />
-              <p className="hint">When the seller joins, both accounts share the same deal room. The buyer funds after both wallets are linked. Deadlines prompt the parties to act; they do not move funds automatically.</p>
+              <p className="hint"><TranslatedText text={"When the seller joins, both accounts share the same deal room. The buyer funds after both wallets are linked. Deadlines prompt the parties to act; they do not move funds automatically."} /></p>
               <div className="wallet-review-status">
-                <strong>{form.chain === "ethereum" ? "Buyer wallet · Ethereum" : "Buyer wallet · Tron (TRC-20)"}</strong>
+                <strong><TranslatedText text={form.chain === "ethereum" ? "Buyer wallet · Ethereum" : "Buyer wallet · Tron (TRC-20)"} /></strong>
                 {form.chain === "ethereum" ? (
                   evmOnEthereum ? (
-                    <p className="ok-banner">Connected on Ethereum · <code>{evmAddress}</code>. This address will be bound as the buyer wallet.</p>
+                    <p className="ok-banner"><TranslatedText text={"Connected on Ethereum ·"} /> <code>{evmAddress}</code><TranslatedText text={". This address will be bound as the buyer wallet."} /></p>
                   ) : isConnected ? (
                     <EvmWrongChainBanner chainId={chainId} />
                   ) : (
-                    <div><p className="hint">Choose MetaMask, Rabby, Coinbase Wallet, or WalletConnect.</p><ConnectEvmWalletButton>{t("Connect wallet")}</ConnectEvmWalletButton></div>
+                    <div><p className="hint"><TranslatedText text={"Choose MetaMask, Rabby, Coinbase Wallet, or WalletConnect."} /></p><ConnectEvmWalletButton>{t("Connect wallet")}</ConnectEvmWalletButton></div>
                   )
                 ) : tron.address ? (
-                  <p className="ok-banner">{tron.walletName || "TRON wallet"} connected · <code>{tron.address}</code>. This address will be bound as the buyer wallet.</p>
+                  <p className="ok-banner"><TranslatedText text={tron.walletName || "TRON wallet"} /> <TranslatedText text={"connected ·"} /> <code>{tron.address}</code><TranslatedText text={". This address will be bound as the buyer wallet."} /></p>
                 ) : (
-                  <div><p className="hint">Connect a TRON wallet that supports signing transactions. You can use a wallet app or pair one with WalletConnect.</p><button type="button" className="secondary" onClick={() => void tron.connect()} disabled={tron.connecting}>{tron.connecting ? "Opening wallet options…" : "Connect TRON wallet"}</button></div>
+                  <div><p className="hint"><TranslatedText text={"Connect a TRON wallet that supports signing transactions. You can use a wallet app or pair one with WalletConnect."} /></p><button type="button" className="secondary" onClick={() => void tron.connect()} disabled={tron.connecting}><TranslatedText text={tron.connecting ? "Opening wallet options…" : "Connect TRON wallet"} /></button></div>
                 )}
               </div>
-              {error && <p className="error-banner">{error}</p>}
+              {error && <p className="error-banner"><TranslatedText text={error} /></p>}
               <div className="action-row">
                 <button type="button" className="secondary" onClick={() => { setError(null); setStep(1); }}>{t("Back to details")}</button>
                 <button type="submit" disabled={busy}>{busy ? t("Creating invitation…") : t("Create trade & get code")}</button>
               </div>
             </>
           )}
-          {step === 1 && error && <p className="error-banner">{error}</p>}
+          {step === 1 && error && <p className="error-banner"><TranslatedText text={error} /></p>}
         </form>
 
         <aside className="card-surface trade-summary-card">

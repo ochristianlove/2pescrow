@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useCallback, useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import { mainnet } from "viem/chains";
@@ -126,7 +127,7 @@ export function ProfilePage() {
         </div>
       </div>
 
-      {err && <p className="error-banner">{err}</p>}
+      {err && <p className="error-banner"><TranslatedText text={err} /></p>}
       {linkMsg && <p className="ok-banner">{linkMsg}</p>}
       {nameMsg && <p className="ok-banner">{nameMsg}</p>}
 

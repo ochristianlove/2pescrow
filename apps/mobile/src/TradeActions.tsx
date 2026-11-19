@@ -10,12 +10,10 @@ import { colors } from "./theme";
 import type { TradeRow } from "./types";
 import { buyerFundingPending, tradeDisputeAccess, tradePermissions } from "./tradePresentation";
 import { Button, Field } from "./ui";
+import { NativeEthereumFunding } from "./NativeEthereumFunding";
 import {
   chainError,
-  createAndFund,
-  fundExisting,
   openDisputeOnChain,
-  readCreationFee,
   readDeal,
   readTronDeal,
   refuseCancel,
@@ -202,29 +200,8 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
   return (
     <View style={{ marginTop: 16, gap: 10 }}>
       {showFunding ? <FundingBreakdown trade={trade} quote={quote} hint={fundingHint} /> : null}
-      {permission.buyer && openTrade && !disputed && !trade.contractAddress ? (
-        <Button label={busy === "fund" ? "Approving and depositing…" : "Approve token and fund escrow"} busy={busy === "fund"} disabled={Boolean(busy) || !trade.sellerAddress} onPress={() => void run("fund", async () => {
-          const { from, provider: wallet } = requireWallet();
-          if (!trade.sellerAddress) throw new Error("The seller needs to link a receiving wallet before funding.");
-          const config = await api<WalletConfig>("/v1/config/wallets");
-          const tokenAddress = trade.tokenSymbol === "USDC" ? config.tokens?.USDC : config.tokens?.USDT;
-          if (!config.factoryAddress || !tokenAddress) throw new Error("On-chain escrow is not configured for this network yet.");
-          const fee = await readCreationFee(config.factoryAddress);
-          const { escrow, receipt } = await createAndFund(wallet, from, config.factoryAddress, trade.sellerAddress, tokenAddress, BigInt(trade.amountAtomic), BigInt(trade.amountAtomic) + fee);
-          await api(`/v1/escrows/${encodeURIComponent(trade.id)}`, { method: "PATCH", body: JSON.stringify({ buyerAddress: from, createTxHash: receipt.hash, contractAddress: escrow }) });
-          await signal(trade.id, "funded");
-        })} />
-      ) : null}
-      {permission.buyer && openTrade && !disputed && trade.contractAddress && (chain ? chain.state === 0 : trade.status === "Created" || trade.status === "AwaitingFunding") ? (
-        <Button label={busy === "fund" ? "Approving and depositing…" : "Approve token and fund escrow"} busy={busy === "fund"} disabled={Boolean(busy)} onPress={() => void run("fund", async () => {
-          const { from, provider: wallet } = requireWallet();
-          const config = await api<WalletConfig>("/v1/config/wallets");
-          const tokenAddress = trade.tokenSymbol === "USDC" ? config.tokens?.USDC : config.tokens?.USDT;
-          if (!tokenAddress || !trade.contractAddress) throw new Error("Token contract address is not configured.");
-          const fee = config.factoryAddress ? await readCreationFee(config.factoryAddress) : 1_000_000n;
-          await fundExisting(wallet, from, trade.contractAddress, tokenAddress, BigInt(trade.amountAtomic) + fee);
-          await signal(trade.id, "funded");
-        })} />
+      {permission.buyer && !disputed && trade.buyerAddress && trade.sellerAddress ? (
+        <NativeEthereumFunding trade={trade} requireWallet={requireWallet} onChanged={onChanged} />
       ) : null}
       {permission.seller && openTrade && !disputed ? (
         <Button

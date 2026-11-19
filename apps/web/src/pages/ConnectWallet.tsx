@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAccount } from "wagmi";
 import { ConnectEvmWalletButton } from "../lib/evmWalletPicker";
@@ -90,7 +91,7 @@ export function ConnectWalletPage() {
         {t("Signed in as")} <strong>{userDisplayLabel(user)}</strong>. {t("Link an Ethereum wallet to continue.")}
       </p>
 
-      {err && <p className="error-banner">{err}</p>}
+      {err && <p className="error-banner"><TranslatedText text={err} /></p>}
       {msg && <p className="ok-banner">{msg}</p>}
       {linking && <p className="muted">{t("Linking wallet to your account…")}</p>}
 
@@ -115,7 +116,7 @@ export function ConnectWalletPage() {
             </button>
           ) : (
             <p className="ok-banner">
-              {tron.walletName || "TRON wallet"} · <code>{tron.address}</code>
+              <TranslatedText text={tron.walletName || "TRON wallet"} /> · <code>{tron.address}</code>
             </p>
           )}
           {tron.error && <p className="error-banner">{tron.error}</p>}

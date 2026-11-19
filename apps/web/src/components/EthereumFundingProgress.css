@@ -1,0 +1,15 @@
+.ethereum-funding-progress {
+  margin-block: 1.5rem;
+  padding-block: 1rem;
+  border-block: 1px solid var(--border, #29443b);
+  overflow-wrap: anywhere;
+}
+.ethereum-funding-progress p,
+.ethereum-funding-progress li {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+.ethereum-funding-progress li + li { margin-block-start: .5rem; }
+.ethereum-funding-progress .action-row { flex-wrap: wrap; margin-block-start: 1rem; }
+.ethereum-funding-progress button { white-space: normal; min-height: 44px; }
+.ethereum-funding-progress summary { cursor: pointer; padding-block: .5rem; }

@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useEffect, useState } from "react";
 import { api, mediaUrl } from "../lib/api";
 import { Link, useRouter } from "../lib/router";
@@ -5,13 +6,13 @@ import { useLanguage } from "../lib/language";
 import type { BlogPost } from "../lib/types";
 import { BlogRichText } from "../components/BlogRichText";
 
-function formatWhen(iso?: string | null) {
+function formatWhen(iso: string | null | undefined, language: string) {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  return new Date(iso).toLocaleDateString(language, { year: "numeric", month: "long", day: "numeric" });
 }
 
 export function BlogPage() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { navigate } = useRouter();
   const [posts, setPosts] = useState<BlogPost[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export function BlogPage() {
         </p>
       </header>
 
-      {error && <p className="error-banner">{error}</p>}
+      {error && <p className="error-banner"><TranslatedText text={error} /></p>}
       {posts === null && !error && <p className="muted">{t("Loading notes…")}</p>}
       {posts && posts.length === 0 && (
         <div className="empty card-surface">
@@ -53,9 +54,9 @@ export function BlogPage() {
             <button type="button" className="blog-card" onClick={() => navigate(`/blog/${post.slug}`)}>
               {post.coverImageUrl ? <img className="blog-card-thumb" src={mediaUrl(post.coverImageUrl)} alt="" /> : null}
               <span className="blog-card-copy">
-                <time dateTime={post.publishedAt || post.createdAt}>{formatWhen(post.publishedAt || post.createdAt)}</time>
-                <h2>{post.title}</h2>
-                <p>{post.excerpt}</p>
+                <time dateTime={post.publishedAt || post.createdAt}>{formatWhen(post.publishedAt || post.createdAt, language)}</time>
+                <h2>{t(post.title)}</h2>
+                <p>{t(post.excerpt || "")}</p>
                 <span className="blog-card-more">{t("Read note")}</span>
               </span>
             </button>
@@ -70,7 +71,7 @@ export function BlogPage() {
 }
 
 export function BlogPostPage({ slug }: { slug: string }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { navigate } = useRouter();
   const [post, setPost] = useState<BlogPost | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +95,7 @@ export function BlogPostPage({ slug }: { slug: string }) {
   if (error) {
     return (
       <div className="page blog-page">
-        <p className="error-banner">{error}</p>
+        <p className="error-banner"><TranslatedText text={error} /></p>
         <button type="button" className="secondary" onClick={() => navigate("/blog")}>
           {t("All notes")}
         </button>
@@ -108,11 +109,11 @@ export function BlogPostPage({ slug }: { slug: string }) {
       <button type="button" className="secondary back-btn" onClick={() => navigate("/blog")}>
         {t("All notes")}
       </button>
-      <p className="eyebrow">{formatWhen(post.publishedAt || post.createdAt)}</p>
-      <h1>{post.title}</h1>
-      <p className="blog-lead">{post.excerpt}</p>
+      <p className="eyebrow">{formatWhen(post.publishedAt || post.createdAt, language)}</p>
+      <h1>{t(post.title)}</h1>
+      <p className="blog-lead">{t(post.excerpt || "")}</p>
       {post.coverImageUrl ? <img className="blog-cover" src={mediaUrl(post.coverImageUrl)} alt="" /> : null}
-      <BlogRichText body={post.body || ""} />
+      <BlogRichText body={post.body || ""} translate />
     </article>
   );
 }

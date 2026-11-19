@@ -1,3 +1,5 @@
+import { useLanguage as useCopyLanguage } from "../lib/language";
+import { TranslatedText } from "../lib/language";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import type { TradeMessage } from "../lib/types";
 
@@ -76,18 +78,19 @@ function MessageFile({
   onDownload: () => void;
   downloadLabel: string;
 }) {
+  const { t: localizeCopy } = useCopyLanguage();
   const kind = fileKind(message.fileName);
   const preview = useAuthedPreview(kind === "image" ? fileUrl : null, message.fileName || null, headers);
   return (
     <div className={`chat-file chat-file-${kind || "file"}`}>
       {kind === "image" && preview && (
         <button type="button" className="chat-file-preview" onClick={onDownload} aria-label={downloadLabel}>
-          <img src={preview} alt={message.fileName || "Shared image"} />
+          <img src={preview} alt={localizeCopy(message.fileName || "Shared image")} />
         </button>
       )}
-      {kind === "image" && !preview && <div className="chat-file-pending">Loading preview…</div>}
+      {kind === "image" && !preview && <div className="chat-file-pending"><TranslatedText text={"Loading preview…"} /></div>}
       <div className="chat-file-row">
-        <span className="chat-file-mark">{kind === "pdf" ? "PDF" : kind === "image" ? "IMG" : "FILE"}</span>
+        <span className="chat-file-mark"><TranslatedText text={kind === "pdf" ? "PDF" : kind === "image" ? "IMG" : "FILE"} /></span>
         <span className="chat-file-name">{message.fileName}</span>
         <button type="button" className="linkish" onClick={onDownload}>
           {downloadLabel}

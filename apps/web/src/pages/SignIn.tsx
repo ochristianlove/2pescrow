@@ -1,3 +1,4 @@
+import { TranslatedText, useLanguage as useCopyLanguage } from "../lib/language";
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { storeReferralCode, peekReferralCode } from "../lib/referralStorage";
@@ -5,6 +6,7 @@ import { useRouter } from "../lib/router";
 import { useLanguage } from "../lib/language";
 
 export function SignInPage() {
+  const { t: localizeCopy } = useCopyLanguage();
   const { navigate } = useRouter();
   const { t } = useLanguage();
   const [email, setEmail] = useState("");
@@ -66,11 +68,11 @@ export function SignInPage() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
+            placeholder={localizeCopy("you@example.com")}
             autoComplete="email"
           />
         </label>
-        {err && <p className="error-banner">{err}</p>}
+        {err && <p className="error-banner"><TranslatedText text={err} /></p>}
         {msg && <p className="ok-banner">{msg}</p>}
         <button type="submit" disabled={busy}>
           {busy ? t("Sending…") : t("Email me a sign-in link")}
@@ -79,7 +81,7 @@ export function SignInPage() {
 
       <p className="hint">
         {t("Prefer browsing without an account?")}{" "}
-        <button type="button" className="linkish" onClick={() => navigate("/trades")}>
+        <button type="button" className="linkish" onClick={() => navigate("/trades?view=public")}>
           {t("View public trades")}
         </button>
       </p>

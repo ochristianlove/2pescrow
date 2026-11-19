@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useRoute } from "../lib/router";
@@ -54,7 +55,7 @@ export function VerifyTradeRecordPage() {
   return (
     <div className="page verify-record-page">
       <section className="card-surface verify-record-card">
-        <p className="eyebrow">2Pescrow · {t("Independent record verification")}</p>
+        <p className="eyebrow"><TranslatedText text={"2Pescrow ·"} /> {t("Independent record verification")}</p>
         <h1>{t("Trade record")}</h1>
         {loading && <p className="muted">{t("Checking record integrity…")}</p>}
         {!loading && record?.valid && record.snapshot && <>
@@ -73,7 +74,27 @@ export function VerifyTradeRecordPage() {
             {record.snapshot.terms && <><dt>{t("Terms")}</dt><dd className="verify-record-terms"><ContractTerms text={record.snapshot.terms} empty="" /></dd></>}
           </dl>
           <h2>{t("Blockchain transactions")}</h2>
-          {record.snapshot.transactions.length ? <ul className="activity-list">{record.snapshot.transactions.map((tx, i) => { const href = explorerLink(record.snapshot!.network, tx.hash); return <li key={`${tx.hash}-${i}`}><strong>{t(tx.label)}</strong> · {href ? <a href={href} target="_blank" rel="noreferrer" className="mono">{tx.hash}</a> : <span className="mono">{tx.hash}</span>}</li>; })}</ul> : <p className="muted">{t("No indexed transactions were attached to this snapshot.")}</p>}
+          {record.snapshot.transactions.length ? (
+  <ul className="activity-list verify-tx-list">
+    {record.snapshot.transactions.map((tx, i) => {
+      const href = explorerLink(record.snapshot!.network, tx.hash);
+      return (
+        <li key={`${tx.hash}-${i}`} className="verify-tx-item">
+          <div className="verify-tx-label"><strong>{t(tx.label)}</strong></div>
+          {href ? (
+            <a href={href} target="_blank" rel="noreferrer" className="mono verify-tx-hash">
+              {tx.hash} ↗
+            </a>
+          ) : (
+            <span className="mono verify-tx-hash">{tx.hash}</span>
+          )}
+        </li>
+      );
+    })}
+  </ul>
+) : (
+  <p className="muted">{t("No indexed transactions were attached to this snapshot.")}</p>
+)}
           <p className="verify-record-hash"><span className="muted">SHA-256</span><br /><code>{record.snapshotHash}</code></p>
         </>}
         {!loading && record && !record.valid && <p className="error-banner" role="alert">{record.error || t("This record could not be verified. It may have been altered or is no longer available.")}</p>}

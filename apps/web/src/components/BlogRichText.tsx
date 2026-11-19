@@ -1,3 +1,4 @@
+import { useLanguage } from "../lib/language";
 import { type ReactNode } from "react";
 import { mediaUrl } from "../lib/api";
 
@@ -5,20 +6,20 @@ const IMAGE_LINE = /^!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)\s*$/i;
 const BARE_IMAGE = /^(https?:\/\/\S+\.(?:png|jpe?g|gif|webp|avif))(?:\?\S*)?$/i;
 const LINK = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi;
 
-function inline(text: string): ReactNode[] {
+function inline(text: string, t: (text: string) => string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let last = 0;
   for (const match of text.matchAll(LINK)) {
     const index = match.index ?? 0;
-    if (index > last) nodes.push(text.slice(last, index));
+    if (index > last) nodes.push(t(text.slice(last, index)));
     nodes.push(
       <a key={`${index}-${match[2]}`} href={match[2]} target="_blank" rel="noreferrer">
-        {match[1]}
+        {t(match[1])}
       </a>,
     );
     last = index + match[0].length;
   }
-  if (last < text.length) nodes.push(text.slice(last));
+  if (last < text.length) nodes.push(t(text.slice(last)));
   return nodes;
 }
 
@@ -28,11 +29,11 @@ function safeSrc(src: string) {
   return "";
 }
 
-function nodeToReact(node: Node, key: string): ReactNode {
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent;
+function nodeToReact(node: Node, key: string, t: (text: string) => string): ReactNode {
+  if (node.nodeType === Node.TEXT_NODE) return t(node.textContent || "");
   if (node.nodeType !== Node.ELEMENT_NODE) return null;
   const el = node as HTMLElement;
-  const kids = Array.from(el.childNodes).map((child, i) => nodeToReact(child, `${key}-${i}`));
+  const kids = Array.from(el.childNodes).map((child, i) => nodeToReact(child, `${key}-${i}`, t));
   switch (el.tagName) {
     case "BR":
       return <br key={key} />;
@@ -58,7 +59,7 @@ function nodeToReact(node: Node, key: string): ReactNode {
     case "IMG": {
       const src = safeSrc(el.getAttribute("src") || "");
       if (!src) return null;
-      return <img key={key} src={src} alt={el.getAttribute("alt") || ""} />;
+      return <img key={key} src={src} alt={t(el.getAttribute("alt") || "")} />;
     }
     case "FIGURE":
       return (
@@ -99,17 +100,19 @@ function nodeToReact(node: Node, key: string): ReactNode {
   }
 }
 
-function HtmlBody({ html }: { html: string }) {
+function HtmlBody({ html, t }: { html: string; t: (text: string) => string }) {
   const doc = new DOMParser().parseFromString(html, "text/html");
   return (
     <div className="blog-body">
-      {Array.from(doc.body.childNodes).map((node, i) => nodeToReact(node, `b${i}`))}
+      {Array.from(doc.body.childNodes).map((node, i) => nodeToReact(node, `b${i}`, t))}
     </div>
   );
 }
 
-export function BlogRichText({ body }: { body: string }) {
-  if (/<(p|div|figure|img|h[1-3]|ul|ol|blockquote|strong|b|em|table)\b/i.test(body)) return <HtmlBody html={body} />;
+export function BlogRichText({ body, translate = false }: { body: string; translate?: boolean }) {
+  const { t: localize } = useLanguage();
+  const t = translate ? localize : (value: string) => value;
+  if (/<(p|div|figure|img|h[1-3]|ul|ol|blockquote|strong|b|em|table)\b/i.test(body)) return <HtmlBody html={body} t={t} />;
   const blocks = body.split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean);
   return (
     <div className="blog-body">
@@ -121,12 +124,12 @@ export function BlogRichText({ body }: { body: string }) {
           const caption = image?.[1]?.trim();
           return (
             <figure className="blog-figure" key={src + (caption || "")}>
-              <img src={src} alt={caption || ""} />
-              {caption ? <figcaption>{caption}</figcaption> : null}
+              <img src={src} alt={t(caption || "")} />
+              {caption ? <figcaption>{t(caption)}</figcaption> : null}
             </figure>
           );
         }
-        return <p key={block.slice(0, 64)}>{inline(block)}</p>;
+        return <p key={block.slice(0, 64)}>{inline(block, t)}</p>;
       })}
     </div>
   );

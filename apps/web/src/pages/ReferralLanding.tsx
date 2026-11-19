@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { storeReferralCode } from "../lib/referralStorage";
@@ -28,7 +29,7 @@ export function ReferralLandingPage({ code }: { code: string }) {
     <div className="page narrow">
       <p className="eyebrow">{t("Referral invite")}</p>
       <h1>{t("You're invited to 2Pescrow")}</h1>
-      {err && <p className="error-banner">{err}</p>}
+      {err && <p className="error-banner"><TranslatedText text={err} /></p>}
       {!err && (
         <>
           <p className="muted">

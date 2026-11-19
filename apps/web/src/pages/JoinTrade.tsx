@@ -1,3 +1,4 @@
+import { TranslatedText, useLanguage as useCopyLanguage } from "../lib/language";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, formatAmount } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -17,6 +18,7 @@ type InvitePreview = {
 };
 
 export function JoinTradePage() {
+  const { t: localizeCopy } = useCopyLanguage();
   const { user, authHeaders } = useAuth();
   const { navigate } = useRouter();
   const { t } = useLanguage();
@@ -77,18 +79,18 @@ export function JoinTradePage() {
       <form className="card-surface form-stack" onSubmit={lookup}>
         <label>
           {t("Trade code")}
-          <input className="join-code-input" value={code} onChange={(e) => { setCode(e.target.value.toUpperCase()); setPreview(null); }} placeholder="K7M4-QP2N" autoCapitalize="characters" autoComplete="off" />
+          <input className="join-code-input" value={code} onChange={(e) => { setCode(e.target.value.toUpperCase()); setPreview(null); }} placeholder={localizeCopy("K7M4-QP2N")} autoCapitalize="characters" autoComplete="off" />
         </label>
         <button type="submit" className="secondary" disabled={!code.trim()}>{t("Find trade")}</button>
-        {error && <p className="error-banner">{error}</p>}
+        {error && <p className="error-banner"><TranslatedText text={error} /></p>}
         {preview && (
           <div className="invite-preview">
             <p className="eyebrow">{t("Review before joining")}</p>
             <h2>{preview.title}</h2>
             <ContractTerms text={preview.description} empty={t("No extra terms provided.")} />
             <dl className="kv">
-              <dt>{t("Amount")}</dt><dd>{preview.tokenSymbol === "TRON_USDT" ? "USDT" : preview.tokenSymbol} {formatAmount(preview.amountAtomic)}</dd>
-              <dt>{t("Network")}</dt><dd>{preview.chain === "tron" ? "Tron" : preview.chain === "ethereum" ? "Ethereum" : "Earlier EVM trade"}</dd>
+              <dt>{t("Amount")}</dt><dd><TranslatedText text={preview.tokenSymbol === "TRON_USDT" ? "USDT" : preview.tokenSymbol} /> {formatAmount(preview.amountAtomic)}</dd>
+              <dt>{t("Network")}</dt><dd><TranslatedText text={preview.chain === "tron" ? "Tron" : preview.chain === "ethereum" ? "Ethereum" : "Earlier EVM trade"} /></dd>
               <dt>{t("Your role")}</dt><dd>{t("Seller")}</dd>
             </dl>
             <p className="hint">{t("Joining links your seller account only. After you join, connect the wallet that should receive funds and tap “Link my seller wallet” in the trade room—nothing is linked automatically from your profile.")}</p>

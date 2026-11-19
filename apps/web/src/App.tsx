@@ -1,3 +1,4 @@
+import { TranslatedText } from "./lib/language";
 import { Layout } from "./components/Layout";
 import { Router, useRouter, normalizePathname } from "./lib/router";
 import { HomePage } from "./pages/Home";
@@ -20,7 +21,6 @@ import { TermsPage } from "./pages/Terms";
 import { PrivacyPage } from "./pages/Privacy";
 import { FaqPage } from "./pages/Faq";
 import { BlogPage, BlogPostPage } from "./pages/Blog";
-import { LanguageProvider } from "./lib/language";
 
 function Routes() {
   const { path: rawPath, navigate } = useRouter();
@@ -57,23 +57,17 @@ function Routes() {
 
   return (
     <div className="page">
-      <h1>Page not found</h1>
-      <p className="muted">No route for {path}</p>
-      <button type="button" onClick={() => navigate("/")}>
-        Go home
-      </button>
+      <h1><TranslatedText text={"Page not found"} /></h1>
+      <p className="muted"><TranslatedText text={"No route for"} /> {path}</p>
+      <button type="button" onClick={() => navigate("/")}> <TranslatedText text={"Go home"} /> </button>
     </div>
   );
 }
 
 export default function App() {
-  return (
-    <LanguageProvider>
-      <Router>
+  return (      <Router>
         <Layout>
           <Routes />
         </Layout>
-      </Router>
-    </LanguageProvider>
-  );
+      </Router>  );
 }

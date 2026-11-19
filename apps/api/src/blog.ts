@@ -119,7 +119,14 @@ export function registerBlogRoutes(app: FastifyInstance) {
 
   app.get("/v1/blog", async (req) => {
     const q = req.query as { limit?: string };
-    const limit = Math.min(24, Math.max(1, Number(q.limit) || 12));
+    let defaultLimit = 3;
+    try {
+      const s = await prisma.platformSettings.findUnique({ where: { id: 1 }, select: { fieldNotesLimit: true } });
+      if (s?.fieldNotesLimit) defaultLimit = s.fieldNotesLimit;
+    } catch {
+      // fallback
+    }
+    const limit = Math.min(24, Math.max(1, Number(q.limit) || defaultLimit));
     return prisma.blogPost.findMany({
       where: { published: true },
       orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],

@@ -1,5 +1,6 @@
+import { TranslatedText } from "../lib/language";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, formatAmount } from "../lib/api";
+import { api, formatAmount, shortAddr } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useRouter } from "../lib/router";
 import { useWorkspaceGuard } from "../lib/useWorkspaceGuard";
@@ -13,6 +14,7 @@ import { AgentApplicationCard, type AgentApplicationContext } from "../component
 import { useTradeListWindow } from "../lib/useTradeListWindow";
 import { userDisplayLabel } from "../lib/userDisplay";
 import { TradePartyBadge } from "../components/TradePartyBadge";
+import { TradeRoleTags } from "../components/TradeRoleTags";
 
 type DashboardData = {
   user: { email: string | null; role: string };
@@ -141,7 +143,7 @@ export function DashboardPage() {
 
   return (
     <div className="page app-dash">
-      {err && <p className="error-banner">{err}</p>}
+      {err && <p className="error-banner"><TranslatedText text={err} /></p>}
 
       <section className="card-surface dash-welcome-card">
         <p className="eyebrow">{t("Dashboard")}</p>
@@ -224,6 +226,10 @@ export function DashboardPage() {
                 <button type="button" className="trade-row" onClick={() => navigate(`/trades/${e.id}`)}>
                   <span className="trade-row-main">
                     <strong>{e.title}</strong>
+                    <TradeRoleTags
+                      buyer={userDisplayLabel(e.buyerUser) || (e.buyerAddress ? shortAddr(e.buyerAddress) : "")}
+                      seller={userDisplayLabel(e.sellerUser) || (e.sellerAddress ? shortAddr(e.sellerAddress) : "")}
+                    />
                     <TradePartyBadge escrow={e} userId={user.id} walletAddresses={data?.wallets.map((wallet) => wallet.address)} />
                   </span>
                   <StatusBadge status={e.status} />
@@ -309,9 +315,7 @@ export function DashboardPage() {
                 {h.explorerTx && (
                   <>
                     {" "}
-                    <a href={h.explorerTx} target="_blank" rel="noreferrer">
-                      tx
-                    </a>
+                    <a href={h.explorerTx} target="_blank" rel="noreferrer"> <TranslatedText text={"tx"} /> </a>
                   </>
                 )}
               </li>

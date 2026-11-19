@@ -1,3 +1,4 @@
+import { TranslatedText } from "../lib/language";
 import { useRef, useState } from "react";
 import { apiUpload } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -51,15 +52,13 @@ export function BrandSlot({ label, hint, value, fallback, wide, onChange }: Prop
       </button>
       <div className="blog-cms-actions">
         <button type="button" className="secondary" disabled={busy} onClick={() => inputRef.current?.click()}>
-          {busy ? "Uploading…" : "Replace"}
+          <TranslatedText text={busy ? "Uploading…" : "Replace"} />
         </button>
         {value.trim() && (
-          <button type="button" className="secondary" onClick={() => onChange("")}>
-            Use the built-in image
-          </button>
+          <button type="button" className="secondary" onClick={() => onChange("")}> <TranslatedText text={"Use the built-in image"} /> </button>
         )}
       </div>
-      {err && <p className="error-banner">{err}</p>}
+      {err && <p className="error-banner"><TranslatedText text={err} /></p>}
       <input
         ref={inputRef}
         type="file"
