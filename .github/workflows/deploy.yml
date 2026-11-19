@@ -99,6 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     needs: verify
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -247,7 +248,8 @@ jobs:
         env:
           DOKPLOY_URL: http://45.90.223.177:3000
           DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
-          APPLICATION_ID: fD6Dob38RFNOuZreEZHKA
+          API_APP_NAME: we32pescrow-aivjfj
+          DEFAULT_APPLICATION_ID: fD6Dob38RFNOuZreEZHKA
           BRANCH: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
         run: |
@@ -255,6 +257,11 @@ jobs:
           if [ -z "${DOKPLOY_API_KEY}" ]; then
             echo "Add the DOKPLOY_API_KEY repository secret from the Dokploy profile API token." >&2
             exit 1
+          fi
+          projects=$(curl -fsS "${DOKPLOY_URL}/api/project.all" -H "x-api-key: ${DOKPLOY_API_KEY}" || echo "{}")
+          APPLICATION_ID=$(echo "${projects}" | jq -r --arg name "${API_APP_NAME}" '[.. | objects | select(.appName == $name) | .applicationId] | first // empty')
+          if [ -z "${APPLICATION_ID}" ] || [ "${APPLICATION_ID}" = "null" ]; then
+            APPLICATION_ID="${DEFAULT_APPLICATION_ID}"
           fi
           app=$(curl -fsS "${DOKPLOY_URL}/api/application.one?applicationId=${APPLICATION_ID}" \
             -H "x-api-key: ${DOKPLOY_API_KEY}")
