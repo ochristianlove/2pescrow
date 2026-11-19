@@ -1,12 +1,16 @@
 import * as FileSystem from "expo-file-system";
 import type { Audio, AVPlaybackStatus } from "expo-av";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-let wavBase64: string | null = null;
-let fileUri: string | null = null;
-let sound: Audio.Sound | null = null;
-let preparing: Promise<Audio.Sound> | null = null;
+export type SoundTone = "subtle" | "ping" | "bell";
 
-function bytesToBase64(bytes: Uint8Array) {
+const SOUND_TONE_STORAGE_KEY = "@2pescrow/notification_sound_tone";
+let cachedTone: SoundTone | null = null;
+
+const soundCache: Partial<Record<SoundTone, Audio.Sound>> = {};
+const preparing: Partial<Record<SoundTone, Promise<Audio.Sound>>> = {};
+
+function bytesToBase64(bytes: Uint8Array): string {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   let out = "";
   for (let i = 0; i < bytes.length; i += 3) {
@@ -22,85 +26,146 @@ function bytesToBase64(bytes: Uint8Array) {
   return out;
 }
 
-function bellWavBase64() {
-  if (wavBase64) return wavBase64;
+function generateWavBase64(tone: SoundTone): string {
   const sampleRate = 22050;
-  const samples = Math.floor(sampleRate * 0.45);
+  const duration = tone === "ping" ? 0.35 : tone === "bell" ? 0.50 : 0.45;
+  const samples = Math.floor(sampleRate * duration);
   const dataSize = samples * 2;
   const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);
   const write = (offset: number, value: string) => {
     for (let i = 0; i < value.length; i += 1) view.setUint8(offset + i, value.charCodeAt(i));
   };
+
   write(0, "RIFF");
   view.setUint32(4, 36 + dataSize, true);
   write(8, "WAVE");
   write(12, "fmt ");
   view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
+  view.setUint16(20, 1, true); // PCM format
+  view.setUint16(22, 1, true); // Mono
   view.setUint32(24, sampleRate, true);
   view.setUint32(28, sampleRate * 2, true);
   view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
+  view.setUint16(34, 16, true); // 16-bit
   write(36, "data");
   view.setUint32(40, dataSize, true);
+
   for (let i = 0; i < samples; i += 1) {
     const t = i / sampleRate;
-    const freq = t < 0.08 ? 880 : t < 0.16 ? 1175 : 880;
-    const env = Math.min(1, t / 0.02) * Math.exp(-3.2 * t);
-    const sample = Math.sin(2 * Math.PI * freq * t) * env * 0.9;
-    view.setInt16(44 + i * 2, Math.max(-32767, Math.min(32767, Math.round(sample * 32767))), true);
+    let sample = 0;
+
+    if (tone === "ping") {
+      // Gentle single acoustic droplet ping (~1046 Hz C6) with soft harmonic
+      const attack = Math.min(1, t / 0.012);
+      const decay = Math.exp(-12.5 * Math.max(0, t - 0.012));
+      const env = attack * decay;
+      sample = (Math.sin(2 * Math.PI * 1046.5 * t) * 0.75 + Math.sin(2 * Math.PI * 2093 * t) * 0.25) * env * 0.22;
+    } else if (tone === "bell") {
+      // Warm resonant chime (587 Hz D5 -> 880 Hz A5)
+      const freq = t < 0.14 ? 587.3 : 880.0;
+      const attack = Math.min(1, t / 0.02);
+      const decay = Math.exp(-8.5 * Math.max(0, t - 0.02));
+      const env = attack * decay;
+      sample = (Math.sin(2 * Math.PI * freq * t) * 0.8 + Math.sin(2 * Math.PI * (freq * 2) * t) * 0.2) * env * 0.24;
+    } else {
+      // Subtle two-tone chime matching website: 880 -> 1175 -> 880 Hz with soft exponential ramp
+      const freq = t < 0.08 ? 880 : t < 0.16 ? 1175 : 880;
+      const attack = Math.min(1, t / 0.02);
+      const decay = Math.exp(-11.0 * Math.max(0, t - 0.02));
+      const env = attack * decay;
+      sample = Math.sin(2 * Math.PI * freq * t) * env * 0.22;
+    }
+
+    const clamped = Math.max(-32767, Math.min(32767, Math.round(sample * 32767)));
+    view.setInt16(44 + i * 2, clamped, true);
   }
-  wavBase64 = bytesToBase64(new Uint8Array(buffer));
-  return wavBase64;
+
+  return bytesToBase64(new Uint8Array(buffer));
 }
 
-async function bellFile() {
-  if (fileUri) return fileUri;
+async function getToneFile(tone: SoundTone): Promise<string> {
   const directory = FileSystem.cacheDirectory;
   if (!directory) throw new Error("No cache directory");
-  const uri = `${directory}2pescrow-bell.wav`;
+  const uri = `${directory}2pescrow-sound-${tone}.wav`;
   const info = await FileSystem.getInfoAsync(uri);
   if (!info.exists) {
-    await FileSystem.writeAsStringAsync(uri, bellWavBase64(), { encoding: FileSystem.EncodingType.Base64 });
+    await FileSystem.writeAsStringAsync(uri, generateWavBase64(tone), {
+      encoding: FileSystem.EncodingType.Base64,
+    });
   }
-  fileUri = uri;
   return uri;
 }
 
-function loaded(status: AVPlaybackStatus) {
+function isLoaded(status: AVPlaybackStatus): boolean {
   return status.isLoaded;
 }
 
-async function bellSound() {
-  if (sound) return sound;
-  if (!preparing) {
-    preparing = (async () => {
+async function getOrCreateSound(tone: SoundTone): Promise<Audio.Sound> {
+  const existing = soundCache[tone];
+  if (existing) return existing;
+
+  if (!preparing[tone]) {
+    preparing[tone] = (async () => {
       const { Audio: AudioModule } = await import("expo-av");
       await AudioModule.setAudioModeAsync({
         playsInSilentModeIOS: true,
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
       });
-      const created = await AudioModule.Sound.createAsync({ uri: await bellFile() }, { shouldPlay: false, volume: 1 });
-      sound = created.sound;
+      const fileUri = await getToneFile(tone);
+      const created = await AudioModule.Sound.createAsync(
+        { uri: fileUri },
+        { shouldPlay: false, volume: 0.55 },
+      );
+      soundCache[tone] = created.sound;
       return created.sound;
     })().finally(() => {
-      preparing = null;
+      delete preparing[tone];
     });
   }
-  return preparing;
+
+  return preparing[tone]!;
 }
 
-/** Same two-tone bell the website synthesizes for live trade alerts. */
-export async function playTradeBell() {
-  const player = await bellSound();
-  const status = await player.getStatusAsync();
-  if (!loaded(status)) {
-    sound = null;
-    await (await bellSound()).replayAsync();
-    return;
+export async function getSavedSoundTone(): Promise<SoundTone> {
+  if (cachedTone) return cachedTone;
+  try {
+    const saved = await AsyncStorage.getItem(SOUND_TONE_STORAGE_KEY);
+    if (saved === "ping" || saved === "bell" || saved === "subtle") {
+      cachedTone = saved;
+      return saved;
+    }
+  } catch {
+    // Fall back to default
   }
-  await player.replayAsync();
+  cachedTone = "subtle";
+  return "subtle";
+}
+
+export async function saveSoundTone(tone: SoundTone): Promise<void> {
+  cachedTone = tone;
+  try {
+    await AsyncStorage.setItem(SOUND_TONE_STORAGE_KEY, tone);
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+/** Plays the alert sound using the user's preferred or passed tone. */
+export async function playTradeBell(explicitTone?: SoundTone): Promise<void> {
+  try {
+    const tone = explicitTone || (await getSavedSoundTone());
+    const player = await getOrCreateSound(tone);
+    const status = await player.getStatusAsync();
+    if (!isLoaded(status)) {
+      delete soundCache[tone];
+      const fresh = await getOrCreateSound(tone);
+      await fresh.replayAsync();
+      return;
+    }
+    await player.replayAsync();
+  } catch {
+    // Suppress audio failure if system audio is occupied
+  }
 }

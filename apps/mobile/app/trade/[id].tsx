@@ -39,7 +39,15 @@ export default function TradeScreen() {
       if (request === generation.current) setError(err instanceof ApiError ? err.message : "Could not refresh this trade. Pull down to try again.");
     }
   }, [id, user?.id]);
-  useEffect(() => { setTrade(null); setMessage(""); if (id) trackEscrowId(id); }, [id, user?.id, trackEscrowId]);
+  const currentId = useRef(id);
+  useEffect(() => {
+    if (currentId.current !== id) {
+      currentId.current = id;
+      setTrade(null);
+      setMessage("");
+    }
+    if (id) trackEscrowId(id);
+  }, [id, trackEscrowId]);
   useEffect(() => {
     const latest = notifications.find((item) => item.escrowId === id);
     if (!latest || latest.id === seenNotice.current) return;

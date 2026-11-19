@@ -29,6 +29,8 @@ export async function setupAndroidChannels() {
     lightColor: "#3ecf8e",
     enableLights: true,
     enableVibrate: true,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    showBadge: true,
   });
 
   await Notifications.setNotificationChannelAsync("trade-messages", {
@@ -38,7 +40,26 @@ export async function setupAndroidChannels() {
     lightColor: "#3ecf8e",
     enableLights: true,
     enableVibrate: true,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    showBadge: true,
   });
+}
+
+export async function setupNotificationCategories() {
+  await Notifications.setNotificationCategoryAsync("trade-action", [
+    {
+      identifier: "view-trade",
+      buttonTitle: "Open Trade Room",
+      options: { opensAppToForeground: true },
+    },
+  ]);
+  await Notifications.setNotificationCategoryAsync("chat-message", [
+    {
+      identifier: "open-chat",
+      buttonTitle: "Reply in Chat",
+      options: { opensAppToForeground: true },
+    },
+  ]);
 }
 
 /**
@@ -62,6 +83,7 @@ export async function registerDevicePushToken(authenticated: boolean): Promise<s
     if (Platform.OS === "android") {
       await setupAndroidChannels();
     }
+    await setupNotificationCategories().catch(() => undefined);
 
     const projectId =
       Constants.expoConfig?.extra?.eas?.projectId ??

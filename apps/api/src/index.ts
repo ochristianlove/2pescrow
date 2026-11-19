@@ -1601,6 +1601,11 @@ app.post("/v1/escrows/join", async (req, reply) => {
   );
   broadcast("trade:seller-joined", { escrowId: updated.id });
   broadcast("trade:timeline-updated", { escrowId: updated.id });
+  void notifySellerJoined({
+    escrowId: updated.id,
+    title: escrow.title,
+    buyerUserId: escrow.buyerUserId,
+  }).catch((err) => console.warn("[Join] Notification error:", err));
   return updated;
 });
 
@@ -1800,6 +1805,16 @@ app.post("/v1/escrows/:id/messages", async (req, reply) => {
     }).catch(() => undefined);
   }
   broadcast("trade:timeline-updated", { escrowId: id });
+  void notifyChatMessage({
+    escrowId: id,
+    title: escrow.title,
+    messageId: message.id,
+    body: body.body,
+    authorUserId: auth.id,
+    authorName: auth.displayName || (role === "admin" ? "Support" : role === "seller" ? "Seller" : "Buyer"),
+    buyerUserId: escrow.buyerUserId,
+    sellerUserId: escrow.sellerUserId,
+  }).catch((err) => console.warn("[Chat] Notification error:", err));
   return message;
 });
 
@@ -1853,6 +1868,24 @@ app.post("/v1/escrows/:id/evidence", async (req, reply) => {
     select: { id: true, authorUserId: true, kind: true, body: true, fileName: true, createdAt: true },
   });
   broadcast("trade:timeline-updated", { escrowId: id });
+  if (kind === "fulfilment") {
+    void notifyDeliverySubmitted({
+      escrowId: id,
+      title: escrow.title,
+      buyerUserId: escrow.buyerUserId,
+    }).catch((err) => console.warn("[Evidence] Fulfilment notification error:", err));
+  } else {
+    void notifyChatMessage({
+      escrowId: id,
+      title: escrow.title,
+      messageId: message.id,
+      body: note || (fileName ? `Shared attachment: ${fileName}` : "Uploaded new trade evidence"),
+      authorUserId: auth.id,
+      authorName: auth.displayName || (role === "seller" ? "Seller" : "Buyer"),
+      buyerUserId: escrow.buyerUserId,
+      sellerUserId: escrow.sellerUserId,
+    }).catch((err) => console.warn("[Evidence] Notification error:", err));
+  }
   return message;
 });
 
@@ -1939,6 +1972,14 @@ app.post("/v1/escrows/:id/wallet", async (req, reply) => {
   if (escrow.tradeCode) {
     broadcast("trade:wallet-linked", { escrowId: updated.id, role, address });
     broadcast("trade:timeline-updated", { escrowId: updated.id });
+    void notifyWalletLinked({
+      escrowId: updated.id,
+      title: escrow.title,
+      role,
+      address,
+      buyerUserId: escrow.buyerUserId,
+      sellerUserId: escrow.sellerUserId,
+    }).catch((err) => console.warn("[Wallet] Notification error:", err));
   } else {
     broadcast("escrow:updated", updated);
   }
@@ -2036,6 +2077,7 @@ app.post("/v1/escrows/:id/disputes", async (req, reply) => {
   if (!escrowRow) return reply.code(404).send({ error: "Trade not found" });
   let openedBy: string;
   let openedByUserId: string | null = null;
+  let openerRole: "buyer" | "seller" | undefined;
   let reason: string | undefined;
   let requestedTier = normalizeRequestedTier(undefined, "moderator");
   if (escrowRow.tradeCode) {
@@ -2043,6 +2085,7 @@ app.post("/v1/escrows/:id/disputes", async (req, reply) => {
     if (!auth) return;
     const role = await escrowPartyRole(auth, escrowRow);
     if (role !== "buyer" && role !== "seller") return reply.code(403).send({ error: "Only the buyer or seller can raise a dispute" });
+    openerRole = role;
     openedByUserId = auth.id;
     const body = z
       .object({
@@ -2105,7 +2148,17 @@ app.post("/v1/escrows/:id/disputes", async (req, reply) => {
     });
   }
   broadcast("dispute:opened", { escrowId: id });
-  if (escrowRow.tradeCode) broadcast("trade:timeline-updated", { escrowId: id });
+  if (escrowRow.tradeCode) {
+    broadcast("trade:timeline-updated", { escrowId: id });
+    void notifyDisputeOpened({
+      escrowId: id,
+      title: escrowRow.title,
+      openerRole,
+      buyerUserId: escrowRow.buyerUserId,
+      sellerUserId: escrowRow.sellerUserId,
+      openerUserId: openedByUserId || undefined,
+    }).catch((err) => console.warn("[Dispute] Notification error:", err));
+  }
   return dispute;
 });
 
@@ -3113,6 +3166,16 @@ app.post("/v1/disputes/:id/finalize", async (req, reply) => {
     data: { status: "resolved" },
   });
   broadcast("dispute:resolved", dispute);
+  const tradeRow = await prisma.escrow.findUnique({ where: { id: dispute.escrowId }, select: { title: true, buyerUserId: true, sellerUserId: true } });
+  if (tradeRow) {
+    void notifyDisputeResolved({
+      escrowId: dispute.escrowId,
+      title: tradeRow.title,
+      buyerFavor: Boolean(body.buyerFavor),
+      buyerUserId: tradeRow.buyerUserId,
+      sellerUserId: tradeRow.sellerUserId,
+    }).catch(() => {});
+  }
   return dispute;
 });
 
@@ -3446,6 +3509,36 @@ app.post("/v1/escrows/:id/signals", async (req, reply) => {
   }
   broadcast(`trade:${body.kind}`, { escrowId: id });
   broadcast("trade:timeline-updated", { escrowId: id });
+  if (body.kind === "cancel-requested") {
+    void notifyCancelRequested({
+      escrowId: id,
+      title: escrow.title,
+      requesterRole: role === "seller" ? "seller" : "buyer",
+      buyerUserId: escrow.buyerUserId,
+      sellerUserId: escrow.sellerUserId,
+    }).catch(() => {});
+  } else if (body.kind === "cancel-refused") {
+    void notifyCancelRefused({
+      escrowId: id,
+      title: escrow.title,
+      buyerUserId: escrow.buyerUserId,
+    }).catch(() => {});
+  } else if (body.kind === "cancelled") {
+    void notifyTradeCancelled({
+      escrowId: id,
+      title: escrow.title,
+      buyerUserId: escrow.buyerUserId,
+      sellerUserId: escrow.sellerUserId,
+    }).catch(() => {});
+  } else if (body.kind === "completed") {
+    void notifyTradeCompleted({
+      escrowId: id,
+      title: escrow.title,
+      amountAtomic: escrow.amountAtomic,
+      buyerUserId: escrow.buyerUserId,
+      sellerUserId: escrow.sellerUserId,
+    }).catch(() => {});
+  }
   return { ok: true };
 });
 

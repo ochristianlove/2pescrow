@@ -1352,12 +1352,13 @@ label { display: block; font-size: 0.85rem; color: var(--muted); margin-top: 0.7
   white-space: nowrap;
 }
 
-.status-Created { color: #7dd3fc; }
-.status-AwaitingSeller { color: #c4b5fd; }
-.status-AwaitingFunding { color: #fde047; }
-.status-Funded { color: #fde047; }
-.status-InProgress { color: #fdba74; }
-.status-Completed, .status-Resolved { color: var(--ok); }
+.status-Created { color: #38bdf8; }
+.status-AwaitingSeller { color: #c084fc; }
+.status-AwaitingFunding { color: #fbbf24; }
+.status-Funded { color: var(--ok); }
+.status-InProgress { color: #fb923c; }
+.status-Completed { color: #34d399; }
+.status-Resolved { color: #2dd4bf; }
 .status-Cancelled { color: var(--muted); }
 .status-Disputed { color: var(--danger); }
 

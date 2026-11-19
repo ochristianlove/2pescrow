@@ -35,7 +35,7 @@ function HomeFaqPreview() {
     return () => {
       cancelled = true;
     };
-  }, [settings?.fieldNotesLimit]);
+  }, []);
 
   return (
     <section className="home-faq" aria-labelledby="home-faq-title">
@@ -84,16 +84,26 @@ export function HomePage() {
           .catch(() => {
             if (!cancelled) setNotes([]);
           });
-        const [list, act] = await Promise.all([
-          api<Escrow[]>("/v1/escrows"),
-          api<Activity[]>("/v1/activity"),
-          postsPromise,
-        ]);
-        if (!cancelled) {
-          setEscrows(list);
-          setActivity(act);
-          setError(null);
-        }
+        void api<Escrow[]>("/v1/escrows")
+          .then((list) => {
+            if (!cancelled) {
+              setEscrows(list);
+              setError(null);
+            }
+          })
+          .catch(() => {
+            if (!cancelled) {
+              setError("Live activity is temporarily unavailable.");
+            }
+          });
+
+        void api<Activity[]>("/v1/activity")
+          .then((act) => {
+            if (!cancelled) setActivity(act);
+          })
+          .catch(() => {});
+
+        await postsPromise;
       } catch (e) {
         if (!cancelled) {
           setError(

@@ -200,6 +200,7 @@ export async function processPendingPushJobs(maxBatch = 50): Promise<number> {
       sound: "default",
       priority: "high",
       channelId: job.notification.type.startsWith("chat:") ? "trade-messages" : "trade-updates",
+      categoryId: job.notification.type.startsWith("chat:") ? "chat-message" : "trade-action",
     };
   });
 

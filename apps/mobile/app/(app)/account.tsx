@@ -11,6 +11,7 @@ import { useAuth } from "../../src/auth";
 import { LegalSheet, WalletAgreement, type LegalDoc } from "../../src/LegalSheet";
 import { breakable, shortAddr } from "../../src/format";
 import { useLiveNotifications } from "../../src/liveNotifications";
+import { type SoundTone, getSavedSoundTone, saveSoundTone, playTradeBell } from "../../src/notificationSound";
 import { colors } from "../../src/theme";
 import type { ReferralView } from "../../src/types";
 import { Button, Card, Field, Notice } from "../../src/ui";
@@ -49,6 +50,11 @@ export default function AccountScreen() {
   const router = useRouter();
   const { user, refresh, signOut } = useAuth();
   const { soundEnabled, setSoundEnabled } = useLiveNotifications();
+  const [soundTone, setSoundTone] = useState<SoundTone>("subtle");
+
+  useEffect(() => {
+    void getSavedSoundTone().then(setSoundTone);
+  }, []);
   const [name, setName] = useState(user?.displayName || "");
   const [publicName, setPublicName] = useState(user?.displayName || "");
   const [wallet, setWallet] = useState("");
@@ -186,9 +192,42 @@ export default function AccountScreen() {
             thumbColor={soundEnabled ? colors.accent : colors.muted}
           />
           <Text style={{ color: colors.text, flex: 1, lineHeight: 20 }}>
-            Play a bell sound when your trades update (wallet linked, new phase, messages).
+            Play an alert sound when trades update (wallet linked, new phase, messages).
           </Text>
         </Pressable>
+        {soundEnabled ? (
+          <View style={{ marginTop: 10, marginBottom: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.line }}>
+            <Text style={{ color: colors.muted, fontSize: 13, fontWeight: "600", marginBottom: 8 }}>Alert sound tone</Text>
+            <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+              {(["subtle", "ping", "bell"] as const).map((tone) => {
+                const isSelected = soundTone === tone;
+                return (
+                  <Pressable
+                    key={tone}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setSoundTone(tone);
+                      void saveSoundTone(tone);
+                      void playTradeBell(tone);
+                    }}
+                    style={{
+                      backgroundColor: isSelected ? "rgba(62, 207, 142, 0.16)" : "rgba(255, 255, 255, 0.04)",
+                      borderColor: isSelected ? colors.accent : colors.line,
+                      borderWidth: 1,
+                      borderRadius: 8,
+                      paddingVertical: 7,
+                      paddingHorizontal: 12,
+                    }}
+                  >
+                    <Text style={{ color: isSelected ? colors.accent : colors.text, fontWeight: "600", fontSize: 13 }}>
+                      {tone === "subtle" ? "Subtle Chime (Web)" : tone === "ping" ? "Soft Ping" : "Classic Bell"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
         <Text style={{ color: colors.muted, lineHeight: 20 }}>Use the bell icon in the header on any page to review recent alerts.</Text>
       </Card>
       <Card>

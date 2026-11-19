@@ -104,23 +104,24 @@ export function tradeActivity(trade: TradeRow) {
 export function statusColor(status: string): string {
   switch (status) {
     case "Created":
-      return "#7dd3fc";
+      return "#38bdf8";
     case "AwaitingSeller":
-      return "#c4b5fd";
+      return "#c084fc";
     case "AwaitingFunding":
-      return "#fde047";
+      return "#fbbf24";
     case "Funded":
-      return "#fde047";
-    case "InProgress":
-      return "#fdba74";
-    case "Completed":
-    case "Resolved":
       return "#3ecf8e";
+    case "InProgress":
+      return "#fb923c";
+    case "Completed":
+      return "#34d399";
+    case "Resolved":
+      return "#2dd4bf";
     case "Cancelled":
-      return "#8aa3ad";
+      return "#94a3b8";
     case "Disputed":
       return "#f87171";
     default:
-      return "#8aa3ad";
+      return "#94a3b8";
   }
 }

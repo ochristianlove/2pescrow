@@ -44,7 +44,27 @@ export function TradeRoom({ trade, userId, onWeb, onError, onChanged, composer, 
       seller={trade.sellerUser?.displayName || (trade.sellerAddress ? shortAddr(trade.sellerAddress) : "")}
     />
     <View style={s.meta}><Text style={s.amount}>{formatAmount(trade.amountAtomic)} {tokenLabel(trade.tokenSymbol)}</Text><Text style={s.muted}>{trade.chain === "tron" ? "Tron" : "Ethereum"}</Text></View>
-    <Text style={[s.status, { color: statusColor(trade.status) }]}>{readableLabel(trade.status)}{permission.buyer ? ` · ${t("You are the buyer")}` : permission.seller ? ` · ${t("You are the seller")}` : ""}</Text>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginVertical: 10 }}>
+      <View style={{
+        backgroundColor: `${statusColor(trade.status)}22`,
+        borderColor: `${statusColor(trade.status)}55`,
+        borderWidth: 1,
+        borderRadius: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+      }}>
+        <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: statusColor(trade.status) }} />
+        <Text style={{ color: statusColor(trade.status), fontWeight: "700", fontSize: 13 }}>
+          {readableLabel(trade.status)}
+        </Text>
+      </View>
+      <Text style={{ color: colors.muted, fontSize: 13 }}>
+        {permission.buyer ? `· ${t("You are the buyer")}` : permission.seller ? `· ${t("You are the seller")}` : ""}
+      </Text>
+    </View>
     <TradeProgress status={trade.status} />
     {trade.tradeCode && permission.buyer && !trade.sellerUserId ? <Card>
       <Text style={s.heading}>Invite the seller</Text><Text style={s.muted}>Share this private code so the seller can join your trade.</Text>

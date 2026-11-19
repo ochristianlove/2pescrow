@@ -11,7 +11,7 @@ import { formatAmount, shortAddr, tokenLabel } from "../../src/format";
 import { colors } from "../../src/theme";
 import type { TradeRow } from "../../src/types";
 import { Button, Notice } from "../../src/ui";
-import { readableLabel } from "../../src/tradePresentation";
+import { readableLabel, statusColor } from "../../src/tradePresentation";
 import { TradeRoleTags } from "../../src/TradeRoleTags";
 import { TradePartyBadge } from "../../src/TradePartyBadge";
 
@@ -41,7 +41,7 @@ export default function TradesScreen({ publicOnly = false }: { publicOnly?: bool
     }
   }, [user, showPublic, syncEscrowIds]);
 
-  useFocusEffect(useCallback(() => { setRows([]); setLoading(true); void load(); return () => { generation.current++; }; }, [load]));
+  useFocusEffect(useCallback(() => { if (rows.length === 0) setLoading(true); void load(); return () => { generation.current++; }; }, [load, rows.length]));
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -74,7 +74,25 @@ export default function TradesScreen({ publicOnly = false }: { publicOnly?: bool
           <Text translate={false} style={{ color: colors.text, fontWeight: "700", fontSize: 16 }}>{item.title}</Text>
           {user ? <View style={{ marginTop: 8 }}><TradePartyBadge trade={item} userId={user.id} walletAddresses={user.wallets?.map((wallet) => wallet.address)} /></View> : null}
           <Text style={{ color: colors.gold, marginTop: 6 }}>{formatAmount(item.amountAtomic)} {tokenLabel(item.tokenSymbol)}</Text>
-          <Text style={{ color: colors.muted, marginTop: 4 }}>{readableLabel(item.status)} · {item.chain === "tron" ? "Tron" : "Ethereum"}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 }}>
+            <View style={{
+              backgroundColor: `${statusColor(item.status)}22`,
+              borderColor: `${statusColor(item.status)}55`,
+              borderWidth: 1,
+              borderRadius: 6,
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 5,
+            }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor(item.status) }} />
+              <Text style={{ color: statusColor(item.status), fontWeight: "700", fontSize: 12 }}>
+                {readableLabel(item.status)}
+              </Text>
+            </View>
+            <Text style={{ color: colors.muted, fontSize: 12 }}>· {item.chain === "tron" ? "Tron" : "Ethereum"}</Text>
+          </View>
           <View style={{ marginTop: 8 }}>
             <TradeRoleTags
               buyer={item.buyerUser?.displayName || (item.buyerAddress ? shortAddr(item.buyerAddress) : "")}

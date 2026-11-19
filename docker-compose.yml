@@ -27,6 +27,9 @@ services:
     build:
       context: .
       dockerfile: docker/api.Dockerfile
+      args:
+        # Pass the checked-out commit so a rebuild cannot keep yesterday's compile.
+        SOURCE_REV: ${SOURCE_REV:-local}
     # Existing image: install OpenSSL, regenerate Prisma client for musl+openssl3, then migrate+start.
     command:
       [

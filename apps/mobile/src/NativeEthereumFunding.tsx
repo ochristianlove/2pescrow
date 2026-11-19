@@ -157,10 +157,14 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
     </>}
     <Button tone="ghost" disabled={busy} label="Check payment status" onPress={() => { setError(null); void refresh(); }} />
     <Button tone="ghost" disabled={busy} label="Support recovery" onPress={() => setSupport(!support)} />
-    {support && <View>
-      <Text>For older attempts that were not saved, support can help find the creation transaction. Recovery does not move funds.</Text>
-      <Field label="Creation transaction hash" value={hash} onChangeText={setHash} autoCapitalize="none" autoCorrect={false} />
-      <Button disabled={busy || !hash.trim()} label="Recover existing escrow" onPress={() => void recover()} />
-    </View>}
+    {support && (
+      <View style={{ backgroundColor: "rgba(56, 189, 248, 0.08)", borderColor: "rgba(56, 189, 248, 0.35)", borderWidth: 1, borderRadius: 12, padding: 14, marginVertical: 8, gap: 10 }}>
+        <Text style={{ color: "#38bdf8", fontSize: 13, fontWeight: "600", lineHeight: 19 }}>
+          For older attempts that were not saved, support can help find the creation transaction recovery that does not move forward. Recovery does not move funds or request wallet signatures.
+        </Text>
+        <Field label="Creation transaction hash" value={hash} onChangeText={setHash} autoCapitalize="none" autoCorrect={false} />
+        <Button disabled={busy || !hash.trim()} label="Recover existing escrow" onPress={() => void recover()} />
+      </View>
+    )}
   </View>;
 }
