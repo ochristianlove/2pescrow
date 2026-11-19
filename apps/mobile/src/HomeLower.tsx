@@ -8,6 +8,7 @@ import { useAuth } from "./auth";
 import { webOrigin } from "./config";
 import { breakable } from "./format";
 import type { FaqItem, ReferralView } from "./types";
+import { readableLabel, statusColor } from "./tradePresentation";
 
 type Note = { id: string; slug: string; title: string; excerpt?: string | null; publishedAt?: string | null };
 type LedgerRow = { id: string; title: string; status: string };
@@ -246,7 +247,26 @@ export function HomeLower() {
       {ledger.map((row) => (
         <Pressable key={row.id} onPress={() => router.push(`/trade/${row.id}`)} style={styles.rowCard}>
           <Text translate={false} style={styles.cardTitle}>{row.title}</Text>
-          <Text style={styles.meta}>{row.status}</Text>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              alignSelf: "flex-start",
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: 999,
+              backgroundColor: `${statusColor(row.status)}22`,
+              borderWidth: 1,
+              borderColor: `${statusColor(row.status)}55`,
+              marginTop: 4,
+            }}
+          >
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor(row.status) }} />
+            <Text style={{ color: statusColor(row.status), fontWeight: "700", fontSize: 12 }}>
+              {readableLabel(row.status)}
+            </Text>
+          </View>
         </Pressable>
       ))}
 

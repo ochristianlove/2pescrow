@@ -23,6 +23,7 @@ import {
   requireAdmin,
   requirePermission,
   requireUser,
+  optionalUser,
   sessionView,
   signToken,
   upsertUserByEmail,
@@ -1612,10 +1613,37 @@ app.post("/v1/escrows/join", async (req, reply) => {
 app.get("/v1/escrows", async (req) => {
   const q = req.query as { wallet?: string };
   const walletWhere = q.wallet ? escrowWalletWhere([q.wallet]) : {};
-  const where = { AND: [walletWhere, { tradeCode: null }] };
+  let where: any;
+  if (q.wallet) {
+    where = walletWhere;
+  } else {
+    // Public ledger: show real conducted trades (on blockchain, funded, in-progress, completed, resolved, disputed, or with joined parties)
+    where = {
+      OR: [
+        { contractAddress: { not: null } },
+        { createTxHash: { not: null } },
+        { status: { in: ["Funded", "InProgress", "Completed", "Resolved", "Disputed", "Refunded"] } },
+        {
+          AND: [
+            { buyerAddress: { not: null } },
+            { sellerAddress: { not: null } },
+            { status: { in: ["AwaitingFunding", "Funded", "InProgress", "Completed", "Resolved", "Disputed"] } },
+          ],
+        },
+        {
+          AND: [
+            { buyerUserId: { not: null } },
+            { sellerUserId: { not: null } },
+            { status: { notIn: ["Created"] } },
+          ],
+        },
+      ],
+    };
+  }
   const rows = await prisma.escrow.findMany({
     where,
     orderBy: { updatedAt: "desc" },
+    take: 50,
     include: { events: { take: 20, orderBy: { id: "desc" } } },
   });
   return rows.map(serializeEscrow);
@@ -1638,21 +1666,36 @@ app.get("/v1/escrows/:id", async (req, reply) => {
   });
   if (!escrow) return reply.code(404).send({ error: "Not found" });
   if (escrow.tradeCode) {
-    const auth = await requireUser(req, reply);
-    if (!auth) return;
-    const role = await escrowPartyRole(auth, escrow);
-    if (!role) return reply.code(403).send({ error: "Only the buyer, seller, or admin can view this trade" });
-    const serialized = serializeEscrow(escrow);
+    const auth = await optionalUser(req);
+    const role = auth ? await escrowPartyRole(auth, escrow) : null;
+    if (role) {
+      const serialized = serializeEscrow(escrow);
+      return {
+        ...serialized,
+        messages: role === "admin"
+          ? serialized.messages
+          : serialized.messages?.filter((message) => !message.recipientUserId || message.recipientUserId === auth!.id),
+        disputes: serialized.disputes?.map((dispute) => ({
+          ...dispute,
+          evidence: dispute.evidence?.map(({ filePath, ...item }) => ({ ...item, fileAvailable: Boolean(filePath) })),
+        })),
+        partyRole: role,
+      };
+    }
+    // Public / spectator view: allow checking conducted trade status on blockchain and public ledger
+    // Private chat messages, dispute evidence, and party email addresses are stripped for safety
+    const serialized = serializeEscrow({
+      ...escrow,
+      buyerUser: escrow.buyerUser ? { id: escrow.buyerUser.id, displayName: escrow.buyerUser.displayName, email: null } : null,
+      sellerUser: escrow.sellerUser ? { id: escrow.sellerUser.id, displayName: escrow.sellerUser.displayName, email: null } : null,
+      messages: [],
+      disputes: [],
+    });
     return {
       ...serialized,
-      messages: role === "admin"
-        ? serialized.messages
-        : serialized.messages?.filter((message) => !message.recipientUserId || message.recipientUserId === auth.id),
-      disputes: serialized.disputes?.map((dispute) => ({
-        ...dispute,
-        evidence: dispute.evidence?.map(({ filePath, ...item }) => ({ ...item, fileAvailable: Boolean(filePath) })),
-      })),
-      partyRole: role,
+      messages: [],
+      disputes: [],
+      partyRole: null,
     };
   }
   return serializeEscrow(escrow);

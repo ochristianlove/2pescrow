@@ -2,7 +2,7 @@ import { TranslatedText, useLanguage as useCopyLanguage } from "../lib/language"
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { storeReferralCode, peekReferralCode } from "../lib/referralStorage";
-import { useRouter } from "../lib/router";
+import { useRouter, Link } from "../lib/router";
 import { useLanguage } from "../lib/language";
 
 export function SignInPage() {
@@ -77,6 +77,12 @@ export function SignInPage() {
         <button type="submit" disabled={busy}>
           {busy ? t("Sending…") : t("Email me a sign-in link")}
         </button>
+        <p className="auth-terms-note muted">
+          {t("By signing in, you agree to our")}{" "}
+          <Link to="/terms">{t("Terms of Service")}</Link>{" "}
+          {t("and")}{" "}
+          <Link to="/privacy">{t("Privacy Policy")}</Link>.
+        </p>
       </form>
 
       <p className="hint">

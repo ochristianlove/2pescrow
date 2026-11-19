@@ -1,4 +1,5 @@
 import { authAndPagesTranslations } from "./authAndPages";
+import { homeMarketingTranslations } from "./homeMarketing";
 import { french } from "./fr";
 import { frenchExtra } from "./fr-extra";
 import { templates } from "./templates";
@@ -196,7 +197,7 @@ const tronInstallTranslations: Partial<Record<Language, Record<string, string>>>
 };
 
 
-export const catalogs = [translations, extraTranslations, dashboardTranslations, homeTranslations, homeStatusTranslations, tradeDocumentTranslations, tradeRoomTranslations, sharedPageTranslations, statusAndNetworkTranslations, tradeUiTranslations, tronInstallTranslations, authAndPagesTranslations];
+export const catalogs = [translations, extraTranslations, dashboardTranslations, homeTranslations, homeStatusTranslations, homeMarketingTranslations, tradeDocumentTranslations, tradeRoomTranslations, sharedPageTranslations, statusAndNetworkTranslations, tradeUiTranslations, tronInstallTranslations, authAndPagesTranslations];
 const variablePatterns = Object.keys(templates.fr).filter(key => key.includes("{")).map(key => {
   const names: string[] = [];
   const escaped = key.split(/(\{\w+\})/).map(part => {

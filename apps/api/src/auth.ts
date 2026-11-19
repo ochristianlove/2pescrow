@@ -124,6 +124,16 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
   return sessionView(user);
 }
 
+export async function optionalUser(req: FastifyRequest): Promise<AuthUser | null> {
+  const token = getBearer(req);
+  if (!token) return null;
+  const payload = verifyToken(token);
+  if (!payload) return null;
+  const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+  if (!user) return null;
+  return sessionView(user);
+}
+
 export async function requireActor(req: FastifyRequest, reply: FastifyReply): Promise<AuthUser | null> {
   const adminKey = req.headers["x-admin-key"];
   if (typeof adminKey === "string" && adminKey && secretsMatch(adminKey, config.adminApiKey)) {

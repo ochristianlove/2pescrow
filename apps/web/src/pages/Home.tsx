@@ -119,7 +119,7 @@ export function HomePage() {
     };
   }, [settings?.fieldNotesLimit]);
 
-  const recent = escrows.slice(0, 4);
+  const recent = escrows.slice(0, 6);
   const startTo = user ? "/trades/new" : "/signin?next=%2Ftrades%2Fnew";
   const joinTo = user ? "/join" : "/signin?next=%2Fjoin";
   const signInForLink = "/signin?next=%2F";
