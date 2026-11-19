@@ -83,6 +83,8 @@ jobs:
               names = apk.namelist()
           if not any(name == "AndroidManifest.xml" or name.endswith("/AndroidManifest.xml") for name in names):
               raise SystemExit("Downloaded file is not an Android APK")
+          if "assets/index.android.bundle" not in names:
+              raise SystemExit("APK is missing its JavaScript bundle and cannot run standalone")
           PY
       - uses: actions/upload-artifact@v4
         with:
@@ -167,7 +169,8 @@ jobs:
     name: Deploy website
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: verify
+    # The new clients require the funding journal API and its migration before rollout.
+    needs: [verify, api]
     steps:
       - name: Deploy this commit to the live website
         env:
@@ -237,8 +240,8 @@ jobs:
     name: Deploy API
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Wait for the Android EAS APK, not iOS. Missing Apple credentials must not block Dokploy.
-    needs: [verify, phone-android]
+    # Backend migrations must be ready before the website; phone builds are independent artifacts.
+    needs: verify
     steps:
       - name: Deploy this commit to the live API
         env:

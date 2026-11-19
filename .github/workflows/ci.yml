@@ -11,6 +11,34 @@ permissions:
   contents: read
 
 jobs:
+  funding-regression:
+    name: Ethereum funding and recovery regressions
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: twopescrow
+          POSTGRES_PASSWORD: twopescrow
+          POSTGRES_DB: twopescrow
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U twopescrow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate --schema apps/api/prisma/schema.prisma
+      - run: npm run build -w @2pescrow/shared
+      - run: npx tsx --test scripts/test-ethereum-funding.test.ts scripts/test-ethereum-recovery.test.ts scripts/test-funding-client.test.ts scripts/test-funding-journal.test.ts
+
   check:
     runs-on: ubuntu-latest
     steps:
