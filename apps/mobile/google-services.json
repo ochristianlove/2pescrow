@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "206582881380",
+    "project_id": "twopescrow-app",
+    "storage_bucket": "twopescrow-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:206582881380:android:1dd7081c9983cba5ad1371",
+        "android_client_info": {
+          "package_name": "com.twopescrow.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB1gtaB_cOI5nsmCTNvJuGq6o06MTNuqY4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
