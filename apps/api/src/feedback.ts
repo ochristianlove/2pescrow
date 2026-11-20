@@ -75,3 +75,42 @@ export async function submitFeedback(opts: {
 
   return { id: row.id, emailSent: emailResult.sent };
 }
+
+export async function submitPublicHelp(opts: {
+  name: string;
+  email: string;
+  message: string;
+  log: { info: (obj: object, msg?: string) => void; warn?: (obj: object, msg?: string) => void };
+}) {
+  const row = await prisma.feedbackSubmission.create({
+    data: {
+      email: opts.email,
+      displayName: opts.name,
+      category: "other",
+      subject: "Help request",
+      message: opts.message,
+      pagePath: "/help",
+    },
+  });
+
+  const emailResult = await sendFeedbackToAdminEmail({
+    adminEmail: config.adminEmail,
+    fromUserEmail: opts.email,
+    fromDisplayName: opts.name,
+    category: "Help",
+    subject: "Help request",
+    message: opts.message,
+    pagePath: "/help",
+    submissionId: row.id,
+    log: opts.log,
+  });
+
+  if (emailResult.sent) {
+    await prisma.feedbackSubmission.update({
+      where: { id: row.id },
+      data: { emailSent: true },
+    });
+  }
+
+  return { id: row.id, emailSent: emailResult.sent };
+}

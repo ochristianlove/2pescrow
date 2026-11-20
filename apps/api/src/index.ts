@@ -114,7 +114,7 @@ import {
   losingPartyRole,
   partyRoleOnEscrow,
 } from "./disputeAppeals";
-import { feedbackCategorySchema, submitFeedback } from "./feedback";
+import { feedbackCategorySchema, submitFeedback, submitPublicHelp } from "./feedback";
 import {
   escrowWalletWhere,
   isEvmAddress,
@@ -1316,6 +1316,36 @@ registerBlogRoutes(app);
 registerEthereumFundingRoutes(app);
 registerFaqRoutes(app);
 registerBrandRoutes(app);
+
+app.post("/v1/help", async (req, reply) => {
+  const body = z
+    .object({
+      name: z.string().trim().min(1).max(80),
+      email: z.string().trim().email().max(200),
+      message: z.string().trim().min(10).max(8000),
+    })
+    .parse(req.body ?? {});
+
+  try {
+    const result = await submitPublicHelp({
+      name: body.name,
+      email: body.email,
+      message: body.message,
+      log: req.log,
+    });
+    return {
+      ok: true,
+      id: result.id,
+      emailSent: result.emailSent,
+      message: result.emailSent
+        ? "Thank you — your message was sent to the team."
+        : "Thank you — we saved your message. Email delivery is pending.",
+    };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return reply.code(400).send({ error: message });
+  }
+});
 
 app.post("/v1/feedback", async (req, reply) => {
   const auth = await requireUser(req, reply);

@@ -20,6 +20,7 @@ import { VerifyTradeRecordPage } from "./pages/VerifyTradeRecord";
 import { TermsPage } from "./pages/Terms";
 import { PrivacyPage } from "./pages/Privacy";
 import { FaqPage } from "./pages/Faq";
+import { HelpPage } from "./pages/Help";
 import { BlogPage, BlogPostPage } from "./pages/Blog";
 
 function Routes() {
@@ -37,6 +38,7 @@ function Routes() {
   if (path === "/terms") return <TermsPage />;
   if (path === "/privacy") return <PrivacyPage />;
   if (path === "/faq") return <FaqPage />;
+  if (path === "/help") return <HelpPage />;
   if (path === "/blog") return <BlogPage />;
   if (path === "/trades") return <TradesPage />;
   if (path === "/trades/new") return <CreateTradePage />;

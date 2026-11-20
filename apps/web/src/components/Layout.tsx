@@ -48,7 +48,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const dash = dashboardPath(user);
   const hideChrome = path.startsWith("/sys/");
   const isHome = path === "/";
-  const showFooter = isHome || path === "/blog" || path.startsWith("/blog/") || path === "/terms" || path === "/privacy" || path === "/faq";
+  const showFooter = isHome || path === "/blog" || path.startsWith("/blog/") || path === "/terms" || path === "/privacy" || path === "/faq" || path === "/help";
   const { settings } = usePlatformSettings();
   const { t } = useLanguage();
   const brandTitle = settings?.siteTitle?.trim() || "2Pescrow";
@@ -137,6 +137,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <Link to="/trades">{t("Open trades")}</Link>
             <Link to="/referrals">{t("Referrals")}</Link>
             <Link to="/faq">{t("FAQ")}</Link>
+            <Link to="/help">{t("Help")}</Link>
           </div>
           <div>
             <h2>{t("Read")}</h2>
