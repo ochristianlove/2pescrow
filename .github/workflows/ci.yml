@@ -85,6 +85,8 @@ jobs:
           EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          EXPO_APPLE_TEAM_ID: T4Y9L72F8B
+          EXPO_APPLE_TEAM_TYPE: INDIVIDUAL
         run: |
           set -euo pipefail
           if [ -z "${EXPO_TOKEN}" ] || [ -z "${EXPO_ASC_KEY_ID}" ] || [ -z "${EXPO_ASC_ISSUER_ID}" ] || [ -z "${ASC_PRIVATE_KEY}" ]; then
