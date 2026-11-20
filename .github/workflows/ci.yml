@@ -63,3 +63,35 @@ jobs:
           name: 2pescrow-web
           path: apps/web/dist
           if-no-files-found: error
+
+  # Runs only for a push whose message asks for it, so ordinary CI does not start a store build.
+  ios-production:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[ios-production]')
+    name: Queue iOS production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Queue the iOS production build
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${EXPO_TOKEN}" ] || [ -z "${EXPO_ASC_KEY_ID}" ] || [ -z "${EXPO_ASC_ISSUER_ID}" ] || [ -z "${ASC_PRIVATE_KEY}" ]; then
+            echo "EXPO_TOKEN, ASC_KEY_ID, ASC_ISSUER_ID, and ASC_PRIVATE_KEY are required." >&2
+            exit 1
+          fi
+          key_path="${RUNNER_TEMP}/AuthKey.p8"
+          printf '%s\n' "$ASC_PRIVATE_KEY" > "$key_path"
+          export EXPO_ASC_API_KEY_PATH="$key_path"
+          npx --yes eas-cli@27.10.0 build --platform ios --profile production --non-interactive --no-wait
