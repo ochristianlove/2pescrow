@@ -1,0 +1,2 @@
+apps/api/scripts/*.sh text eol=lf
+apps/api/prisma/migrations/**/migration.sql text eol=lf
