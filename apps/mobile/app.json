@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.twopescrow.app",
-      "buildNumber": "8",
+      "buildNumber": "9",
       "appleTeamId": "T4Y9L72F8B",
       "associatedDomains": [
         "applinks:2pescrow.com"

@@ -394,6 +394,7 @@ jobs:
             -H "content-type: application/json" \
             -d "$(jq -n --arg applicationId "${APPLICATION_ID}" --arg title "GitHub Actions ${SHA}" '{applicationId:$applicationId, title:$title}')" > /dev/null
           seen_running=0
+          finished=0
           for _ in $(seq 1 40); do
             status=$(curl -fsS "${DOKPLOY_URL}/api/application.one?applicationId=${APPLICATION_ID}" \
               -H "x-api-key: ${DOKPLOY_API_KEY}" | jq -r '.applicationStatus')
@@ -402,12 +403,27 @@ jobs:
               seen_running=1
             fi
             if [ "${status}" = "done" ] && [ "${seen_running}" = "1" ]; then
-              exit 0
+              finished=1
+              break
             fi
             if [ "${status}" = "error" ]; then
               exit 1
             fi
             sleep 15
           done
-          echo "API deploy did not finish." >&2
+          if [ "${finished}" != "1" ]; then
+            echo "API deploy did not finish." >&2
+            exit 1
+          fi
+          # Dokploy "done" only means the container was replaced. Confirm the process answers before the run succeeds.
+          health_url="https://api.45.90.223.177.sslip.io/health"
+          for _ in $(seq 1 20); do
+            if curl -fsS --max-time 10 "${health_url}" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true'; then
+              echo "API health check passed: ${health_url}"
+              exit 0
+            fi
+            echo "API is not healthy yet."
+            sleep 10
+          done
+          echo "API deploy finished but ${health_url} did not return ok." >&2
           exit 1

@@ -12,8 +12,15 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   # Local SMTP catch-all for magic-link / notification testing (no auth).
   mailpit:
@@ -37,9 +44,22 @@ services:
         "-c",
         "apk add --no-cache openssl >/dev/null 2>&1 || true; npx prisma generate && npx prisma migrate deploy && node dist/index.js",
       ]
+    restart: unless-stopped
     ports:
       - "3002:3000"
       - "8000:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
     environment:
       DATABASE_URL: postgresql://twopescrow:twopescrow@postgres:5432/twopescrow
       REDIS_URL: redis://redis:6379
@@ -73,8 +93,10 @@ services:
       - uploads:/data/uploads
       - ./apps/api/prisma:/app/apps/api/prisma
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_healthy
 
   indexer-tron:
     image: 2pescrow-indexer-tron:latest

@@ -34,7 +34,8 @@ EXECUTE PROCEDURE set_escrow_on_public_ledger();
 
 UPDATE "Escrow" SET "on_public_ledger" = "on_public_ledger";
 
-CREATE INDEX "Escrow_on_public_ledger_updated_at_idx" ON "Escrow"("on_public_ledger", "updated_at" DESC);
-CREATE INDEX "Escrow_buyer_user_id_idx" ON "Escrow"("buyer_user_id");
-CREATE INDEX "Escrow_seller_user_id_idx" ON "Escrow"("seller_user_id");
-CREATE INDEX "EscrowEvent_escrow_id_id_idx" ON "EscrowEvent"("escrow_id", "id" DESC);
+CREATE INDEX IF NOT EXISTS "Escrow_on_public_ledger_updated_at_idx" ON "Escrow"("on_public_ledger", "updated_at" DESC);
+-- These two already exist from 20261021100000_two_party_trades.
+CREATE INDEX IF NOT EXISTS "Escrow_buyer_user_id_idx" ON "Escrow"("buyer_user_id");
+CREATE INDEX IF NOT EXISTS "Escrow_seller_user_id_idx" ON "Escrow"("seller_user_id");
+CREATE INDEX IF NOT EXISTS "EscrowEvent_escrow_id_id_idx" ON "EscrowEvent"("escrow_id", "id" DESC);
