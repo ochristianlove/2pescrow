@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - cursor/api-start-and-prisma-generate
+      - main
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -25,7 +25,7 @@ jobs:
   phone-android:
     name: Build Android app (EAS preview)
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 360
     needs: verify
     steps:
       - uses: actions/checkout@v4
@@ -91,13 +91,65 @@ jobs:
           name: 2pescrow-android
           path: apps/mobile/dist/2pescrow-preview.apk
           if-no-files-found: error
+      - name: Build the Android app bundle for Play internal testing
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx --yes eas-cli@27.10.0 build --platform android --profile production --non-interactive --wait --json > eas-production.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          raw = Path("eas-production.json").read_text(encoding="utf-8")
+          positions = [p for p in (raw.find("{"), raw.find("[")) if p != -1]
+          if not positions:
+              raise SystemExit("EAS did not return JSON, so there is no Android App Bundle to submit.")
+          build, _ = json.JSONDecoder().raw_decode(raw[min(positions):])
+          if isinstance(build, list):
+              build = build[0]
+          status = str(build.get("status") or "").lower()
+          if status and status != "finished":
+              raise SystemExit("EAS Android production build status was %s" % status)
+          build_id = build.get("id") or ""
+          if not build_id:
+              raise SystemExit("EAS Android production build finished without an id.")
+          Path("production-build-id.txt").write_text(build_id, encoding="utf-8")
+          PY
+      - name: Submit the Android app bundle to Play internal testing
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PLAY_SERVICE_ACCOUNT_JSON}" ]; then
+            echo "Add the PLAY_SERVICE_ACCOUNT_JSON repository secret (the Play Console service account JSON key)." >&2
+            exit 1
+          fi
+          key_path="${RUNNER_TEMP}/play-service-account.json"
+          printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > "$key_path"
+          KEY_PATH="$key_path" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          path = Path("eas.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          android = data.setdefault("submit", {}).setdefault("production", {}).setdefault("android", {})
+          android["track"] = "internal"
+          android["serviceAccountKeyPath"] = os.environ["KEY_PATH"]
+          path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+          PY
+          npx --yes eas-cli@27.10.0 submit --platform android --profile production --id "$(cat production-build-id.txt)" --non-interactive --wait
 
   # Separate from the API deploy. An Apple credential failure must not skip Dokploy.
   # Ad hoc signing is not in the repo. EAS reuses credentials already stored on the Expo project.
   phone-ios:
     name: Build iOS app (EAS preview)
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 360
     needs: verify
     continue-on-error: true
     steps:
@@ -118,7 +170,7 @@ jobs:
             echo "Add the EXPO_TOKEN repository secret (an Expo access token) so EAS can authenticate." >&2
             exit 1
           fi
-          echo "iOS preview is an internal ad hoc build. This workflow does not submit it or request review."
+          echo "iOS preview is an internal ad hoc build. TestFlight submit uses a separate store build."
           echo "No Apple certificate, provisioning profile, or App Store Connect API key is stored in this repo."
           echo "EAS must already have the distribution certificate and ad hoc profile for com.twopescrow.app."
           npx --yes eas-cli@27.10.0 build --platform ios --profile preview --non-interactive --wait --json > eas-build.json
@@ -165,6 +217,64 @@ jobs:
           name: 2pescrow-ios
           path: apps/mobile/dist/2pescrow-preview.ipa
           if-no-files-found: error
+      - name: Build the iOS app for TestFlight
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx --yes eas-cli@27.10.0 build --platform ios --profile production --non-interactive --wait --json > eas-production.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          raw = Path("eas-production.json").read_text(encoding="utf-8")
+          positions = [p for p in (raw.find("{"), raw.find("[")) if p != -1]
+          if not positions:
+              raise SystemExit("EAS did not return JSON, so there is no iOS archive to submit.")
+          build, _ = json.JSONDecoder().raw_decode(raw[min(positions):])
+          if isinstance(build, list):
+              build = build[0]
+          status = str(build.get("status") or "").lower()
+          if status and status != "finished":
+              raise SystemExit("EAS iOS production build status was %s" % status)
+          build_id = build.get("id") or ""
+          if not build_id:
+              raise SystemExit("EAS iOS production build finished without an id.")
+          Path("production-build-id.txt").write_text(build_id, encoding="utf-8")
+          PY
+      - name: Submit the iOS app to TestFlight
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ASC_KEY_ID}" ] || [ -z "${ASC_ISSUER_ID}" ] || [ -z "${ASC_PRIVATE_KEY}" ]; then
+            echo "Add the ASC_KEY_ID, ASC_ISSUER_ID, and ASC_PRIVATE_KEY repository secrets." >&2
+            exit 1
+          fi
+          key_path="${RUNNER_TEMP}/AuthKey.p8"
+          printf '%s\n' "$ASC_PRIVATE_KEY" > "$key_path"
+          KEY_PATH="$key_path" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          path = Path("eas.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          ios = data.setdefault("submit", {}).setdefault("production", {}).setdefault("ios", {})
+          app_id = str(ios.get("ascAppId") or "")
+          if not app_id.isdigit():
+              raise SystemExit("Set eas.json submit.production.ios.ascAppId to the numeric App Store Connect app id before TestFlight submit can run.")
+          ios["ascApiKeyPath"] = os.environ["KEY_PATH"]
+          ios["ascApiKeyId"] = os.environ["ASC_KEY_ID"]
+          ios["ascApiKeyIssuerId"] = os.environ["ASC_ISSUER_ID"]
+          path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+          PY
+          npx --yes eas-cli@27.10.0 submit --platform ios --profile production --id "$(cat production-build-id.txt)" --non-interactive --wait
 
   web:
     name: Deploy website
