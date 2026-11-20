@@ -10,6 +10,7 @@ import { Button, Card } from "./ui";
 import { downloadTradeAgreement, MessageFile } from "./TradeFiles";
 import { TradeActions } from "./TradeActions";
 import { TradeRoleTags } from "./TradeRoleTags";
+import { LogoLoader } from "./LogoLoader";
 
 export function TradeRoom({ trade, userId, onWeb, onError, onChanged, composer, wallet }: {
   trade: TradeRow; userId?: string; onWeb: () => void; onError: (message: string) => void; onChanged: () => Promise<void>; composer?: ReactNode; wallet?: ReactNode;
@@ -20,10 +21,12 @@ export function TradeRoom({ trade, userId, onWeb, onError, onChanged, composer, 
   const downloadLock = useRef(false);
   const date = (value?: string | null) => dateLabel(value, language);
   const permission = tradePermissions(trade, userId);
+  const activityReady = Array.isArray(trade.events) || Array.isArray(trade.messages);
   const activity = tradeActivity(trade);
   const terms = plainTerms(trade.description || "");
   const canDownload = Boolean(trade.tradeCode && (permission.buyer || permission.seller || trade.partyRole === "admin"));
   const canDownloadSigned = Boolean(canDownload && trade.buyerUserId && trade.sellerUserId && trade.contractAddress && (permission.buyer || permission.seller));
+  if (!activityReady) return <LogoLoader fullScreen message="Loading trade room…" />;
   async function downloadAgreement() {
     if (downloadLock.current) return;
     downloadLock.current = true;

@@ -1,6 +1,7 @@
 import { Text } from "../../src/language";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState, KeyboardAvoidingView, Linking, Platform, RefreshControl, ScrollView, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AppState, KeyboardAvoidingView, Linking, Platform, RefreshControl, ScrollView, View } from "react-native";
 import { useLocalSearchParams, useFocusEffect, useRouter } from "expo-router";
 import { api, ApiError } from "../../src/api";
 import { AppBottomNav } from "../../src/AppBottomNav";
@@ -16,6 +17,10 @@ import { TradeRoom } from "../../src/TradeRoom";
 import { EvidenceComposer } from "../../src/TradeFiles";
 import { TradeWallet } from "../../src/TradeWallet";
 import { LogoLoader } from "../../src/LogoLoader";
+
+function escrowCacheKey(id: string) {
+  return `twopescrow.escrow:${id}`;
+}
 
 export default function TradeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -34,7 +39,11 @@ export default function TradeScreen() {
     const request = ++generation.current;
     try {
       const result = await api<TradeRow>(`/v1/escrows/${encodeURIComponent(id)}`);
-      if (request === generation.current) { setTrade(result); setError(null); }
+      if (request === generation.current) {
+        setTrade(result);
+        setError(null);
+        void AsyncStorage.setItem(escrowCacheKey(id), JSON.stringify(result)).catch(() => undefined);
+      }
     } catch (err) {
       if (request === generation.current) setError(err instanceof ApiError ? err.message : "Could not refresh this trade. Pull down to try again.");
     }
@@ -47,6 +56,19 @@ export default function TradeScreen() {
       setMessage("");
     }
     if (id) trackEscrowId(id);
+    if (!id) return;
+    let cancelled = false;
+    void AsyncStorage.getItem(escrowCacheKey(id)).then((raw) => {
+      if (cancelled || !raw) return;
+      try {
+        const cached = JSON.parse(raw) as TradeRow;
+        if (!cached || cached.id !== id) return;
+        setTrade((current) => current ?? cached);
+      } catch {
+        // ignore cache parse error
+      }
+    });
+    return () => { cancelled = true; };
   }, [id, trackEscrowId]);
   useEffect(() => {
     const latest = notifications.find((item) => item.escrowId === id);
@@ -81,23 +103,29 @@ export default function TradeScreen() {
     } catch (err) { setError(err instanceof ApiError ? err.message : "Could not send your message. Your text is saved here; try again."); }
     finally { actionLock.current = false; setBusy(null); }
   }
+  const waiting = !trade || !permission;
   return <View style={{ flex: 1, backgroundColor: colors.bg }}>
     <AppTopBar />
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    {waiting ? <View style={{ flex: 1 }}>
+      {error ? <View style={{ padding: 16, gap: 12 }}>
+        <Button label="Back to trades" tone="ghost" onPress={() => router.replace("/(app)/trades")} />
+        <Notice text={error} />
+        <Button label="Try again" tone="ghost" onPress={() => void load()} />
+      </View> : <LogoLoader fullScreen message="Loading trade room…" />}
+    </View> : <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }} keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} tintColor={colors.accent} onRefresh={() => { setRefreshing(true); void load().finally(() => setRefreshing(false)); }} />}>
         <Button label="Back to trades" tone="ghost" onPress={() => router.replace("/(app)/trades")} />
         {error ? <View style={{ marginTop: 16 }}><Notice text={error} /><Button label="Try again" tone="ghost" onPress={() => void load()} /></View> : null}
-        {!trade || !permission ? (!error && <LogoLoader message="Loading trade room…" />) :
-          <TradeRoom trade={trade} userId={user?.id} onWeb={() => void openWeb()} onError={setError} onChanged={load}
-            wallet={<TradeWallet trade={trade} onLinked={load} />}
-            composer={permission.canPost ? <View style={{ marginTop: 16, gap: 10 }}>
-              <Field label="Message" value={message} editable={!busy} maxLength={4000} onChangeText={setMessage} placeholder="Write to the other person" multiline />
-              <Button label="Send message" onPress={() => void send()} busy={busy === "message"} disabled={!message.trim() || Boolean(busy)} />
-              {permission.party ? <EvidenceComposer trade={trade} seller={permission.seller} disabled={Boolean(busy)} onBusy={value => { actionLock.current = value; setBusy(value ? "file" : null); }} onUploaded={load} /> : null}
-            </View> : <Text style={{ color: colors.muted, marginTop: 16 }}>{user ? "Only trade participants can send messages." : "Sign in with your trade account to send messages."}</Text>} />}
+        <TradeRoom trade={trade} userId={user?.id} onWeb={() => void openWeb()} onError={setError} onChanged={load}
+          wallet={<TradeWallet trade={trade} onLinked={load} />}
+          composer={permission.canPost ? <View style={{ marginTop: 16, gap: 10 }}>
+            <Field label="Message" value={message} editable={!busy} maxLength={4000} onChangeText={setMessage} placeholder="Write to the other person" multiline />
+            <Button label="Send message" onPress={() => void send()} busy={busy === "message"} disabled={!message.trim() || Boolean(busy)} />
+            {permission.party ? <EvidenceComposer trade={trade} seller={permission.seller} disabled={Boolean(busy)} onBusy={value => { actionLock.current = value; setBusy(value ? "file" : null); }} onUploaded={load} /> : null}
+          </View> : <Text style={{ color: colors.muted, marginTop: 16 }}>{user ? "Only trade participants can send messages." : "Sign in with your trade account to send messages."}</Text>} />
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingView>}
     <AppBottomNav active="escrows" />
   </View>;
 }

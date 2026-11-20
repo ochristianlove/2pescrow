@@ -1,8 +1,10 @@
 import { Text, TextInput } from "../../src/language";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Linking, Pressable, ScrollView, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { api, ApiError } from "../../src/api";
+import { LogoLoader } from "../../src/LogoLoader";
 import { AppBottomNav } from "../../src/AppBottomNav";
 import { AppTopBar } from "../../src/AppTopBar";
 import { useAuth } from "../../src/auth";
@@ -44,6 +46,17 @@ type Referral = {
   pendingBalanceAtomic?: string;
 };
 
+type DashboardCache = {
+  dash: Dash;
+  history: HistoryRow[];
+  cursor: string | null;
+  referral: Referral | null;
+};
+
+function dashboardCacheKey(userId: string) {
+  return `twopescrow.dashboard:${userId}`;
+}
+
 function eventLabel(name: string) {
   return name.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
 }
@@ -52,6 +65,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { syncEscrowIds } = useLiveNotifications();
+  const fresh = useRef(false);
   const [data, setData] = useState<Dash | null>(null);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -69,16 +83,40 @@ export default function DashboardScreen() {
         api<HistoryPage>("/v1/me/history?limit=5"),
         api<Referral>("/v1/me/referral"),
       ]);
+      fresh.current = true;
       setData(dash);
       if (dash.myTrades) syncEscrowIds(dash.myTrades.map((trade) => trade.id));
       setHistory(hist.items);
       setCursor(hist.nextCursor);
       setReferral(ref);
       setError(null);
+      if (user?.id) {
+        const payload: DashboardCache = { dash, history: hist.items, cursor: hist.nextCursor, referral: ref };
+        void AsyncStorage.setItem(dashboardCacheKey(user.id), JSON.stringify(payload)).catch(() => undefined);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not load the dashboard.");
     }
-  }, [syncEscrowIds]);
+  }, [syncEscrowIds, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    void AsyncStorage.getItem(dashboardCacheKey(user.id)).then((raw) => {
+      if (cancelled || fresh.current || !raw) return;
+      try {
+        const cached = JSON.parse(raw) as DashboardCache;
+        if (!cached?.dash) return;
+        setData((current) => current ?? cached.dash);
+        setHistory((current) => current.length > 0 ? current : cached.history ?? []);
+        setCursor((current) => current ?? cached.cursor ?? null);
+        setReferral((current) => current ?? cached.referral ?? null);
+      } catch {
+        // ignore cache parse error
+      }
+    });
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
@@ -134,6 +172,7 @@ export default function DashboardScreen() {
       <AppTopBar />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 28 }}>
         {error ? <Notice text={error} /> : null}
+        {!data ? <LogoLoader message="Loading your dashboard…" /> : <>
         <View style={styles.welcome}>
           <Text style={styles.eyebrow}>Dashboard</Text>
           <Text style={styles.title}>
@@ -261,6 +300,7 @@ export default function DashboardScreen() {
           <Text style={styles.lede}>Buyer funds · seller delivers proof · approve 90/10 or open a dispute.</Text>
           <Button label="How it works" tone="ghost" onPress={() => router.replace("/")} />
         </View>
+        </>}
       </ScrollView>
       <AppBottomNav active="home" />
     </View>
