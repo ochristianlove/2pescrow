@@ -38,12 +38,7 @@ services:
         # Pass the checked-out commit so a rebuild cannot keep yesterday's compile.
         SOURCE_REV: ${SOURCE_REV:-local}
     # Existing image: install OpenSSL, regenerate Prisma client for musl+openssl3, then migrate+start.
-    command:
-      [
-        "sh",
-        "-c",
-        "apk add --no-cache openssl >/dev/null 2>&1 || true; npx prisma generate && npx prisma migrate deploy && node dist/index.js",
-      ]
+    command: ["sh", "scripts/start.sh"]
     restart: unless-stopped
     ports:
       - "3002:3000"
@@ -92,6 +87,7 @@ services:
     volumes:
       - uploads:/data/uploads
       - ./apps/api/prisma:/app/apps/api/prisma
+      - ./apps/api/scripts/start.sh:/app/apps/api/scripts/start.sh:ro
     depends_on:
       postgres:
         condition: service_started

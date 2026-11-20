@@ -15,4 +15,4 @@ WORKDIR /app/apps/api
 RUN npx prisma generate
 RUN echo "Building API source ${SOURCE_REV}" && npm run build
 EXPOSE 3000
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "scripts/start.sh"]

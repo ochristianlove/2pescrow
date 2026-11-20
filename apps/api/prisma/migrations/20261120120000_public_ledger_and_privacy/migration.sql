@@ -1,8 +1,8 @@
 -- Public ledger membership is maintained by the trigger so list queries
 -- can use one indexed predicate instead of a five-way OR.
-ALTER TABLE "Escrow" ADD COLUMN "on_public_ledger" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Escrow" ADD COLUMN IF NOT EXISTS "on_public_ledger" BOOLEAN NOT NULL DEFAULT false;
 
-ALTER TABLE "User" ADD COLUMN "hide_from_public_ledger" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "hide_from_public_ledger" BOOLEAN NOT NULL DEFAULT false;
 
 CREATE OR REPLACE FUNCTION set_escrow_on_public_ledger()
 RETURNS TRIGGER
@@ -27,6 +27,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS escrow_public_ledger_flag ON "Escrow";
 CREATE TRIGGER escrow_public_ledger_flag
 BEFORE INSERT OR UPDATE ON "Escrow"
 FOR EACH ROW
