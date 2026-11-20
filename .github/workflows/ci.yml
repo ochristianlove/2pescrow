@@ -97,3 +97,44 @@ jobs:
           printf '%s\n' "$ASC_PRIVATE_KEY" > "$key_path"
           export EXPO_ASC_API_KEY_PATH="$key_path"
           npx --yes eas-cli@27.10.0 build --platform ios --profile production --non-interactive --no-wait
+
+  # Store app bundle only. Preview APKs stay on the deploy workflow.
+  android-production:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[android-production]')
+    name: Queue Android Play internal release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Queue the Android production build and Play internal submit
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "${EXPO_TOKEN}" ] || [ -z "${PLAY_SERVICE_ACCOUNT_JSON}" ]; then
+            echo "EXPO_TOKEN and PLAY_SERVICE_ACCOUNT_JSON are required." >&2
+            exit 1
+          fi
+          key_path="${RUNNER_TEMP}/play-service-account.json"
+          printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > "$key_path"
+          KEY_PATH="$key_path" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          path = Path("eas.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          android = data.setdefault("submit", {}).setdefault("production", {}).setdefault("android", {})
+          android["track"] = "internal"
+          android["releaseStatus"] = "completed"
+          android["serviceAccountKeyPath"] = os.environ["KEY_PATH"]
+          path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+          PY
+          npx --yes eas-cli@27.10.0 build --platform android --profile production --non-interactive --auto-submit --no-wait
