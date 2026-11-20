@@ -3,6 +3,7 @@ export type SessionUser = {
   email: string | null;
   role: string;
   displayName: string | null;
+  hideFromPublicLedger?: boolean;
   permissions?: string[];
   wallets?: { id?: string; address: string; chainKind?: string }[];
 };

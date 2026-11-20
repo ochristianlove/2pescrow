@@ -10,6 +10,7 @@ import { useLiveNotifications } from "../../src/liveNotifications";
 import { breakable, formatAmount, shortAddr, tokenLabel } from "../../src/format";
 import { TradeRoleTags } from "../../src/TradeRoleTags";
 import { TradePartyBadge } from "../../src/TradePartyBadge";
+import { readableLabel, statusColor } from "../../src/tradePresentation";
 import { colors } from "../../src/theme";
 import { Button, Notice } from "../../src/ui";
 
@@ -181,7 +182,24 @@ export default function DashboardScreen() {
                 seller={trade.sellerUser?.displayName || (trade.sellerAddress ? shortAddr(trade.sellerAddress) : "")}
               />
             </View>
-            <Text style={styles.badge}>{trade.status}</Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 5,
+                backgroundColor: `${statusColor(trade.status)}22`,
+                borderColor: `${statusColor(trade.status)}55`,
+                borderWidth: 1,
+                borderRadius: 6,
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+              }}
+            >
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor(trade.status) }} />
+              <Text style={{ color: statusColor(trade.status), fontWeight: "700", fontSize: 12 }}>
+                {readableLabel(trade.status)}
+              </Text>
+            </View>
           </Pressable>
         ))}
 
@@ -329,7 +347,6 @@ const styles = {
     marginBottom: 8,
   },
   rowTitle: { color: "#e8f4f2", fontWeight: "700" as const, flexShrink: 1 },
-  badge: { color: "#e8b84a", fontSize: 12, fontWeight: "700" as const },
   link: { color: "#3ecf8e", fontWeight: "700" as const, marginTop: 8 },
   line: { flexDirection: "row" as const, justifyContent: "space-between" as const, gap: 12 },
   history: { color: "#8aa3ad", fontSize: 14, lineHeight: 22, marginBottom: 8 },

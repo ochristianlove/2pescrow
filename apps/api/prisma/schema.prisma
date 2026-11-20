@@ -12,6 +12,7 @@ model User {
   id                    String   @id @default(uuid())
   email                 String?  @unique
   displayName           String?  @map("display_name")
+  hideFromPublicLedger  Boolean  @default(false) @map("hide_from_public_ledger")
   role                  String   @default("user")
   permissions           String[] @default([])
   passwordHash          String?  @map("password_hash")
@@ -254,6 +255,7 @@ model Escrow {
   proofHash        String?  @map("proof_hash")
   proofFilePath    String?  @map("proof_file_path")
   createTxHash     String?  @map("create_tx_hash")
+  onPublicLedger   Boolean  @default(false) @map("on_public_ledger")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
   events           EscrowEvent[]
@@ -262,6 +264,10 @@ model Escrow {
   messages         ChatMessage[]
   tradeRecords     TradeRecord[]
   fundingAttempts  EthereumFundingAttempt[]
+
+  @@index([onPublicLedger, updatedAt(sort: Desc)])
+  @@index([buyerUserId])
+  @@index([sellerUserId])
 }
 
 /// Durable wallet intent. Active rows never expire into a new nonce: uncertain sends must reconcile.
@@ -315,6 +321,8 @@ model EscrowEvent {
   txHash      String?  @map("tx_hash")
   payload     Json?
   createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([escrowId, id(sort: Desc)])
 }
 
 model Dispute {

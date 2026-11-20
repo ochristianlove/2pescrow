@@ -270,6 +270,9 @@ a:hover { text-decoration: underline; }
   text-decoration: none !important;
 }
 .profile-feedback-card { margin-bottom: 1rem; }
+.profile-privacy { margin-top: 1rem; }
+.profile-privacy summary { cursor: pointer; font-weight: 700; }
+.profile-privacy .check-row { margin-top: 0.75rem; }
 .wallet-connected { display: flex; gap: 0.5rem; align-items: center; }
 .language-picker { position: relative; flex-shrink: 0; }
 .language-picker-button { min-width: 2rem; min-height: 2rem; padding: 0 .1rem; font-size: .8rem; font-weight: 700; line-height: 1; color: var(--text); background: transparent; border: 0; border-radius: 0; box-shadow: none; }

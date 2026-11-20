@@ -64,6 +64,8 @@ export default function AccountScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [legal, setLegal] = useState<LegalDoc | null>(null);
   const [feedbackEnabled, setFeedbackEnabled] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [privacyMsg, setPrivacyMsg] = useState<string | null>(null);
 
   const loadReferral = useCallback(async () => {
     try {
@@ -144,6 +146,24 @@ export default function AccountScreen() {
       setNote("Referral link is ready.");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create a referral link.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function setLedgerPrivacy(hide: boolean) {
+    setBusy("privacy");
+    setError(null);
+    setPrivacyMsg(null);
+    try {
+      await api("/v1/me/profile", {
+        method: "PATCH",
+        body: JSON.stringify({ hideFromPublicLedger: hide }),
+      });
+      await refresh();
+      setPrivacyMsg(hide ? "Your trades are hidden from the public ledger." : "Your trades can appear on the public ledger.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update privacy.");
     } finally {
       setBusy(null);
     }
@@ -245,6 +265,30 @@ export default function AccountScreen() {
             <Button label="Get my referral link" tone="ghost" onPress={() => void enroll()} busy={busy === "referral"} />
           </>
         )}
+      </Card>
+      <Card>
+        <Pressable accessibilityRole="button" onPress={() => setPrivacyOpen((open) => !open)}>
+          <Text style={{ color: colors.text, fontWeight: "700" }}>Privacy</Text>
+          <Text style={{ color: colors.muted, marginTop: 4 }}>Ledger visibility</Text>
+        </Pressable>
+        {privacyOpen ? (
+          <View style={{ marginTop: 12 }}>
+            <Text style={{ color: colors.muted, lineHeight: 20, marginBottom: 10 }}>
+              Hide your trades from the public ledger and the activity feed. You and the other party still see them when signed in.
+            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Switch
+                value={Boolean(user?.hideFromPublicLedger)}
+                onValueChange={(value) => void setLedgerPrivacy(value)}
+                disabled={busy === "privacy"}
+                trackColor={{ false: colors.line, true: "#1f6b4a" }}
+                thumbColor={user?.hideFromPublicLedger ? colors.accent : colors.muted}
+              />
+              <Text style={{ color: colors.text, flex: 1, lineHeight: 20 }}>Hide my trades from the public ledger</Text>
+            </View>
+            {privacyMsg ? <Text style={{ color: colors.muted, marginTop: 8 }}>{privacyMsg}</Text> : null}
+          </View>
+        ) : null}
       </Card>
       <Button label="Privacy policy" tone="ghost" onPress={() => setLegal("privacy")} />
       {legal ? <LegalSheet key={legal} doc={legal} onClose={() => setLegal(null)} /> : null}

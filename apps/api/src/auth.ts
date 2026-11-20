@@ -28,6 +28,7 @@ export function sessionView(user: {
   role: string;
   displayName: string | null;
   permissions?: string[] | null;
+  hideFromPublicLedger?: boolean;
 }) {
   return {
     id: user.id,
@@ -35,6 +36,7 @@ export function sessionView(user: {
     role: user.role,
     displayName: user.displayName,
     permissions: normalizePermissions(user.role, user.permissions),
+    hideFromPublicLedger: Boolean(user.hideFromPublicLedger),
   };
 }
 

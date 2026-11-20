@@ -139,6 +139,36 @@ function serializeEscrow<T extends { events?: { id: bigint; blockNumber: bigint 
   };
 }
 
+const publicEscrowSelect = {
+  id: true,
+  chain: true,
+  chainId: true,
+  title: true,
+  status: true,
+  buyerAddress: true,
+  sellerAddress: true,
+  buyerUserId: true,
+  sellerUserId: true,
+  tokenSymbol: true,
+  tokenAddress: true,
+  amountAtomic: true,
+  contractAddress: true,
+  tradeCode: true,
+  createdAt: true,
+  updatedAt: true,
+  buyerUser: { select: { id: true, displayName: true } },
+  sellerUser: { select: { id: true, displayName: true } },
+} satisfies Prisma.EscrowSelect;
+
+const hiddenFromPublicLedger: Prisma.EscrowWhereInput = {
+  NOT: {
+    OR: [
+      { buyerUser: { is: { hideFromPublicLedger: true } } },
+      { sellerUser: { is: { hideFromPublicLedger: true } } },
+    ],
+  },
+};
+
 async function ensureSettings() {
   const existing = await prisma.platformSettings.findUnique({ where: { id: 1 } });
   if (existing) return existing;
@@ -414,12 +444,19 @@ app.patch("/v1/me/profile", async (req, reply) => {
   if (!auth) return;
   const body = z
     .object({
-      displayName: z.string().trim().min(1).max(80),
+      displayName: z.string().trim().min(1).max(80).optional(),
+      hideFromPublicLedger: z.boolean().optional(),
+    })
+    .refine((value) => value.displayName !== undefined || value.hideFromPublicLedger !== undefined, {
+      message: "Nothing to update",
     })
     .parse(req.body);
   const updated = await prisma.user.update({
     where: { id: auth.id },
-    data: { displayName: body.displayName },
+    data: {
+      ...(body.displayName !== undefined ? { displayName: body.displayName } : {}),
+      ...(body.hideFromPublicLedger !== undefined ? { hideFromPublicLedger: body.hideFromPublicLedger } : {}),
+    },
     include: { wallets: true },
   });
   return {
@@ -437,7 +474,6 @@ app.get("/v1/me/dashboard", async (req, reply) => {
   const escrows = await prisma.escrow.findMany({
     where,
     orderBy: { updatedAt: "desc" },
-    include: { events: { take: 5, orderBy: { id: "desc" } }, disputes: true },
   });
   const active = escrows.filter((e) => ACTIVE_ESCROW_STATUSES.includes(e.status as (typeof ACTIVE_ESCROW_STATUSES)[number])).length;
   const completed = escrows.filter((e) => ["Completed", "Resolved"].includes(e.status)).length;
@@ -470,7 +506,7 @@ app.get("/v1/me/trades", async (req, reply) => {
   const escrows = await prisma.escrow.findMany({
     where,
     orderBy: { updatedAt: "desc" },
-    include: { events: { take: 5, orderBy: { id: "desc" } } },
+    select: publicEscrowSelect,
   });
   return escrows.map((e) => mapUserEscrowRow(e, auth.id));
 });
@@ -1218,7 +1254,14 @@ app.get("/v1/me/history", async (req, reply) => {
     },
     orderBy: { id: "desc" },
     take: limit + 1,
-    include: { escrow: true },
+    select: {
+      id: true,
+      eventName: true,
+      txHash: true,
+      createdAt: true,
+      escrowId: true,
+      escrow: { select: { title: true, status: true, amountAtomic: true, tokenSymbol: true, chain: true } },
+    },
   });
   const hasMore = events.length > limit;
   const page = hasMore ? events.slice(0, limit) : events;
@@ -1612,93 +1655,97 @@ app.post("/v1/escrows/join", async (req, reply) => {
 
 app.get("/v1/escrows", async (req) => {
   const q = req.query as { wallet?: string };
-  const walletWhere = q.wallet ? escrowWalletWhere([q.wallet]) : {};
-  let where: any;
-  if (q.wallet) {
-    where = walletWhere;
-  } else {
-    // Public ledger: show real conducted trades (on blockchain, funded, in-progress, completed, resolved, disputed, or with joined parties)
-    where = {
-      OR: [
-        { contractAddress: { not: null } },
-        { createTxHash: { not: null } },
-        { status: { in: ["Funded", "InProgress", "Completed", "Resolved", "Disputed", "Refunded"] } },
-        {
-          AND: [
-            { buyerAddress: { not: null } },
-            { sellerAddress: { not: null } },
-            { status: { in: ["AwaitingFunding", "Funded", "InProgress", "Completed", "Resolved", "Disputed"] } },
-          ],
-        },
-        {
-          AND: [
-            { buyerUserId: { not: null } },
-            { sellerUserId: { not: null } },
-            { status: { notIn: ["Created"] } },
-          ],
-        },
-      ],
-    };
-  }
+  const where: Prisma.EscrowWhereInput = q.wallet
+    ? { AND: [escrowWalletWhere([q.wallet]), hiddenFromPublicLedger] }
+    : { AND: [{ onPublicLedger: true }, hiddenFromPublicLedger] };
   const rows = await prisma.escrow.findMany({
     where,
     orderBy: { updatedAt: "desc" },
     take: 50,
-    include: { events: { take: 20, orderBy: { id: "desc" } } },
+    select: publicEscrowSelect,
   });
-  return rows.map(serializeEscrow);
+  return rows;
 });
 
 app.get("/v1/escrows/:id", async (req, reply) => {
   const { id } = req.params as { id: string };
+  const head = await prisma.escrow.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      tradeCode: true,
+      chain: true,
+      buyerUserId: true,
+      sellerUserId: true,
+      buyerAddress: true,
+      sellerAddress: true,
+      buyerUser: { select: { hideFromPublicLedger: true } },
+      sellerUser: { select: { hideFromPublicLedger: true } },
+    },
+  });
+  if (!head) return reply.code(404).send({ error: "Not found" });
+  const auth = await optionalUser(req);
+  const role = auth ? await escrowPartyRole(auth, head) : null;
+  const hidden = Boolean(head.buyerUser?.hideFromPublicLedger || head.sellerUser?.hideFromPublicLedger);
+  if (hidden && !role) return reply.code(404).send({ error: "Not found" });
+
+  if (role) {
+    const escrow = await prisma.escrow.findUnique({
+      where: { id },
+      include: {
+        events: { orderBy: { id: "desc" } },
+        disputes: { orderBy: { createdAt: "desc" }, include: disputeStaffInclude },
+        messages: {
+          select: { id: true, authorUserId: true, recipientUserId: true, kind: true, body: true, fileName: true, createdAt: true },
+          orderBy: { createdAt: "asc" },
+        },
+        buyerUser: { select: { id: true, displayName: true, email: true } },
+        sellerUser: { select: { id: true, displayName: true, email: true } },
+      },
+    });
+    if (!escrow) return reply.code(404).send({ error: "Not found" });
+    const serialized = serializeEscrow(escrow);
+    return {
+      ...serialized,
+      messages: role === "admin"
+        ? serialized.messages
+        : serialized.messages?.filter((message) => !message.recipientUserId || message.recipientUserId === auth!.id),
+      disputes: serialized.disputes?.map((dispute) => ({
+        ...dispute,
+        evidence: dispute.evidence?.map(({ filePath, ...item }) => ({ ...item, fileAvailable: Boolean(filePath) })),
+      })),
+      partyRole: role,
+    };
+  }
+
   const escrow = await prisma.escrow.findUnique({
     where: { id },
-    include: {
-      events: { orderBy: { id: "desc" } },
-      disputes: { orderBy: { createdAt: "desc" }, include: disputeStaffInclude },
-      messages: {
-        select: { id: true, authorUserId: true, recipientUserId: true, kind: true, body: true, fileName: true, createdAt: true },
-        orderBy: { createdAt: "asc" },
+    select: {
+      ...publicEscrowSelect,
+      description: true,
+      proofHash: true,
+      createTxHash: true,
+      joinDeadlineAt: true,
+      fundDeadlineAt: true,
+      deliveryDeadlineAt: true,
+      reviewDeadlineAt: true,
+      deliveryWindowHours: true,
+      reviewWindowHours: true,
+      events: {
+        where: { NOT: { eventName: { startsWith: "DeadlineReminder:" } } },
+        orderBy: { id: "desc" },
+        take: 20,
+        select: { id: true, eventName: true, blockNumber: true, txHash: true, createdAt: true },
       },
-      buyerUser: { select: { id: true, displayName: true, email: true } },
-      sellerUser: { select: { id: true, displayName: true, email: true } },
     },
   });
   if (!escrow) return reply.code(404).send({ error: "Not found" });
-  if (escrow.tradeCode) {
-    const auth = await optionalUser(req);
-    const role = auth ? await escrowPartyRole(auth, escrow) : null;
-    if (role) {
-      const serialized = serializeEscrow(escrow);
-      return {
-        ...serialized,
-        messages: role === "admin"
-          ? serialized.messages
-          : serialized.messages?.filter((message) => !message.recipientUserId || message.recipientUserId === auth!.id),
-        disputes: serialized.disputes?.map((dispute) => ({
-          ...dispute,
-          evidence: dispute.evidence?.map(({ filePath, ...item }) => ({ ...item, fileAvailable: Boolean(filePath) })),
-        })),
-        partyRole: role,
-      };
-    }
-    // Public / spectator view: allow checking conducted trade status on blockchain and public ledger
-    // Private chat messages, dispute evidence, and party email addresses are stripped for safety
-    const serialized = serializeEscrow({
-      ...escrow,
-      buyerUser: escrow.buyerUser ? { id: escrow.buyerUser.id, displayName: escrow.buyerUser.displayName, email: null } : null,
-      sellerUser: escrow.sellerUser ? { id: escrow.sellerUser.id, displayName: escrow.sellerUser.displayName, email: null } : null,
-      messages: [],
-      disputes: [],
-    });
-    return {
-      ...serialized,
-      messages: [],
-      disputes: [],
-      partyRole: null,
-    };
-  }
-  return serializeEscrow(escrow);
+  return {
+    ...serializeEscrow(escrow),
+    messages: [],
+    disputes: [],
+    partyRole: null,
+  };
 });
 
 app.post("/v1/escrows/:id/trade-record", async (req, reply) => {
@@ -3452,10 +3499,19 @@ app.post("/v1/admin/email/send", async (req, reply) => {
 
 app.get("/v1/activity", async () => {
   const events = await prisma.escrowEvent.findMany({
-    where: { NOT: { eventName: { startsWith: "DeadlineReminder:" } } },
+    where: {
+      NOT: { eventName: { startsWith: "DeadlineReminder:" } },
+      escrow: { onPublicLedger: true, ...hiddenFromPublicLedger },
+    },
     take: 50,
     orderBy: { id: "desc" },
-    include: { escrow: true },
+    select: {
+      id: true,
+      eventName: true,
+      txHash: true,
+      blockNumber: true,
+      escrow: { select: { title: true, contractAddress: true, chain: true } },
+    },
   });
   return events.map((e) => ({
     ...e,

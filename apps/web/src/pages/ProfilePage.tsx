@@ -40,6 +40,8 @@ export function ProfilePage() {
   const [nameDraft, setNameDraft] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [nameMsg, setNameMsg] = useState<string | null>(null);
+  const [privacyBusy, setPrivacyBusy] = useState(false);
+  const [privacyMsg, setPrivacyMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -82,6 +84,29 @@ export function ProfilePage() {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setSavingName(false);
+    }
+  }
+
+  async function setLedgerPrivacy(hide: boolean) {
+    setPrivacyBusy(true);
+    setErr(null);
+    setPrivacyMsg(null);
+    try {
+      await api("/v1/me/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ hideFromPublicLedger: hide }),
+      });
+      await refresh();
+      setPrivacyMsg(
+        hide
+          ? t("Your trades are hidden from the public ledger.")
+          : t("Your trades can appear on the public ledger."),
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPrivacyBusy(false);
     }
   }
 
@@ -321,6 +346,23 @@ export function ProfilePage() {
           </>
         )}
       </section>
+
+      <details className="card-surface profile-privacy">
+        <summary>{t("Privacy")}</summary>
+        <p className="muted">
+          {t("Hide your trades from the public ledger and the activity feed. You and the other party still see them when signed in.")}
+        </p>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={Boolean(authUser?.hideFromPublicLedger)}
+            disabled={privacyBusy}
+            onChange={(e) => void setLedgerPrivacy(e.target.checked)}
+          />
+          {t("Hide my trades from the public ledger")}
+        </label>
+        {privacyMsg && <p className="muted">{privacyMsg}</p>}
+      </details>
     </div>
   );
 }
