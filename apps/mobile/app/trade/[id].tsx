@@ -17,6 +17,7 @@ import { TradeRoom } from "../../src/TradeRoom";
 import { EvidenceComposer } from "../../src/TradeFiles";
 import { TradeWallet } from "../../src/TradeWallet";
 import { LogoLoader } from "../../src/LogoLoader";
+import { clearTradeReturnPath, rememberTradeReturnPath } from "../../src/walletReturn";
 
 function escrowCacheKey(id: string) {
   return `twopescrow.escrow:${id}`;
@@ -84,11 +85,17 @@ export default function TradeScreen() {
     });
   }, [id, load, subscribeTradeEvents]);
   useFocusEffect(useCallback(() => {
+    rememberTradeReturnPath(id);
     void load();
     const timer = setInterval(() => { if (AppState.currentState === "active" && !actionLock.current) void load(); }, 4000);
     const listener = AppState.addEventListener("change", state => { if (state === "active" && !actionLock.current) void load(); });
-    return () => { generation.current++; clearInterval(timer); listener.remove(); };
-  }, [load]));
+    return () => {
+      generation.current++;
+      clearInterval(timer);
+      listener.remove();
+      if (AppState.currentState === "active") clearTradeReturnPath(id);
+    };
+  }, [id, load]));
   const permission = trade ? tradePermissions(trade, user?.id) : null;
   async function openWeb() {
     try { await Linking.openURL(`${webOrigin()}/trades/${encodeURIComponent(id)}`); }
