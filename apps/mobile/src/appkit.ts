@@ -42,6 +42,73 @@ const storage: Storage = {
 
 export const walletConnectReady = Boolean(projectId);
 
+const WALLETCONNECT_STORAGE_PREFIXES = ["wc@2:", "@appkit/", "@w3m/"];
+
+export async function disconnectWallet(): Promise<void> {
+  if (!appKit) return;
+
+  // 1. Try polite WalletConnect disconnect with a short timeout so dead/stale iOS sockets never hang.
+  try {
+    await Promise.race([
+      appKit.disconnect(),
+      new Promise<void>((resolve) => setTimeout(resolve, 3000)),
+    ]);
+  } catch {
+    // Fall through to forced local teardown below.
+  }
+
+  // 2. Always force local AppKit state teardown (isInternal = false skips the network relay call).
+  try {
+    const internal = appKit as unknown as {
+      disconnect: (namespace?: string, isInternal?: boolean) => Promise<void>;
+      getProvider?: (namespace?: string) => {
+        session?: unknown;
+        namespaces?: unknown;
+        cleanupPendingPairings?: () => Promise<void>;
+        client?: {
+          session?: { getAll?: () => { topic: string }[]; delete?: (topic: string, reason: { code: number; message: string }) => Promise<void> };
+          pairing?: { getAll?: () => { topic: string }[]; delete?: (topic: string, reason: { code: number; message: string }) => Promise<void> };
+        };
+      } | null;
+    };
+    const provider = internal.getProvider?.("eip155") ?? internal.getProvider?.();
+    if (provider) {
+      const reason = { code: 6000, message: "User disconnected." };
+      try {
+        const sessions = provider.client?.session?.getAll?.() ?? [];
+        for (const s of sessions) {
+          await provider.client?.session?.delete?.(s.topic, reason).catch(() => undefined);
+        }
+        const pairings = provider.client?.pairing?.getAll?.() ?? [];
+        for (const p of pairings) {
+          await provider.client?.pairing?.delete?.(p.topic, reason).catch(() => undefined);
+        }
+        await provider.cleanupPendingPairings?.().catch(() => undefined);
+      } catch {
+        // Ignore stale client cleanup errors.
+      }
+      provider.session = undefined;
+      provider.namespaces = undefined;
+    }
+    await internal.disconnect("eip155", false);
+  } catch {
+    // Continue to storage cleanup.
+  }
+
+  // 3. Clear persisted WalletConnect / AppKit session keys so the stale connection cannot resurrect on restart.
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const staleKeys = keys.filter((key) =>
+      WALLETCONNECT_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix)),
+    );
+    if (staleKeys.length > 0) {
+      await AsyncStorage.multiRemove(staleKeys);
+    }
+  } catch {
+    // Ignore storage cleanup errors.
+  }
+}
+
 export const appKit = walletConnectReady
   ? createAppKit({
       projectId,

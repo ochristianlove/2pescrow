@@ -1,11 +1,9 @@
 import { AppKit, AppKitProvider, useAccount } from "@reown/appkit-react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { appKit } from "../src/appkit";
-import { LegalSheet, WalletAgreement, type LegalDoc } from "../src/LegalSheet";
 import { AuthProvider, useAuth } from "../src/auth";
 import { LiveNotificationsProvider, useLiveNotifications } from "../src/liveNotifications";
 import { shortAddr } from "../src/format";
@@ -64,20 +62,6 @@ function WalletConnectedFeedback() {
   return null;
 }
 
-function WalletSheetFrame({ children }: { children: ReactNode }) {
-  const insets = useSafeAreaInsets();
-  const [legal, setLegal] = useState<LegalDoc | null>(null);
-  return (
-    <View style={styles.sheetFrame}>
-      {children}
-      <View style={[styles.legalBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-        <WalletAgreement onOpen={setLegal} />
-      </View>
-      {legal ? <LegalSheet key={legal} embedded doc={legal} onClose={() => setLegal(null)} /> : null}
-    </View>
-  );
-}
-
 function WalletConnectShell({ children }: { children: ReactNode }) {
   if (!appKit) return <>{children}</>;
   return (
@@ -85,7 +69,7 @@ function WalletConnectShell({ children }: { children: ReactNode }) {
       <View style={styles.shell}>
         {children}
         <WalletConnectedFeedback />
-        <AppKit modalContentWrapper={WalletSheetFrame} />
+        <AppKit />
       </View>
     </AppKitProvider>
   );
@@ -122,17 +106,4 @@ export default function RootLayout() {
 
 const styles = StyleSheet.create({
   shell: { flex: 1, overflow: "hidden" },
-  sheetFrame: { flex: 1, width: "100%", overflow: "hidden" },
-  legalBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 5,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    backgroundColor: "#0e1b24",
-    borderTopWidth: 1,
-    borderTopColor: "#1f3440",
-  },
 });

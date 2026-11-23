@@ -35,7 +35,7 @@
     "android": {
       "package": "com.twopescrow.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 6,
+      "versionCode": 8,
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -80,7 +80,9 @@
         "expo-build-properties",
         {
           "android": {
-            "kotlinVersion": "1.9.25"
+            "kotlinVersion": "1.9.25",
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
           }
         }
       ],
@@ -88,7 +90,8 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#3ecf8e"
+          "color": "#3ecf8e",
+          "enableBackgroundRemoteNotifications": true
         }
       ]
     ],

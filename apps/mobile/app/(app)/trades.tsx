@@ -70,35 +70,38 @@ export default function TradesScreen({ publicOnly = false }: { publicOnly?: bool
       }
       ListEmptyComponent={!error ? <Text style={{ color: colors.muted, marginTop: 12 }}>{loading ? "Loading trades…" : "No trades yet."}</Text> : null}
       renderItem={({ item }) => (
-        <Pressable accessibilityRole="button" onPress={() => router.push(`/trade/${item.id}`)} style={{ backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: "rgba(62, 207, 142, 0.16)", padding: 14, marginTop: 10 }}>
-          <Text translate={false} style={{ color: colors.text, fontWeight: "700", fontSize: 16 }}>{item.title}</Text>
-          {user ? <View style={{ marginTop: 8 }}><TradePartyBadge trade={item} userId={user.id} walletAddresses={user.wallets?.map((wallet) => wallet.address)} /></View> : null}
-          <Text style={{ color: colors.gold, marginTop: 6 }}>{formatAmount(item.amountAtomic)} {tokenLabel(item.tokenSymbol)}</Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 }}>
+        <Pressable accessibilityRole="button" onPress={() => router.push(`/trade/${item.id}`)} style={{ backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: "rgba(62, 207, 142, 0.16)", padding: 14, marginTop: 10, gap: 8 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+            <Text translate={false} numberOfLines={2} style={{ color: colors.text, fontWeight: "700", fontSize: 16, flex: 1, minWidth: 0 }}>
+              {item.title}
+            </Text>
             <View style={{
               backgroundColor: `${statusColor(item.status)}22`,
               borderColor: `${statusColor(item.status)}55`,
               borderWidth: 1,
-              borderRadius: 6,
-              paddingHorizontal: 8,
-              paddingVertical: 3,
+              borderRadius: 999,
+              paddingHorizontal: 9,
+              paddingVertical: 4,
               flexDirection: "row",
               alignItems: "center",
               gap: 5,
+              flexShrink: 0,
             }}>
-              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor(item.status) }} />
-              <Text style={{ color: statusColor(item.status), fontWeight: "700", fontSize: 12 }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor(item.status), flexShrink: 0 }} />
+              <Text numberOfLines={1} style={{ color: statusColor(item.status), fontWeight: "700", fontSize: 12 }}>
                 {readableLabel(item.status)}
               </Text>
             </View>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <Text style={{ color: colors.gold, fontWeight: "600" }}>{formatAmount(item.amountAtomic)} {tokenLabel(item.tokenSymbol)}</Text>
             <Text style={{ color: colors.muted, fontSize: 12 }}>· {item.chain === "tron" ? "Tron" : "Ethereum"}</Text>
           </View>
-          <View style={{ marginTop: 8 }}>
-            <TradeRoleTags
-              buyer={item.buyerUser?.displayName || (item.buyerAddress ? shortAddr(item.buyerAddress) : "")}
-              seller={item.sellerUser?.displayName || (item.sellerAddress ? shortAddr(item.sellerAddress) : "")}
-            />
-          </View>
+          {user ? <TradePartyBadge trade={item} userId={user.id} walletAddresses={user.wallets?.map((wallet) => wallet.address)} /> : null}
+          <TradeRoleTags
+            buyer={item.buyerUser?.displayName || (item.buyerAddress ? shortAddr(item.buyerAddress) : "")}
+            seller={item.sellerUser?.displayName || (item.sellerAddress ? shortAddr(item.sellerAddress) : "")}
+          />
         </Pressable>
       )}
     />

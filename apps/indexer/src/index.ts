@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import path from "path";
 import { createPublicClient, http } from "viem";
 import { mainnet } from "viem/chains";
-import { escrowDealAbi, escrowFactoryAbi } from "@2pescrow/shared";
+import { escrowDealAbi, escrowDealV1EventsAbi, escrowFactoryAbi } from "@2pescrow/shared";
 
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
@@ -34,10 +34,12 @@ async function ingest(payload: Record<string, unknown>) {
   });
 }
 
+const escrowWatchAbi = [...escrowDealAbi, ...escrowDealV1EventsAbi] as const;
+
 async function watchEscrow(address: `0x${string}`) {
   const unwatch = client.watchContractEvent({
     address,
-    abi: escrowDealAbi,
+    abi: escrowWatchAbi,
     onLogs: async (logs) => {
       for (const log of logs) {
         const eventName = log.eventName || "Unknown";

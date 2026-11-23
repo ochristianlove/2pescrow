@@ -1,11 +1,11 @@
 import { Text } from "./language";
-import { useState } from "react";
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { useAccount, useAppKit } from "@reown/appkit-react-native";
 import { useRouter } from "expo-router";
-import { walletConnectReady } from "./appkit";
+import { disconnectWallet, walletConnectReady } from "./appkit";
 import { LegalSheet, WalletAgreement, type LegalDoc } from "./LegalSheet";
 import { shortAddr } from "./format";
 import { useLiveNotifications } from "./liveNotifications";
@@ -90,7 +90,7 @@ function NotificationBell() {
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
-          <Pressable style={[styles.bellPanel, { marginTop: insets.top + 52 }]}>
+          <Pressable style={[styles.bellPanel, { marginTop: insets.top + 52 }]} onPress={(e) => e.stopPropagation()}>
             <View style={styles.bellHead}>
               <Text style={styles.bellTitle}>Live updates</Text>
               <View style={styles.soundRow}>
@@ -142,13 +142,33 @@ function HeaderWallet() {
 function WalletPill() {
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
-  const { open, disconnect } = useAppKit();
+  const { open } = useAppKit();
   const { address, isConnected, chain, chainId } = useAccount();
   const [menu, setMenu] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [legal, setLegal] = useState<LegalDoc | null>(null);
+  const pendingAction = useRef<"connect" | "disconnect" | null>(null);
   const connected = Boolean(isConnected && address);
   const onMainnet = chainId === "1" || chain?.id === 1;
   const label = connected ? `ETH ${shortAddr(address)}` : "Connect wallet";
+
+  function runPendingAction() {
+    const action = pendingAction.current;
+    if (!action) return;
+    pendingAction.current = null;
+    if (action === "connect") {
+      open({ view: "Connect" });
+    } else if (action === "disconnect") {
+      setDisconnecting(true);
+      void disconnectWallet().finally(() => setDisconnecting(false));
+    }
+  }
+
+  useEffect(() => {
+    if (menu || !pendingAction.current || Platform.OS === "ios") return;
+    const timer = setTimeout(runPendingAction, 180);
+    return () => clearTimeout(timer);
+  }, [menu]);
 
   return (
     <View style={styles.walletSlot}>
@@ -170,10 +190,19 @@ function WalletPill() {
         </Text>
         <Text style={styles.walletChevron}>⌄</Text>
       </Pressable>
-      <Modal visible={menu} transparent animationType="fade" onRequestClose={() => { if (legal) setLegal(null); else setMenu(false); }}>
+      <Modal
+        visible={menu}
+        transparent
+        animationType="fade"
+        onDismiss={runPendingAction}
+        onRequestClose={() => { if (legal) setLegal(null); else setMenu(false); }}
+      >
         <View style={{ flex: 1 }}>
         <Pressable style={styles.backdrop} onPress={() => setMenu(false)}>
-          <Pressable style={[styles.walletMenu, { marginTop: insets.top + 52 }]}>
+          <Pressable
+            style={[styles.walletMenu, { marginTop: insets.top + 52 }]}
+            onPress={(e) => e.stopPropagation()}
+          >
             <Text style={styles.bellTitle}>Wallet connections</Text>
             <Text style={styles.bellEmpty}>Connect an Ethereum wallet for ERC-20 trades.</Text>
             <View style={styles.networkRow}>
@@ -190,9 +219,10 @@ function WalletPill() {
               </View>
               <Pressable
                 accessibilityRole="button"
+                disabled={disconnecting}
                 onPress={() => {
+                  pendingAction.current = "connect";
                   setMenu(false);
-                  open({ view: "Connect" });
                 }}
                 style={styles.changeButton}
               >
@@ -201,11 +231,12 @@ function WalletPill() {
             </View>
             {connected ? (
               <Button
-                label="Disconnect WalletConnect"
+                label={disconnecting ? "Disconnecting…" : "Disconnect WalletConnect"}
                 tone="ghost"
+                busy={disconnecting}
                 onPress={() => {
+                  pendingAction.current = "disconnect";
                   setMenu(false);
-                  void disconnect();
                 }}
               />
             ) : null}

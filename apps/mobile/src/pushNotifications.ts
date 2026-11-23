@@ -62,17 +62,42 @@ export async function setupNotificationCategories() {
   ]);
 }
 
+async function getPlatformDeviceId(): Promise<string | undefined> {
+  try {
+    if (Platform.OS === "android") {
+      return Application.getAndroidId() ?? undefined;
+    }
+    if (Platform.OS === "ios") {
+      return (await Application.getIosIdForVendorAsync()) ?? undefined;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
 /**
  * Requests notification permissions (if not already determined) and registers
  * the Expo Push Token with the 2Pescrow backend.
  */
 export async function registerDevicePushToken(authenticated: boolean): Promise<string | null> {
   try {
+    // Android 13+ requires at least one notification channel before requesting permission.
+    if (Platform.OS === "android") {
+      await setupAndroidChannels();
+    }
+
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
     if (existingStatus !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync();
+      const { status } = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+        },
+      });
       finalStatus = status;
     }
 
@@ -80,9 +105,6 @@ export async function registerDevicePushToken(authenticated: boolean): Promise<s
       return null;
     }
 
-    if (Platform.OS === "android") {
-      await setupAndroidChannels();
-    }
     await setupNotificationCategories().catch(() => undefined);
 
     const projectId =
@@ -95,12 +117,13 @@ export async function registerDevicePushToken(authenticated: boolean): Promise<s
     currentPushToken = token;
 
     if (authenticated && token) {
+      const deviceId = await getPlatformDeviceId();
       await api("/v1/me/device-tokens", {
         method: "POST",
         body: JSON.stringify({
           token,
           platform: Platform.OS === "android" ? "android" : Platform.OS === "ios" ? "ios" : "web",
-          deviceId: Application.getAndroidId?.() ?? undefined,
+          deviceId,
           appVersion: Application.nativeApplicationVersion ?? "1.0.0",
         }),
       }).catch((err) => {

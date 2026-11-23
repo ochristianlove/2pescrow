@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "./language";
 import { privacyBlocks, termsBlocks, type LegalBlock } from "./legalCopy";
 
@@ -17,14 +17,28 @@ export function WalletAgreement({ onOpen }: { onOpen: (doc: LegalDoc) => void })
 }
 
 export function LegalSheet({ doc, onClose, embedded = false }: { doc: LegalDoc; onClose: () => void; embedded?: boolean }) {
+  const insets = useSafeAreaInsets();
   const [active, setActive] = useState<LegalDoc>(doc);
   const blocks = active === "terms" ? termsBlocks : privacyBlocks;
   const title = active === "terms" ? "Terms of Service" : "Privacy Policy";
+  const topInset = Math.max(insets.top, Platform.OS === "ios" ? 54 : 12);
+  const bottomInset = Math.max(insets.bottom, 16);
   const sheet = (
-      <SafeAreaView style={[styles.screen, embedded && styles.embedded]} edges={["top", "bottom"]}>
+      <View
+        style={[
+          styles.screen,
+          embedded && styles.embedded,
+          { paddingTop: topInset, paddingBottom: bottomInset },
+        ]}
+      >
         <View style={styles.bar}>
           <Text style={styles.eyebrow}>Legal</Text>
-          <Pressable accessibilityRole="button" onPress={onClose} style={styles.close}>
+          <Pressable
+            accessibilityRole="button"
+            hitSlop={12}
+            onPress={onClose}
+            style={({ pressed }) => [styles.close, pressed && { opacity: 0.7 }]}
+          >
             <Text style={styles.closeLabel}>Close</Text>
           </Pressable>
         </View>
@@ -46,11 +60,11 @@ export function LegalSheet({ doc, onClose, embedded = false }: { doc: LegalDoc; 
             <LegalLine key={`${active}-${index}`} block={block} />
           ))}
         </ScrollView>
-      </SafeAreaView>
+      </View>
   );
   if (embedded) return sheet;
   return (
-    <Modal visible animationType="slide" onRequestClose={onClose}>
+    <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       {sheet}
     </Modal>
   );

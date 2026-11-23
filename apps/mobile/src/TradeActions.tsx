@@ -15,11 +15,14 @@ import {
   chainError,
   openDisputeOnChain,
   readDeal,
+  readDealCapabilities,
   readTronDeal,
   refuseCancel,
   releaseFunds,
   requestCancel,
+  submitProofOnChain,
   withdrawDisputeOnChain,
+  type DealChainView,
   type WalletProvider,
 } from "./tradeChain";
 
@@ -28,7 +31,7 @@ type WalletConfig = {
   factoryAddress?: string | null;
 };
 
-type ChainView = { state: number; buyerCancelRequested: boolean };
+type ChainView = DealChainView;
 type ActionMode = "ethereum" | "tron" | "website";
 
 export function TradeActions({ trade, userId, onChanged, onError, onWeb }: {
@@ -155,7 +158,24 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
   const matches = Boolean(address && linked && address.toLowerCase() === linked.toLowerCase());
   const walletReady = Boolean(isConnected && address && provider && mainnet && (matches || !linked));
   const fulfilmentReady = trade.status === "InProgress" || Boolean(trade.proofHash) || Boolean(trade.messages?.some((message) => message.kind === "fulfilment" && message.fileName));
-  const releaseReady = Boolean(trade.contractAddress) && fulfilmentReady && !disputed && (chain ? chain.state === 2 : trade.status === "InProgress");
+  const capabilities = chain?.capabilities ?? null;
+  const isV1Deal = capabilities?.requiresOnChainSellerProof === true;
+  const v1OnChainProofNeeded = isV1Deal && chain?.state === 1;
+  const capabilitiesPending = Boolean(trade.contractAddress) && !capabilities;
+  const releaseReady =
+    Boolean(trade.contractAddress)
+    && !disputed
+    && (capabilities?.releaseMode === "v1-zero-arg"
+      ? chain?.state === 2
+      : capabilities?.releaseMode === "v2-proof-hash"
+        ? fulfilmentReady && (chain?.state === 1 || chain?.state === 2)
+        : false);
+  const sellerCanSubmit = Boolean(
+    trade.contractAddress
+    && (isV1Deal
+      ? chain?.state === 1
+      : trade.status === "Funded" && !capabilitiesPending),
+  );
   const showFunding = buyerFundingPending(trade, permission.buyer, chain?.state);
   const fundingWallet = isConnected && mainnet && address ? address : null;
   const fundingHint: FundingHint = !isConnected ? "connect-ethereum" : !mainnet ? "switch-ethereum" : null;
@@ -205,17 +225,77 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
       ) : null}
       {permission.seller && openTrade && !disputed ? (
         <Button
-          label="Confirm fulfilment"
+          label={isV1Deal ? "Submit fulfilment on-chain" : "Confirm fulfilment"}
           busy={busy === "delivery"}
-          disabled={Boolean(busy) || trade.status !== "Funded" || !trade.contractAddress}
-          onPress={() => Alert.alert(t("Confirm fulfilment?"), t("Share your delivery evidence first. This tells the buyer the deal is fulfilled and requests their review."), [
-            { text: t("Keep working"), style: "cancel" },
-            { text: t("Confirm fulfilment"), onPress: () => void run("delivery", () => signal(trade.id, "release-requested")) },
-          ])}
+          disabled={Boolean(busy) || !sellerCanSubmit}
+          onPress={() => {
+            if (!trade.contractAddress) return;
+            if (isV1Deal) {
+              Alert.alert(
+                t("Submit fulfilment on-chain?"),
+                t("Upload your delivery proof in chat first. This escrow contract requires your linked seller wallet to record the proof hash on-chain before the buyer can release funds."),
+                [
+                  { text: t("Keep working"), style: "cancel" },
+                  {
+                    text: t("Submit on-chain"),
+                    onPress: () => void run("delivery", async () => {
+                      if (!trade.contractAddress) throw new Error("No on-chain contract yet.");
+                      const { from, provider: wallet } = requireWallet();
+                      let proofHash = "";
+                      try {
+                        const proof = await api<{ proofHash: string }>(`/v1/escrows/${encodeURIComponent(trade.id)}/fulfilment-proof-hash`);
+                        proofHash = proof.proofHash;
+                      } catch {
+                        throw new Error("Upload fulfilment proof in chat first, then submit fulfilment on-chain.");
+                      }
+                      await submitProofOnChain(wallet, from, trade.contractAddress, proofHash);
+                      await signal(trade.id, "release-requested");
+                      const refreshed = await readDeal(trade.contractAddress);
+                      if (refreshed) setChain(refreshed);
+                    }),
+                  },
+                ],
+              );
+              return;
+            }
+            Alert.alert(t("Confirm fulfilment?"), t("Share your delivery evidence first. This tells the buyer the deal is fulfilled and requests their review."), [
+              { text: t("Keep working"), style: "cancel" },
+              {
+                text: t("Confirm fulfilment"),
+                onPress: () => void run("delivery", async () => {
+                  if (!trade.contractAddress) throw new Error("No on-chain contract yet.");
+                  const caps = capabilities ?? await readDealCapabilities(trade.contractAddress);
+                  if (caps.releaseMode === "unknown") {
+                    throw new Error("Could not verify the deployed escrow contract version. Refresh and try again.");
+                  }
+                  if (caps.requiresOnChainSellerProof) {
+                    const { from, provider: wallet } = requireWallet();
+                    let proofHash = "";
+                    try {
+                      const proof = await api<{ proofHash: string }>(`/v1/escrows/${encodeURIComponent(trade.id)}/fulfilment-proof-hash`);
+                      proofHash = proof.proofHash;
+                    } catch {
+                      throw new Error("Upload fulfilment proof in chat first, then submit fulfilment on-chain.");
+                    }
+                    await submitProofOnChain(wallet, from, trade.contractAddress, proofHash);
+                  }
+                  await signal(trade.id, "release-requested");
+                  const refreshed = await readDeal(trade.contractAddress);
+                  if (refreshed) setChain(refreshed);
+                }),
+              },
+            ]);
+          }}
         />
       ) : null}
       {permission.buyer && openTrade && !disputed && trade.contractAddress && !releaseReady && ["Funded", "InProgress"].includes(trade.status) ? (
-        <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>Available after the seller shares fulfilment in chat.</Text>
+        <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
+          {v1OnChainProofNeeded
+            ? "Waiting for the seller to submit fulfilment proof on-chain before you can release funds."
+            : capabilitiesPending
+              ? "Checking escrow contract version…"
+              : "Available after the seller shares fulfilment in chat."}
+        </Text>
       ) : null}
       {permission.buyer && openTrade && !disputed ? (
         <Button
@@ -223,12 +303,21 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
           busy={busy === "release"}
           disabled={Boolean(busy) || !releaseReady}
           onPress={() => void run("release", async () => {
-            if (!releaseReady || !trade.contractAddress) throw new Error("Available after the seller shares fulfilment in chat.");
+            if (!trade.contractAddress) throw new Error("No on-chain contract yet.");
+            const caps = capabilities ?? await readDealCapabilities(trade.contractAddress);
             const { from, provider: wallet } = requireWallet();
-            const proof = await api<{ proofHash: string }>(`/v1/escrows/${encodeURIComponent(trade.id)}/fulfilment-proof-hash`);
-            if (!/^0x[0-9a-fA-F]{64}$/.test(proof.proofHash)) throw new Error("Waiting for fulfilment proof in chat before release.");
-            await releaseFunds(wallet, from, trade.contractAddress, proof.proofHash);
+            if (caps.releaseMode === "v1-zero-arg") {
+              await releaseFunds(wallet, from, trade.contractAddress);
+            } else if (caps.releaseMode === "v2-proof-hash") {
+              const proof = await api<{ proofHash: string }>(`/v1/escrows/${encodeURIComponent(trade.id)}/fulfilment-proof-hash`);
+              if (!/^0x[0-9a-fA-F]{64}$/.test(proof.proofHash)) throw new Error("Waiting for fulfilment proof in chat before release.");
+              await releaseFunds(wallet, from, trade.contractAddress, proof.proofHash);
+            } else {
+              throw new Error("Could not determine the release function supported by this escrow contract.");
+            }
             await signal(trade.id, "completed");
+            const refreshed = await readDeal(trade.contractAddress);
+            if (refreshed) setChain(refreshed);
           })}
         />
       ) : null}

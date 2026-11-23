@@ -6,7 +6,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { api, ApiError } from "../../src/api";
 import { AppBottomNav } from "../../src/AppBottomNav";
 import { AppTopBar } from "../../src/AppTopBar";
-import { walletConnectReady } from "../../src/appkit";
+import { disconnectWallet, walletConnectReady } from "../../src/appkit";
 import { useAuth } from "../../src/auth";
 import { LegalSheet, WalletAgreement, type LegalDoc } from "../../src/LegalSheet";
 import { breakable, shortAddr } from "../../src/format";
@@ -17,9 +17,10 @@ import type { ReferralView } from "../../src/types";
 import { Button, Card, Field, Notice } from "../../src/ui";
 
 function WalletConnectLink({ onAddress }: { onAddress: (address: string) => Promise<void> }) {
-  const { open, disconnect } = useAppKit();
+  const { open } = useAppKit();
   const { address, isConnected } = useAccount();
   const sent = useRef("");
+  const [disconnecting, setDisconnecting] = useState(false);
   const [legal, setLegal] = useState<LegalDoc | null>(null);
 
   useEffect(() => {
@@ -41,7 +42,18 @@ function WalletConnectLink({ onAddress }: { onAddress: (address: string) => Prom
       </Text>
       <WalletAgreement onOpen={setLegal} />
       {legal ? <LegalSheet key={legal} doc={legal} onClose={() => setLegal(null)} /> : null}
-      {isConnected ? <Button label="Disconnect WalletConnect" tone="ghost" onPress={() => { sent.current = ""; void disconnect(); }} /> : null}
+      {isConnected ? (
+        <Button
+          label={disconnecting ? "Disconnecting…" : "Disconnect WalletConnect"}
+          tone="ghost"
+          busy={disconnecting}
+          onPress={() => {
+            sent.current = "";
+            setDisconnecting(true);
+            void disconnectWallet().finally(() => setDisconnecting(false));
+          }}
+        />
+      ) : null}
     </View>
   );
 }

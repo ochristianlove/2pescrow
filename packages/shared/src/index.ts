@@ -1,5 +1,6 @@
 export const ETHEREUM_CHAIN_ID = 1;
 export * from "./funding";
+export * from "./escrowCompat";
 export const ETHEREUM_USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 export const ETHEREUM_USDT = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
 
@@ -120,6 +121,20 @@ export const escrowDealAbi = [
   {
     type: "function",
     name: "factory",
+    inputs: [],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "buyer",
+    inputs: [],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "seller",
     inputs: [],
     outputs: [{ type: "address" }],
     stateMutability: "view",

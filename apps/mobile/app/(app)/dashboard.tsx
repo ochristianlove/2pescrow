@@ -213,32 +213,28 @@ export default function DashboardScreen() {
           </View>
         ) : trades.map((trade) => (
           <Pressable key={trade.id} onPress={() => router.push(`/trade/${trade.id}`)} style={styles.row}>
-            <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
-              <Text translate={false} style={styles.rowTitle}>{trade.title}</Text>
-              <TradePartyBadge trade={trade} userId={user?.id} walletAddresses={data?.wallets.map((wallet) => wallet.address)} />
-              <TradeRoleTags
-                buyer={trade.buyerUser?.displayName || (trade.buyerAddress ? shortAddr(trade.buyerAddress) : "")}
-                seller={trade.sellerUser?.displayName || (trade.sellerAddress ? shortAddr(trade.sellerAddress) : "")}
-              />
+            <View style={styles.rowTop}>
+              <Text translate={false} numberOfLines={2} style={styles.rowTitle}>{trade.title}</Text>
+              <View
+                style={[
+                  styles.statusBadge,
+                  {
+                    backgroundColor: `${statusColor(trade.status)}22`,
+                    borderColor: `${statusColor(trade.status)}55`,
+                  },
+                ]}
+              >
+                <View style={[styles.statusDot, { backgroundColor: statusColor(trade.status) }]} />
+                <Text numberOfLines={1} style={[styles.statusText, { color: statusColor(trade.status) }]}>
+                  {readableLabel(trade.status)}
+                </Text>
+              </View>
             </View>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 5,
-                backgroundColor: `${statusColor(trade.status)}22`,
-                borderColor: `${statusColor(trade.status)}55`,
-                borderWidth: 1,
-                borderRadius: 6,
-                paddingHorizontal: 8,
-                paddingVertical: 3,
-              }}
-            >
-              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor(trade.status) }} />
-              <Text style={{ color: statusColor(trade.status), fontWeight: "700", fontSize: 12 }}>
-                {readableLabel(trade.status)}
-              </Text>
-            </View>
+            <TradePartyBadge trade={trade} userId={user?.id} walletAddresses={data?.wallets.map((wallet) => wallet.address)} />
+            <TradeRoleTags
+              buyer={trade.buyerUser?.displayName || (trade.buyerAddress ? shortAddr(trade.buyerAddress) : "")}
+              seller={trade.sellerUser?.displayName || (trade.sellerAddress ? shortAddr(trade.sellerAddress) : "")}
+            />
           </Pressable>
         ))}
 
@@ -288,7 +284,7 @@ export default function DashboardScreen() {
         {history.length === 0 ? <Text style={styles.lede}>Events from your escrows will show here after activity.</Text> : null}
         {history.map((item) => (
           <Text key={item.id} style={styles.history}>
-            <Text style={styles.rowTitle}>{eventLabel(item.eventName)}</Text>
+            <Text style={styles.historyTitle}>{eventLabel(item.eventName)}</Text>
             <Text translate={false} style={styles.lede}>{` — ${item.escrowTitle} · ${formatAmount(item.amountAtomic)} ${tokenLabel(item.tokenSymbol)}`}</Text>
             {item.explorerTx ? <Text style={styles.link} onPress={() => void Linking.openURL(item.explorerTx!)}> tx</Text> : null}
           </Text>
@@ -320,7 +316,7 @@ function StatLine({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.line}>
       <Text style={styles.lede}>{label}</Text>
-      <Text style={styles.rowTitle}>{value}</Text>
+      <Text style={styles.historyTitle}>{value}</Text>
     </View>
   );
 }
@@ -375,18 +371,34 @@ const styles = {
     fontSize: 16,
   },
   row: {
-    flexDirection: "row" as const,
-    justifyContent: "space-between" as const,
-    alignItems: "center" as const,
-    gap: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#1f3440",
     backgroundColor: "#0e1c26",
     padding: 12,
     marginBottom: 8,
+    gap: 8,
   },
-  rowTitle: { color: "#e8f4f2", fontWeight: "700" as const, flexShrink: 1 },
+  rowTop: {
+    flexDirection: "row" as const,
+    justifyContent: "space-between" as const,
+    alignItems: "flex-start" as const,
+    gap: 10,
+  },
+  rowTitle: { color: "#e8f4f2", fontWeight: "700" as const, flex: 1, minWidth: 0, fontSize: 15, lineHeight: 20 },
+  historyTitle: { color: "#e8f4f2", fontWeight: "700" as const, flexShrink: 1 },
+  statusBadge: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 5,
+    flexShrink: 0,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  statusDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
+  statusText: { fontWeight: "700" as const, fontSize: 12 },
   link: { color: "#3ecf8e", fontWeight: "700" as const, marginTop: 8 },
   line: { flexDirection: "row" as const, justifyContent: "space-between" as const, gap: 12 },
   history: { color: "#8aa3ad", fontSize: 14, lineHeight: 22, marginBottom: 8 },

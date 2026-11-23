@@ -204,6 +204,7 @@ export function LiveNotificationsProvider({ children }: { children: ReactNode })
   const escrowIdsRef = useRef<Set<string>>(new Set());
   const notificationsRef = useRef<LiveNotification[]>([]);
   const soundRef = useRef(true);
+  const pushRegisteredUserRef = useRef<string | null>(null);
 
   // Sync state & persistent storage
   const commitNotifications = useCallback((items: LiveNotification[]) => {
@@ -371,6 +372,7 @@ export function LiveNotificationsProvider({ children }: { children: ReactNode })
       commitNotifications([]);
       escrowIdsRef.current = new Set();
       setPreferences(null);
+      pushRegisteredUserRef.current = null;
       return;
     }
 
@@ -378,7 +380,9 @@ export function LiveNotificationsProvider({ children }: { children: ReactNode })
     void loadPreferences();
 
     // Register push token for authorized notifications
-    void registerDevicePushToken(true);
+    void registerDevicePushToken(true).then((token) => {
+      if (token) pushRegisteredUserRef.current = user.id;
+    });
 
     // Flush any pending cold start navigation
     flushPendingNotificationNavigation();
@@ -397,6 +401,11 @@ export function LiveNotificationsProvider({ children }: { children: ReactNode })
       if (nextState === "active" && user) {
         void refreshInbox();
         flushPendingNotificationNavigation();
+        if (pushRegisteredUserRef.current !== user.id) {
+          void registerDevicePushToken(true).then((token) => {
+            if (token) pushRegisteredUserRef.current = user.id;
+          });
+        }
       }
     });
     return () => {

@@ -246,24 +246,20 @@ export function HomeLower() {
       {ledger.length === 0 && !liveNote ? <Text style={styles.body}>No trades yet. The first one will show up here.</Text> : null}
       {ledger.map((row) => (
         <Pressable key={row.id} onPress={() => router.push(`/trade/${row.id}`)} style={styles.rowCard}>
-          <Text translate={false} style={styles.cardTitle}>{row.title}</Text>
+          <Text translate={false} numberOfLines={2} style={[styles.cardTitle, styles.rowTitle]}>
+            {row.title}
+          </Text>
           <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 6,
-              alignSelf: "flex-start",
-              paddingHorizontal: 8,
-              paddingVertical: 3,
-              borderRadius: 999,
-              backgroundColor: `${statusColor(row.status)}22`,
-              borderWidth: 1,
-              borderColor: `${statusColor(row.status)}55`,
-              marginTop: 4,
-            }}
+            style={[
+              styles.statusBadge,
+              {
+                backgroundColor: `${statusColor(row.status)}22`,
+                borderColor: `${statusColor(row.status)}55`,
+              },
+            ]}
           >
-            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor(row.status) }} />
-            <Text style={{ color: statusColor(row.status), fontWeight: "700", fontSize: 12 }}>
+            <View style={[styles.statusDot, { backgroundColor: statusColor(row.status) }]} />
+            <Text numberOfLines={1} style={[styles.statusText, { color: statusColor(row.status) }]}>
               {readableLabel(row.status)}
             </Text>
           </View>
@@ -337,5 +333,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
+  rowTitle: { flex: 1, minWidth: 0 },
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  statusDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
+  statusText: { fontWeight: "700", fontSize: 12 },
   activity: { color: "#8aa3ad", fontSize: 14, lineHeight: 21 },
 });
