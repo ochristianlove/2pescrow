@@ -129,15 +129,70 @@ export async function findReferrerForCompletedEscrow(buyerAddress: string | null
   return prisma.referrer.findUnique({ where: { id: referrerId } });
 }
 
+export async function findSpecialResolverForUsers(userIds: (string | null | undefined)[]): Promise<{ userId: string; walletAddress: string } | null> {
+  const uniqueIds = Array.from(new Set(userIds.filter((v): v is string => Boolean(v))));
+  if (uniqueIds.length === 0) return null;
+  for (const uid of uniqueIds) {
+    const ref = await prisma.referralReferee.findUnique({
+      where: { refereeUserId: uid },
+      include: {
+        referrer: {
+          include: {
+            user: {
+              include: {
+                agentProfile: true,
+                wallets: { where: { chainKind: "evm" }, orderBy: { createdAt: "asc" }, take: 1 },
+              },
+            },
+          },
+        },
+      },
+    });
+    const partner = ref?.referrer?.user;
+    if (!partner || partner.role !== "special_resolver") continue;
+    const candidateWallet = partner.agentProfile?.walletAddress || partner.wallets[0]?.address;
+    if (candidateWallet && isEvmAddress(candidateWallet)) {
+      return { userId: partner.id, walletAddress: candidateWallet.toLowerCase() };
+    }
+  }
+  return null;
+}
+
+export async function findSpecialResolverByWallet(walletAddress: string | null | undefined): Promise<{ userId: string; walletAddress: string } | null> {
+  if (!walletAddress || !isEvmAddress(walletAddress)) return null;
+  const normalized = walletAddress.trim().toLowerCase();
+  const agent = await prisma.agent.findFirst({
+    where: { walletAddress: { equals: normalized, mode: "insensitive" }, active: true },
+    include: { user: true },
+  });
+  if (agent?.user && agent.user.role === "special_resolver") {
+    return { userId: agent.user.id, walletAddress: normalized };
+  }
+  const wallet = await prisma.wallet.findFirst({
+    where: { address: { equals: normalized, mode: "insensitive" }, chainKind: "evm" },
+    include: { user: true },
+  });
+  if (wallet?.user && wallet.user.role === "special_resolver") {
+    return { userId: wallet.user.id, walletAddress: normalized };
+  }
+  return null;
+}
+
 export async function processEscrowCompletion(escrowId: string) {
   const escrow = await prisma.escrow.findUnique({ where: { id: escrowId } });
   if (!escrow || escrow.status !== "Completed") return null;
+
+  // Special Resolver trades receive 50% of protocol fees automatically on-chain; void manual referral commission.
+  if (escrow.agentAddress && isEvmAddress(escrow.agentAddress)) return null;
 
   const existing = await prisma.referralCommission.findUnique({ where: { escrowId } });
   if (existing) return existing;
 
   const referrer = await findReferrerForCompletedEscrow(escrow.buyerAddress, escrow.sellerAddress, escrow.buyerUserId, escrow.sellerUserId);
   if (!referrer) return null;
+
+  const referrerUser = await prisma.user.findUnique({ where: { id: referrer.userId }, select: { role: true } });
+  if (referrerUser?.role === "special_resolver") return null;
 
   const profit = platformProfitAtomic(escrow.amountAtomic);
   const bps = await commissionBpsForUserId(referrer.userId);

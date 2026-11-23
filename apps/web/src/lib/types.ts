@@ -231,6 +231,7 @@ export type AdminUserRow = {
   createdAt: string;
   wallets: { address: string; chainKind: string }[];
   referrer: { id: string; referralCode: string; tier: string } | null;
+  resolverWallet?: string | null;
 };
 
 export type Agent = {

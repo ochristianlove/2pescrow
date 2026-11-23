@@ -9,7 +9,10 @@ import { broadcast } from "./wsHub";
 import { EthereumFundingService, FundingError } from "./ethereumFunding";
 
 const client = createPublicClient({ chain: mainnet, transport: http(config.ethereumRpcUrl, { timeout: 10_000, retryCount: 0 }) });
-const LEGACY_ETHEREUM_FACTORIES = ["0x08Be929Ac784E8aEe20403c4F5bbEE2668e183c9"];
+const LEGACY_ETHEREUM_FACTORIES = [
+  "0x08Be929Ac784E8aEe20403c4F5bbEE2668e183c9",
+  "0x65b93De2FF1be330110F9A8e0DabCc189938afBe",
+];
 
 export const ethereumFunding = new EthereumFundingService(prisma, client, async () => {
   const s = await prisma.platformSettings.findUnique({ where: { id: 1 } });

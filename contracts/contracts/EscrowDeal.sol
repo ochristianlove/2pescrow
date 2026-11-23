@@ -137,7 +137,7 @@ contract EscrowDeal is ReentrancyGuard {
         uint256 toSeller = (escrowAmount * f.sellerShareBps()) / 10_000;
         uint256 toFee = escrowAmount - toSeller;
         IERC20(token).safeTransfer(seller, toSeller);
-        IERC20(token).safeTransfer(f.feeRecipient(), toFee);
+        _distributeFee(f.feeRecipient(), toFee);
         _transition(State.Completed);
         emit Released(buyer, seller, toSeller, toFee, proofHash);
     }
@@ -213,9 +213,22 @@ contract EscrowDeal is ReentrancyGuard {
             toSeller = (escrowAmount * f.sellerShareBps()) / 10_000;
             toFee = escrowAmount - toSeller;
             IERC20(token).safeTransfer(seller, toSeller);
-            if (toFee > 0) IERC20(token).safeTransfer(f.feeRecipient(), toFee);
+            _distributeFee(f.feeRecipient(), toFee);
         }
         _transition(State.Resolved);
         emit DisputeResolved(buyerFavor, toBuyer, toSeller, toFee);
+    }
+
+    /// @dev Routes 100% of protocol fee to feeRecipient on standard trades; splits 50/50 with optionalAgent when assigned.
+    function _distributeFee(address feeRecipient, uint256 totalFee) internal {
+        if (totalFee == 0) return;
+        if (optionalAgent != address(0)) {
+            uint256 toPartner = totalFee / 2;
+            uint256 toProtocol = totalFee - toPartner;
+            if (toPartner > 0) IERC20(token).safeTransfer(optionalAgent, toPartner);
+            if (toProtocol > 0) IERC20(token).safeTransfer(feeRecipient, toProtocol);
+        } else {
+            IERC20(token).safeTransfer(feeRecipient, totalFee);
+        }
     }
 }

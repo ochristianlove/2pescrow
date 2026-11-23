@@ -37,7 +37,8 @@ export class EthereumFundingService {
       const allowedFactories = Array.from(
         new Set([settings.factory, ...(settings.allowedFactories ?? [])].filter((f): f is Address => isAddress(f)).map((f) => f.toLowerCase())),
       ) as Address[];
-      const terms: FundingTerms = { factory: settings.factory as Address, allowedFactories, buyer: row.buyerAddress as Address, seller: row.sellerAddress as Address, token: token as Address, amount: BigInt(row.amountAtomic) };
+      const optionalAgent = row.agentAddress && isAddress(row.agentAddress) ? (row.agentAddress as Address) : undefined;
+      const terms: FundingTerms = { factory: settings.factory as Address, allowedFactories, optionalAgent, buyer: row.buyerAddress as Address, seller: row.sellerAddress as Address, token: token as Address, amount: BigInt(row.amountAtomic) };
       const latest = await this.client.getBlockNumber({ cacheTime: 0 });
       const head = latest > 2n ? latest - 2n : 0n; // Three confirmations before advancing a step.
       return run(db, row, terms, head);

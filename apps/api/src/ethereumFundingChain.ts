@@ -8,23 +8,24 @@ export const fundingReadAbi = parseAbi([
   "function fund()", "function allowance(address,address) view returns (uint256)",
   "function balanceOf(address) view returns (uint256)", "function approve(address,uint256) returns (bool)",
 ]);
-export type FundingTerms = { factory: Address; allowedFactories?: Address[]; buyer: Address; seller: Address; token: Address; amount: bigint };
+export type FundingTerms = { factory: Address; allowedFactories?: Address[]; optionalAgent?: Address; buyer: Address; seller: Address; token: Address; amount: bigint };
 export const same = (a: string | null | undefined, b: string | null | undefined) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
 const allowedFactoryMatch = (candidate: string | null | undefined, terms: FundingTerms) =>
   (terms.allowedFactories?.length ? terms.allowedFactories : [terms.factory]).some((f) => same(candidate, f));
-const zero = "0x0000000000000000000000000000000000000000";
+const zero = "0x0000000000000000000000000000000000000000" as Address;
 
 export function creationChild(receipt: TransactionReceipt, terms: FundingTerms): Address {
   if (receipt.status !== "success" || !same(receipt.from, terms.buyer) || !allowedFactoryMatch(receipt.to, terms)) {
     throw new Error("The creation receipt does not match this buyer and factory.");
   }
+  const expectedAgent = terms.optionalAgent || zero;
   const matches: Address[] = [];
   for (const log of receipt.logs) {
     if (!allowedFactoryMatch(log.address, terms)) continue;
     try {
       const e = decodeEventLog({ abi: escrowFactoryAbi, data: log.data, topics: log.topics });
       if (e.eventName === "EscrowCreated" && same(e.args.buyer, terms.buyer) && same(e.args.seller, terms.seller)
-        && same(e.args.token, terms.token) && e.args.amount === terms.amount && same(e.args.optionalAgent, zero)) matches.push(e.args.escrow);
+        && same(e.args.token, terms.token) && e.args.amount === terms.amount && same(e.args.optionalAgent, expectedAgent)) matches.push(e.args.escrow);
     } catch { /* Not a creation event. */ }
   }
   if (matches.length !== 1) throw new Error("This transaction does not contain one escrow matching this trade.");
@@ -60,9 +61,10 @@ export async function verifyChild(client: PublicClient, child: Address, terms: F
 
 export function nextFundingCall(terms: FundingTerms, child: Address | null, combined: boolean, allowance: bigint, required: bigint) {
   const spender = child || terms.factory;
+  const optionalAgent = terms.optionalAgent || zero;
   if (!child && !combined) return {
     kind: "create" as FundingKind, to: terms.factory,
-    data: encodeFunctionData({ abi: escrowFactoryAbi, functionName: "createEscrow", args: [terms.buyer, terms.seller, terms.token, terms.amount, zero] }),
+    data: encodeFunctionData({ abi: escrowFactoryAbi, functionName: "createEscrow", args: [terms.buyer, terms.seller, terms.token, terms.amount, optionalAgent] }),
   };
   if (allowance < required) return {
     kind: (allowance > 0n ? "reset" : "approve") as FundingKind, to: terms.token,
@@ -70,7 +72,7 @@ export function nextFundingCall(terms: FundingTerms, child: Address | null, comb
   };
   return child
     ? { kind: "deposit" as FundingKind, to: child, data: encodeFunctionData({ abi: fundingReadAbi, functionName: "fund" }) }
-    : { kind: "createAndFund" as FundingKind, to: terms.factory, data: encodeFunctionData({ abi: escrowFactoryAbi, functionName: "createAndFund", args: [terms.seller, terms.token, terms.amount, zero] }) };
+    : { kind: "createAndFund" as FundingKind, to: terms.factory, data: encodeFunctionData({ abi: escrowFactoryAbi, functionName: "createAndFund", args: [terms.seller, terms.token, terms.amount, optionalAgent] }) };
 }
 
 /** First block containing a consumed nonce. Archive-state RPCs use O(log n); callers retain a bounded scan fallback. */

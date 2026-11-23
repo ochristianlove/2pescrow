@@ -12,7 +12,10 @@ const INDEXER_KEY = process.env.INDEXER_API_KEY ?? "";
 if (!INDEXER_KEY) {
   throw new Error("INDEXER_API_KEY is required");
 }
-const LEGACY_FACTORIES = ["0x08Be929Ac784E8aEe20403c4F5bbEE2668e183c9"];
+const LEGACY_FACTORIES = [
+  "0x08Be929Ac784E8aEe20403c4F5bbEE2668e183c9",
+  "0x65b93De2FF1be330110F9A8e0DabCc189938afBe",
+];
 const FACTORIES = Array.from(
   new Set(
     [process.env.ESCROW_FACTORY_ADDRESS, ...(process.env.LEGACY_ESCROW_FACTORY_ADDRESSES || "").split(","), ...LEGACY_FACTORIES]

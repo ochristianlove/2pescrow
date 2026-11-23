@@ -16,6 +16,7 @@ export function tierRank(tier: ResolverTier): number {
 
 export function staffTier(user: Pick<AuthUser, "role" | "permissions">): ResolverTier | null {
   if (user.role === "admin") return "admin";
+  if (user.role === "special_resolver") return "moderator";
   if (user.role === "moderator" && user.permissions.includes("disputes")) return "moderator";
   if (user.role === "agent" && user.permissions.includes("disputes")) return "agent";
   return null;
@@ -25,9 +26,10 @@ export function canStaffInvestigateDispute(user: AuthUser): boolean {
   return staffTier(user) !== null;
 }
 
-/** On-chain payout is always signed by the platform resolver wallet; app gates who may initiate. */
+/** On-chain payout is signed by an authorized resolver wallet (platform or scoped special resolver); app gates who may initiate. */
 export function canStaffReleaseFunds(user: AuthUser): boolean {
   if (user.role === "admin") return true;
+  if (user.role === "special_resolver") return true;
   if (user.role === "moderator" && user.permissions.includes("disputes")) return true;
   if (user.role === "agent" && user.permissions.includes("disputes_release")) return true;
   return false;
@@ -60,6 +62,8 @@ export function canClaimDispute(
   user: AuthUser,
   dispute: { status: string; ownerUserId?: string | null; awaitingRulingTier?: string | null },
 ): boolean {
+  // Special Resolvers are external partners scoped strictly to their referred clients' trades — never general pool claims.
+  if (user.role === "special_resolver") return false;
   if (dispute.status !== "open" || dispute.ownerUserId) return false;
   const tier = staffTier(user);
   if (!tier) return false;
@@ -91,10 +95,21 @@ export async function findOpenDisputeForEscrow(escrowId: string) {
 
 const ACTIVE_DISPUTE_STATUSES = ["open", "ruled_pending_appeal", "appealed", "appeal_decided", "final_ruling"] as const;
 
-/** Shared queue: any dispute staff member can read a live case. Actions still require ownership. */
+/** Shared queue: internal dispute staff can read live cases; Special Resolvers can ONLY access cases assigned to them. */
 export async function canStaffAccessDisputeEscrow(user: AuthUser, escrowId: string): Promise<boolean> {
   if (user.role === "admin") return true;
   if (!canStaffInvestigateDispute(user)) return false;
+  if (user.role === "special_resolver") {
+    const owned = await prisma.dispute.findFirst({
+      where: {
+        escrowId,
+        status: { in: [...ACTIVE_DISPUTE_STATUSES] },
+        OR: [{ ownerUserId: user.id }, { assignedModeratorUserId: user.id }],
+      },
+      select: { id: true },
+    });
+    return !!owned;
+  }
   const dispute = await prisma.dispute.findFirst({
     where: { escrowId, status: { in: [...ACTIVE_DISPUTE_STATUSES] } },
     select: { id: true },
@@ -110,6 +125,9 @@ export async function canStaffExecuteDisputeResolution(
   if (!canStaffReleaseFunds(user)) return false;
   if (user.role === "admin") return true;
   if (user.role === "agent") return false;
+  if (user.role === "special_resolver") {
+    return dispute.ownerUserId === user.id || dispute.assignedModeratorUserId === user.id;
+  }
   return user.role === "moderator" && dispute.ownerUserId === user.id;
 }
 

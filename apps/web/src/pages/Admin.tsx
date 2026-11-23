@@ -3,7 +3,7 @@ import { TranslatedText } from "../lib/language";
 import { Fragment, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { mainnet } from "viem/chains";
-import { escrowDealAbi, escrowFactoryAbi } from "@2pescrow/shared";
+import { escrowDealAbi, escrowFactoryAbi, resolverRouterAbi } from "@2pescrow/shared";
 import { useLiveTradeUpdates } from "../lib/useLiveTradeUpdates";
 import { api, formatAmount, shortAddr } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -433,7 +433,7 @@ export function AdminPage() {
   const [payoutFilter, setPayoutFilter] = useState<"pending" | "sent" | "rejected" | "all">("pending");
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [userSearch, setUserSearch] = useState("");
-  const [accessDraft, setAccessDraft] = useState<Record<string, { moderator: boolean; disputes: boolean; blog: boolean; email: boolean }>>({});
+  const [accessDraft, setAccessDraft] = useState<Record<string, { role: "user" | "moderator" | "special_resolver"; disputes: boolean; blog: boolean; email: boolean; resolverWallet: string }>>({});
   const [savingAccessId, setSavingAccessId] = useState<string | null>(null);
   const [editingAccessId, setEditingAccessId] = useState<string | null>(null);
   const [feedbackItems, setFeedbackItems] = useState<FeedbackSubmission[]>([]);
@@ -531,11 +531,19 @@ export function AdminPage() {
   const [emailMessageSubject, setEmailMessageSubject] = useState("");
   const [emailMessageBody, setEmailMessageBody] = useState("");
   const [emailSending, setEmailSending] = useState(false);
+  const [onChainRouterAddress, setOnChainRouterAddress] = useState<`0x${string}` | null>(null);
+  const [onChainRouterOwner, setOnChainRouterOwner] = useState<`0x${string}` | null>(null);
+  const [onChainResolvers, setOnChainResolvers] = useState<`0x${string}`[]>([]);
+  const [onChainSpecialResolvers, setOnChainSpecialResolvers] = useState<`0x${string}`[]>([]);
+  const [newResolverWallet, setNewResolverWallet] = useState("");
+  const [newSpecialResolverWallet, setNewSpecialResolverWallet] = useState("");
+  const [resolverBusy, setResolverBusy] = useState(false);
 
   const headers = useCallback(() => authHeaders(), [authHeaders]);
   const isSuper = user?.role === "admin";
+  const isSpecialResolver = user?.role === "special_resolver";
   const isDisputeAgent = user?.role === "agent" && !!user.permissions?.includes("disputes");
-  const canDisputes = isSuper || isDisputeAgent || (user?.role === "moderator" && !!user.permissions?.includes("disputes"));
+  const canDisputes = isSuper || isSpecialResolver || isDisputeAgent || (user?.role === "moderator" && !!user.permissions?.includes("disputes"));
   const canBlog = isSuper || (user?.role === "moderator" && !!user.permissions?.includes("blog"));
   const canEmail = isSuper || (user?.role === "moderator" && !!user.permissions?.includes("email"));
   const visibleNav = NAV.filter((item) => {
@@ -1021,9 +1029,168 @@ export function AdminPage() {
     return person?.displayName || person?.email || "Staff";
   }
 
-  const canFinalizeOnChain = isSuper || user?.role === "moderator";
+  const canFinalizeOnChain = isSuper || isSpecialResolver || user?.role === "moderator";
 
-  async function assertResolverCanSubmitPayout(escrow: Escrow) {
+  const loadOnChainResolvers = useCallback(async (factoryAddr: string | undefined) => {
+    if (!publicClient || !factoryAddr || !/^0x[0-9a-fA-F]{40}$/.test(factoryAddr)) {
+      setOnChainRouterAddress(null);
+      setOnChainRouterOwner(null);
+      setOnChainResolvers([]);
+      setOnChainSpecialResolvers([]);
+      return;
+    }
+    try {
+      const configuredResolver = await publicClient.readContract({
+        address: factoryAddr as `0x${string}`,
+        abi: escrowFactoryAbi,
+        functionName: "resolver",
+      });
+      const code = await publicClient.getBytecode({ address: configuredResolver });
+      if (!code || code === "0x") {
+        setOnChainRouterAddress(null);
+        setOnChainRouterOwner(null);
+        setOnChainResolvers([configuredResolver]);
+        setOnChainSpecialResolvers([]);
+        return;
+      }
+      const [resolversList, specialList, ownerAddr] = await Promise.all([
+        publicClient.readContract({ address: configuredResolver, abi: resolverRouterAbi, functionName: "getResolvers" }),
+        publicClient.readContract({ address: configuredResolver, abi: resolverRouterAbi, functionName: "getSpecialResolvers" }).catch(() => [] as readonly `0x${string}`[]),
+        publicClient.readContract({ address: configuredResolver, abi: resolverRouterAbi, functionName: "owner" }),
+      ]);
+      setOnChainRouterAddress(configuredResolver);
+      setOnChainRouterOwner(ownerAddr);
+      setOnChainResolvers([...resolversList]);
+      setOnChainSpecialResolvers([...specialList]);
+    } catch {
+      setOnChainRouterAddress(null);
+      setOnChainRouterOwner(null);
+      setOnChainResolvers([]);
+      setOnChainSpecialResolvers([]);
+    }
+  }, [publicClient]);
+
+  useEffect(() => {
+    void loadOnChainResolvers(settingsForm.factoryAddress || cfg?.factoryAddress || undefined);
+  }, [loadOnChainResolvers, settingsForm.factoryAddress, cfg?.factoryAddress]);
+
+  async function addOnChainResolver() {
+    setErr(null);
+    setMsg(null);
+    if (!onChainRouterAddress) {
+      setErr("This Ethereum factory does not use a ResolverRouter contract yet.");
+      return;
+    }
+    if (!address || chainId !== mainnet.id || !publicClient) {
+      setErr("Connect the factory owner wallet on Ethereum mainnet first.");
+      return;
+    }
+    const trimmed = newResolverWallet.trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(trimmed)) {
+      setErr("Enter a valid 0x Ethereum wallet address.");
+      return;
+    }
+    setResolverBusy(true);
+    try {
+      const txHash = await writeContractAsync({
+        address: onChainRouterAddress,
+        abi: resolverRouterAbi,
+        functionName: "addResolver",
+        args: [trimmed as `0x${string}`],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      setNewResolverWallet("");
+      setMsg(`Added resolver wallet ${shortAddr(trimmed)} on-chain.`);
+      await loadOnChainResolvers(settingsForm.factoryAddress || cfg?.factoryAddress || undefined);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setResolverBusy(false);
+    }
+  }
+
+  async function removeOnChainResolver(target: `0x${string}`) {
+    setErr(null);
+    setMsg(null);
+    if (!onChainRouterAddress || !address || chainId !== mainnet.id || !publicClient) {
+      setErr("Connect the factory owner wallet on Ethereum mainnet first.");
+      return;
+    }
+    setResolverBusy(true);
+    try {
+      const txHash = await writeContractAsync({
+        address: onChainRouterAddress,
+        abi: resolverRouterAbi,
+        functionName: "removeResolver",
+        args: [target],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      setMsg(`Removed resolver wallet ${shortAddr(target)} on-chain.`);
+      await loadOnChainResolvers(settingsForm.factoryAddress || cfg?.factoryAddress || undefined);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setResolverBusy(false);
+    }
+  }
+
+  async function addOnChainSpecialResolver() {
+    setErr(null);
+    setMsg(null);
+    if (!onChainRouterAddress || !address || chainId !== mainnet.id || !publicClient) {
+      setErr("Connect the factory owner wallet on Ethereum mainnet first.");
+      return;
+    }
+    const trimmed = newSpecialResolverWallet.trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(trimmed)) {
+      setErr("Enter a valid 0x Ethereum wallet address.");
+      return;
+    }
+    setResolverBusy(true);
+    try {
+      const txHash = await writeContractAsync({
+        address: onChainRouterAddress,
+        abi: resolverRouterAbi,
+        functionName: "addSpecialResolver",
+        args: [trimmed as `0x${string}`],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      setNewSpecialResolverWallet("");
+      setMsg(`Added Special Resolver wallet ${shortAddr(trimmed)} on-chain.`);
+      await loadOnChainResolvers(settingsForm.factoryAddress || cfg?.factoryAddress || undefined);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setResolverBusy(false);
+    }
+  }
+
+  async function removeOnChainSpecialResolver(target: `0x${string}`) {
+    setErr(null);
+    setMsg(null);
+    if (!onChainRouterAddress || !address || chainId !== mainnet.id || !publicClient) {
+      setErr("Connect the factory owner wallet on Ethereum mainnet first.");
+      return;
+    }
+    setResolverBusy(true);
+    try {
+      const txHash = await writeContractAsync({
+        address: onChainRouterAddress,
+        abi: resolverRouterAbi,
+        functionName: "removeSpecialResolver",
+        args: [target],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      setMsg(`Removed Special Resolver wallet ${shortAddr(target)} on-chain.`);
+      await loadOnChainResolvers(settingsForm.factoryAddress || cfg?.factoryAddress || undefined);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setResolverBusy(false);
+    }
+  }
+
+  async function assertResolverCanSubmitPayout(escrow: Escrow): Promise<{ resolver: string; routerAddress: `0x${string}` | null }> {
     if (!escrow.contractAddress) throw new Error("This trade has no deployed escrow contract, so it cannot pay out on-chain.");
     if (escrow.chain === "tron") {
       if (!tron.address || !tron.tronWeb || !tron.signer) throw new Error("Connect the configured TRON resolver wallet before ruling.");
@@ -1042,10 +1209,10 @@ export function AdminPage() {
       if (normalizeTronAddress(configuredResolver) !== normalizeTronAddress(tron.address)) {
         throw new Error(`This connected wallet is not the configured resolver. Connect ${shortAddr(configuredResolver)}. Being the buyer or seller does not grant resolver permission.`);
       }
-      return tron.address;
+      return { resolver: tron.address, routerAddress: null };
     }
 
-    if (!address) throw new Error("Connect the configured resolver wallet before ruling.");
+    if (!address) throw new Error("Connect an authorized Ethereum resolver wallet before ruling.");
     if (chainId !== mainnet.id) throw new Error("Switch the resolver wallet to Ethereum mainnet before ruling.");
     if (!publicClient) throw new Error("Ethereum RPC is not ready. Connect the resolver wallet on Ethereum and try again.");
     const dealAddress = escrow.contractAddress as `0x${string}`;
@@ -1057,14 +1224,27 @@ export function AdminPage() {
       abi: escrowFactoryAbi,
       functionName: "resolver",
     });
+    const resolverCode = await publicClient.getBytecode({ address: configuredResolver });
+    if (resolverCode && resolverCode !== "0x") {
+      const authorized = await publicClient.readContract({
+        address: configuredResolver,
+        abi: resolverRouterAbi,
+        functionName: "canResolveEscrow",
+        args: [address, dealAddress],
+      });
+      if (!authorized) {
+        throw new Error(`Connected wallet ${shortAddr(address)} is not authorized to resolve this escrow on router ${shortAddr(configuredResolver)}.`);
+      }
+      return { resolver: address, routerAddress: configuredResolver };
+    }
     if (configuredResolver.toLowerCase() !== address.toLowerCase()) {
       throw new Error(`Connected wallet ${shortAddr(address)} is not the configured resolver ${shortAddr(configuredResolver)}. Use the resolver wallet; it may also be a trade party wallet if configured that way.`);
     }
-    return address;
+    return { resolver: address, routerAddress: null };
   }
 
   async function submitResolverPayout(escrow: Escrow, disputeId: string, buyerFavor: boolean) {
-    const resolver = await assertResolverCanSubmitPayout(escrow);
+    const { resolver, routerAddress } = await assertResolverCanSubmitPayout(escrow);
     let txHash: string;
     if (escrow.chain === "tron") {
       if (!tron.address || !tron.signer) throw new Error("Connect the configured TRON resolver wallet before ruling.");
@@ -1073,12 +1253,19 @@ export function AdminPage() {
       if (!txHash) throw new Error("The TRON wallet did not return a transaction id.");
     } else {
       if (!publicClient) throw new Error("Ethereum RPC is not ready.");
-      txHash = await writeContractAsync({
-        address: escrow.contractAddress as `0x${string}`,
-        abi: escrowDealAbi,
-        functionName: "resolveDispute",
-        args: [buyerFavor],
-      });
+      txHash = routerAddress
+        ? await writeContractAsync({
+            address: routerAddress,
+            abi: resolverRouterAbi,
+            functionName: "resolveDispute",
+            args: [escrow.contractAddress as `0x${string}`, buyerFavor],
+          })
+        : await writeContractAsync({
+            address: escrow.contractAddress as `0x${string}`,
+            abi: escrowDealAbi,
+            functionName: "resolveDispute",
+            args: [buyerFavor],
+          });
       await publicClient.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
     }
     await api(`/v1/disputes/${disputeId}/finalize`, {
@@ -1290,12 +1477,34 @@ export function AdminPage() {
             functionName: "state",
           });
           if (Number(chainState) === 5) {
-            if (!address) throw new Error("Connect the configured resolver wallet to cancel this on-chain dispute.");
-            txHash = await writeContractAsync({
-              address: escrow.contractAddress as `0x${string}`,
-              abi: escrowDealAbi,
-              functionName: "withdrawDispute",
-            });
+            if (!address) throw new Error("Connect an authorized resolver wallet to cancel this on-chain dispute.");
+            const dealAddress = escrow.contractAddress as `0x${string}`;
+            const factoryAddress = await publicClient.readContract({ address: dealAddress, abi: escrowDealAbi, functionName: "factory" });
+            const configuredResolver = await publicClient.readContract({ address: factoryAddress, abi: escrowFactoryAbi, functionName: "resolver" });
+            const resolverCode = await publicClient.getBytecode({ address: configuredResolver });
+            if (resolverCode && resolverCode !== "0x") {
+              const authorized = await publicClient.readContract({
+                address: configuredResolver,
+                abi: resolverRouterAbi,
+                functionName: "canResolveEscrow",
+                args: [address, dealAddress],
+              });
+              if (!authorized) {
+                throw new Error(`Connected wallet ${shortAddr(address)} is not authorized to withdraw this dispute on router ${shortAddr(configuredResolver)}.`);
+              }
+              txHash = await writeContractAsync({
+                address: configuredResolver,
+                abi: resolverRouterAbi,
+                functionName: "withdrawDispute",
+                args: [dealAddress],
+              });
+            } else {
+              txHash = await writeContractAsync({
+                address: dealAddress,
+                abi: escrowDealAbi,
+                functionName: "withdrawDispute",
+              });
+            }
             await publicClient.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
           } else if (Number(chainState) !== 1 && Number(chainState) !== 2) {
             throw new Error("The escrow is not in a state that can be returned to normal trade flow.");
@@ -1474,34 +1683,41 @@ export function AdminPage() {
     }
   }
 
-  if (loading || !user || (user.role !== "admin" && user.role !== "moderator" && !(user.role === "agent" && user.permissions?.includes("disputes")))) {
+  if (loading || !user || (user.role !== "admin" && user.role !== "moderator" && user.role !== "special_resolver" && !(user.role === "agent" && user.permissions?.includes("disputes")))) {
     return <p className="muted"><TranslatedText text={"Checking admin session…"} /></p>;
   }
 
   function accessFor(row: AdminUserRow) {
+    const role: "user" | "moderator" | "special_resolver" =
+      row.role === "special_resolver" ? "special_resolver" : row.role === "moderator" ? "moderator" : "user";
     return accessDraft[row.id] ?? {
-      moderator: row.role === "moderator",
+      role,
       disputes: !!row.permissions?.includes("disputes"),
       blog: !!row.permissions?.includes("blog"),
       email: !!row.permissions?.includes("email"),
+      resolverWallet: row.resolverWallet || row.wallets.find((w) => w.chainKind === "evm")?.address || "",
     };
   }
 
-  function setAccess(row: AdminUserRow, next: { moderator: boolean; disputes: boolean; blog: boolean; email: boolean }) {
+  function setAccess(row: AdminUserRow, next: { role: "user" | "moderator" | "special_resolver"; disputes: boolean; blog: boolean; email: boolean; resolverWallet: string }) {
     setAccessDraft((prev) => ({ ...prev, [row.id]: next }));
   }
 
-  function chooseRole(row: AdminUserRow, moderator: boolean) {
+  function chooseRole(row: AdminUserRow, role: "user" | "moderator" | "special_resolver") {
     const current = accessFor(row);
-    setAccess(row, moderator
-      ? { ...current, moderator: true }
-      : { moderator: false, disputes: false, blog: false, email: false });
+    if (role === "user") {
+      setAccess(row, { ...current, role: "user", disputes: false, blog: false, email: false });
+    } else if (role === "special_resolver") {
+      setAccess(row, { ...current, role: "special_resolver", disputes: true, blog: false, email: false });
+    } else {
+      setAccess(row, { ...current, role: "moderator" });
+    }
   }
 
   function togglePrivilege(row: AdminUserRow, key: "disputes" | "blog" | "email") {
     const current = accessFor(row);
     const checked = !current[key];
-    setAccess(row, { ...current, moderator: true, [key]: checked });
+    setAccess(row, { ...current, role: "moderator", [key]: checked });
   }
 
   function closeAccess(row: AdminUserRow) {
@@ -1515,21 +1731,37 @@ export function AdminPage() {
 
   async function saveAccess(row: AdminUserRow) {
     const draft = accessFor(row);
-    const permissions = (["disputes", "blog", "email"] as const).filter((item) => draft[item]);
+    const permissions =
+      draft.role === "special_resolver"
+        ? ["disputes", "disputes_release"]
+        : draft.role === "moderator"
+          ? (["disputes", "blog", "email"] as const).filter((item) => draft[item])
+          : [];
     setSavingAccessId(row.id);
     setErr(null);
     try {
       await api(`/v1/admin/users/${row.id}/access`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...headers() },
-        body: JSON.stringify({ moderator: draft.moderator, permissions }),
+        body: JSON.stringify({
+          staffRole: draft.role,
+          moderator: draft.role === "moderator",
+          permissions,
+          resolverWallet: draft.role === "special_resolver" ? draft.resolverWallet.trim() || undefined : undefined,
+        }),
       });
       setAccessDraft((prev) => {
         const copy = { ...prev };
         delete copy[row.id];
         return copy;
       });
-      setMsg(draft.moderator ? `Privileges saved for ${row.email || "that user"}.` : `${row.email || "That user"} is a regular user again.`);
+      setMsg(
+        draft.role === "special_resolver"
+          ? `Special Resolver saved for ${row.email || "that user"}. Remember to also add their wallet under On-Chain Special Resolvers in Platform settings.`
+          : draft.role === "moderator"
+            ? `Privileges saved for ${row.email || "that user"}.`
+            : `${row.email || "That user"} is a regular user again.`,
+      );
       setEditingAccessId(null);
       await loadUsers(userSearch);
     } catch (e) {
@@ -1544,9 +1776,9 @@ export function AdminPage() {
       <div className="page-head">
         <div>
           <p className="eyebrow"><TranslatedText text={"CMS"} /></p>
-          <h1><TranslatedText text={isSuper ? "Admin dashboard" : "Staff desk"} /></h1>
+          <h1><TranslatedText text={isSuper ? "Admin dashboard" : isSpecialResolver ? "Special Resolver desk" : "Staff desk"} /></h1>
           <p className="muted"> <TranslatedText text={"Signed in as"} /> <strong>{user.email}</strong>
-            <TranslatedText text={isSuper ? " · super admin" : isDisputeAgent ? " · agent" : " · moderator"} />
+            <TranslatedText text={isSuper ? " · super admin" : isSpecialResolver ? " · special resolver" : isDisputeAgent ? " · agent" : " · moderator"} />
           </p>
         </div>
         <div className="hero-actions">
@@ -1706,8 +1938,8 @@ export function AdminPage() {
                         <td>{u.email || "—"}</td>
                         <td>{u.displayName || "—"}</td>
                         <td>
-                          <span className={`access-pill ${u.role === "admin" ? "access-pill-admin" : u.role === "moderator" ? "access-pill-mod" : "access-pill-user"}`}>
-                            <TranslatedText text={u.role === "admin" ? "Super admin" : u.role === "moderator" ? "Moderator" : "Regular user"} />
+                          <span className={`access-pill ${u.role === "admin" ? "access-pill-admin" : u.role === "moderator" || u.role === "special_resolver" ? "access-pill-mod" : "access-pill-user"}`}>
+                            <TranslatedText text={u.role === "admin" ? "Super admin" : u.role === "special_resolver" ? "Special Resolver" : u.role === "moderator" ? "Moderator" : "Regular user"} />
                           </span>
                         </td>
                         <td>
@@ -1716,7 +1948,9 @@ export function AdminPage() {
                           ) : (
                             <div className="access-summary">
                               <div className="access-chips">
-                                {savedPrivileges.length
+                                {u.role === "special_resolver" ? (
+                                  <span className="access-chip">Referred cases only{u.resolverWallet ? ` · ${shortAddr(u.resolverWallet)}` : ""}</span>
+                                ) : savedPrivileges.length
                                   ? savedPrivileges.map((label) => <span className="access-chip" key={label}>{label}</span>)
                                   : <span className="muted"><TranslatedText text={"No staff privileges"} /></span>}
                               </div>
@@ -1744,29 +1978,43 @@ export function AdminPage() {
                             <div className="access-panel">
                               <p className="access-panel-kicker"><TranslatedText text={"Access for"} /> <TranslatedText text={u.email || "this account"} /></p>
                               <div className="access-role-choice" role="group" aria-label={localizeCopy("Role")}>
-                                <button type="button" className={!draft.moderator ? "is-selected" : ""} aria-pressed={!draft.moderator} onClick={() => chooseRole(u, false)}> <TranslatedText text={"Regular user"} /> <small><TranslatedText text={"Trade only. No admin desk."} /></small>
+                                <button type="button" className={draft.role === "user" ? "is-selected" : ""} aria-pressed={draft.role === "user"} onClick={() => chooseRole(u, "user")}> <TranslatedText text={"Regular user"} /> <small><TranslatedText text={"Trade only. No admin desk."} /></small>
                                 </button>
-                                <button type="button" className={draft.moderator ? "is-selected" : ""} aria-pressed={draft.moderator} onClick={() => chooseRole(u, true)}> <TranslatedText text={"Moderator"} /> <small><TranslatedText text={"Opens the staff desk for the privileges below."} /></small>
+                                <button type="button" className={draft.role === "moderator" ? "is-selected" : ""} aria-pressed={draft.role === "moderator"} onClick={() => chooseRole(u, "moderator")}> <TranslatedText text={"Moderator"} /> <small><TranslatedText text={"Internal staff desk for selected privileges."} /></small>
+                                </button>
+                                <button type="button" className={draft.role === "special_resolver" ? "is-selected" : ""} aria-pressed={draft.role === "special_resolver"} onClick={() => chooseRole(u, "special_resolver")}> <TranslatedText text={"Special Resolver"} /> <small><TranslatedText text={"External lawyer/operator · own referred trades only · 50% on-chain fee split."} /></small>
                                 </button>
                               </div>
-                              <div className="access-priv-list">
-                                {privilegeChoices.map(([key, title, detail]) => (
-                                  <button
-                                    key={key}
-                                    type="button"
-                                    className={`access-priv${draft[key] ? " is-on" : ""}`}
-                                    aria-pressed={draft[key]}
-                                    disabled={!draft.moderator}
-                                    onClick={() => togglePrivilege(u, key)}
-                                  >
-                                    <span className="access-priv-mark" aria-hidden><TranslatedText text={draft[key] ? "On" : "Off"} /></span>
-                                    <span>
-                                      <strong>{title}</strong>
-                                      {detail}
-                                    </span>
-                                  </button>
-                                ))}
-                              </div>
+                              {draft.role === "special_resolver" ? (
+                                <label style={{ display: "grid", gap: "0.35rem", marginTop: "0.75rem" }}>
+                                  <span><TranslatedText text={"Special Resolver Ethereum wallet (receives 50% fee split & signs client rulings)"} /></span>
+                                  <input
+                                    className="mono"
+                                    value={draft.resolverWallet}
+                                    onChange={(e) => setAccess(u, { ...draft, resolverWallet: e.target.value })}
+                                    placeholder="0x… partner resolver wallet"
+                                  />
+                                </label>
+                              ) : (
+                                <div className="access-priv-list">
+                                  {privilegeChoices.map(([key, title, detail]) => (
+                                    <button
+                                      key={key}
+                                      type="button"
+                                      className={`access-priv${draft[key] ? " is-on" : ""}`}
+                                      aria-pressed={draft[key]}
+                                      disabled={draft.role !== "moderator"}
+                                      onClick={() => togglePrivilege(u, key)}
+                                    >
+                                      <span className="access-priv-mark" aria-hidden><TranslatedText text={draft[key] ? "On" : "Off"} /></span>
+                                      <span>
+                                        <strong>{title}</strong>
+                                        {detail}
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
                               <p className="privilege-lock"><TranslatedText text={"This account still cannot approve referral payouts or change escrow platform settings."} /></p>
                               <div className="access-actions">
                                 <button type="button" disabled={savingAccessId === u.id} onClick={() => saveAccess(u)}>
@@ -2482,6 +2730,82 @@ export function AdminPage() {
                 </label>
                 <button type="submit"><TranslatedText text={"Save platform settings"} /></button>
               </form>
+              <div className="settings-form" style={{ marginTop: "1.5rem" }}>
+                <h3><TranslatedText text={"Ethereum dispute resolvers (on-chain)"} /></h3>
+                {onChainRouterAddress ? (
+                  <>
+                    <p className="hint">
+                      <TranslatedText text={"ResolverRouter contract:"} /> <span className="mono">{onChainRouterAddress}</span>
+                      {onChainRouterOwner ? <> · <TranslatedText text={"Owner:"} /> <span className="mono">{shortAddr(onChainRouterOwner)}</span></> : null}
+                    </p>
+                    <div className="row" style={{ gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                      <input
+                        className="mono"
+                        style={{ flex: 1, minWidth: "260px" }}
+                        value={newResolverWallet}
+                        onChange={(e) => setNewResolverWallet(e.target.value)}
+                        placeholder="0x… new moderator resolver wallet"
+                      />
+                      <button type="button" disabled={resolverBusy} onClick={() => void addOnChainResolver()}>
+                        <TranslatedText text={resolverBusy ? "Confirming…" : "Add resolver wallet"} />
+                      </button>
+                    </div>
+                    <div style={{ display: "grid", gap: "0.4rem", marginTop: "0.75rem" }}>
+                      {onChainResolvers.map((w) => (
+                        <div key={w} className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
+                          <span className="mono" style={{ fontSize: "0.85rem", wordBreak: "break-all" }}>{w}</span>
+                          <button
+                            type="button"
+                            className="secondary"
+                            disabled={resolverBusy}
+                            onClick={() => void removeOnChainResolver(w)}
+                          >
+                            <TranslatedText text={"Remove"} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <hr className="settings-divider" />
+                    <h4><TranslatedText text={"Special Resolvers (external partners · scoped to own referred trades only)"} /></h4>
+                    <div className="row" style={{ gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                      <input
+                        className="mono"
+                        style={{ flex: 1, minWidth: "260px" }}
+                        value={newSpecialResolverWallet}
+                        onChange={(e) => setNewSpecialResolverWallet(e.target.value)}
+                        placeholder="0x… external lawyer or escrow operator wallet"
+                      />
+                      <button type="button" disabled={resolverBusy} onClick={() => void addOnChainSpecialResolver()}>
+                        <TranslatedText text={resolverBusy ? "Confirming…" : "Add Special Resolver"} />
+                      </button>
+                    </div>
+                    <div style={{ display: "grid", gap: "0.4rem", marginTop: "0.75rem" }}>
+                      {onChainSpecialResolvers.length === 0 ? (
+                        <p className="hint"><TranslatedText text={"No external Special Resolver wallets registered yet."} /></p>
+                      ) : (
+                        onChainSpecialResolvers.map((w) => (
+                          <div key={w} className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
+                            <span className="mono" style={{ fontSize: "0.85rem", wordBreak: "break-all" }}>{w}</span>
+                            <button
+                              type="button"
+                              className="secondary"
+                              disabled={resolverBusy}
+                              onClick={() => void removeOnChainSpecialResolver(w)}
+                            >
+                              <TranslatedText text={"Remove"} />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <p className="hint">
+                    <TranslatedText text={"Current Ethereum factory resolver:"} />{" "}
+                    <span className="mono">{onChainResolvers[0] || "—"}</span>
+                  </p>
+                )}
+              </div>
               {cfg && (
                 <div className="role-box">
                   <h3><TranslatedText text={"Configured role wallets"} /></h3>

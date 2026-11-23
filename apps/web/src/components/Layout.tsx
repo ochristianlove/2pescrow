@@ -73,6 +73,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <Link to={user ? "/trades/new" : "/signin?next=%2Ftrades%2Fnew"}>{t("Start a trade")}</Link>
             <Link to={user ? "/join" : "/signin?next=%2Fjoin"}>{t("Join a trade")}</Link>
             <Link to="/referrals">{t("Referrals")}</Link>
+            <Link to="/special-resolvers">{t("Special Resolvers")}</Link>
             <Link to="/blog">{t("Blog")}</Link>
             {!user ? <Link to="/signin">{t("Sign in")}</Link> : null}
           </nav>
@@ -136,6 +137,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <Link to={user ? "/join" : "/signin"}>{t("Join a trade")}</Link>
             <Link to="/trades">{t("Open trades")}</Link>
             <Link to="/referrals">{t("Referrals")}</Link>
+            <Link to="/special-resolvers">{t("Special Resolvers")}</Link>
             <Link to="/faq">{t("FAQ")}</Link>
             <Link to="/help">{t("Help")}</Link>
           </div>

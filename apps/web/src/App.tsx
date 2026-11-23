@@ -22,6 +22,7 @@ import { PrivacyPage } from "./pages/Privacy";
 import { FaqPage } from "./pages/Faq";
 import { HelpPage } from "./pages/Help";
 import { BlogPage, BlogPostPage } from "./pages/Blog";
+import { SpecialResolversPage } from "./pages/SpecialResolvers";
 
 function Routes() {
   const { path: rawPath, navigate } = useRouter();
@@ -34,6 +35,7 @@ function Routes() {
   if (path === "/app") return <DashboardPage />;
   if (path === "/app/profile") return <ProfilePage />;
   if (path === "/referrals") return <ReferralProgramPage />;
+  if (path === "/special-resolvers") return <SpecialResolversPage />;
   if (path === "/feedback") return <FeedbackPage />;
   if (path === "/terms") return <TermsPage />;
   if (path === "/privacy") return <PrivacyPage />;

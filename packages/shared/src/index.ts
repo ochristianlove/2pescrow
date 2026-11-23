@@ -295,6 +295,106 @@ export const escrowDealAbi = [
   },
 ] as const;
 
+export const resolverRouterAbi = [
+  {
+    type: "function",
+    name: "owner",
+    inputs: [],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "isResolver",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "isSpecialResolver",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "canResolveEscrow",
+    inputs: [
+      { name: "account", type: "address" },
+      { name: "escrow", type: "address" },
+    ],
+    outputs: [{ type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getResolvers",
+    inputs: [],
+    outputs: [{ type: "address[]" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getSpecialResolvers",
+    inputs: [],
+    outputs: [{ type: "address[]" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "addResolver",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "addResolvers",
+    inputs: [{ name: "accounts", type: "address[]" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "removeResolver",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "addSpecialResolver",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "removeSpecialResolver",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "resolveDispute",
+    inputs: [
+      { name: "escrow", type: "address" },
+      { name: "buyerFavor", type: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "withdrawDispute",
+    inputs: [{ name: "escrow", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
 export const erc20Abi = [
   {
     type: "function",

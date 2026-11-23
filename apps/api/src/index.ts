@@ -72,6 +72,8 @@ import {
 import {
   attributeRefereeByCode,
   ensureReferrerForUser,
+  findSpecialResolverByWallet,
+  findSpecialResolverForUsers,
   recordReferralClick,
   referralUrl,
   processEscrowCompletion,
@@ -988,6 +990,7 @@ app.get("/v1/admin/users", async (req, reply) => {
     include: {
       wallets: { select: { address: true, chainKind: true } },
       referrer: { select: { id: true, referralCode: true, tier: true } },
+      agentProfile: { select: { walletAddress: true, feeBps: true, active: true } },
     },
   });
   return users.map((u) => ({
@@ -999,6 +1002,7 @@ app.get("/v1/admin/users", async (req, reply) => {
     createdAt: u.createdAt,
     wallets: u.wallets,
     referrer: u.referrer,
+    resolverWallet: u.agentProfile?.walletAddress ?? null,
   }));
 });
 
@@ -1008,9 +1012,10 @@ app.patch("/v1/admin/users/:id/access", async (req, reply) => {
   const { id } = req.params as { id: string };
   const body = z
     .object({
-      staffRole: z.enum(["user", "agent", "moderator"]).default("user"),
+      staffRole: z.enum(["user", "agent", "moderator", "special_resolver"]).default("user"),
       permissions: z.array(z.enum(["disputes", "disputes_release", "blog", "email"])).max(4),
       moderator: z.boolean().optional(),
+      resolverWallet: z.string().trim().optional(),
     })
     .parse(req.body ?? {});
   const target = await prisma.user.findUnique({ where: { id } });
@@ -1019,9 +1024,41 @@ app.patch("/v1/admin/users/:id/access", async (req, reply) => {
     return reply.code(403).send({ error: "Super admin access cannot be changed here" });
   }
   const staffRole = body.moderator === true && body.staffRole === "user" ? "moderator" : body.staffRole;
-  const permissions = staffRole === "user" ? [] : [...new Set(body.permissions)];
+  const permissions =
+    staffRole === "user"
+      ? []
+      : staffRole === "special_resolver"
+        ? ["disputes", "disputes_release"]
+        : [...new Set(body.permissions)];
   let updated;
-  if (staffRole === "agent" && permissions.includes("disputes")) {
+  if (staffRole === "special_resolver") {
+    const cleanWallet = body.resolverWallet?.trim();
+    if (cleanWallet && !/^0x[0-9a-fA-F]{40}$/.test(cleanWallet)) {
+      return reply.code(400).send({ error: "Special Resolver wallet must be a valid 0x Ethereum address" });
+    }
+    updated = await prisma.user.update({
+      where: { id },
+      data: { role: "special_resolver", permissions },
+    });
+    if (cleanWallet) {
+      await prisma.agent.upsert({
+        where: { userId: id },
+        create: {
+          userId: id,
+          walletAddress: cleanWallet.toLowerCase(),
+          displayName: target.displayName || target.email || "Special Resolver",
+          feeBps: 500,
+          active: true,
+        },
+        update: {
+          walletAddress: cleanWallet.toLowerCase(),
+          feeBps: 500,
+          active: true,
+        },
+      });
+    }
+    await ensureReferrerForUser(id);
+  } else if (staffRole === "agent" && permissions.includes("disputes")) {
     try {
       updated = await grantAgentStaffAccess(target.id);
     } catch (e) {
@@ -1075,6 +1112,46 @@ app.post("/v1/me/agent-application", async (req, reply) => {
     }
     throw e;
   }
+});
+
+app.post("/v1/me/special-resolver-application", async (req, reply) => {
+  const auth = await requireUser(req, reply);
+  if (!auth) return;
+  const body = z
+    .object({
+      category: z.enum(["escrow_lawyer", "escrow_operator"]),
+      organization: z.string().trim().min(2).max(160),
+      proofUrl: z.string().trim().min(4).max(500),
+      walletAddress: z.string().trim().regex(/^0x[0-9a-fA-F]{40}$/, "Enter a valid 0x Ethereum wallet address"),
+      note: z.string().trim().min(10).max(1200),
+    })
+    .parse(req.body ?? {});
+
+  const pending = await prisma.agentApplication.findFirst({
+    where: { userId: auth.id, status: "pending" },
+    select: { id: true },
+  });
+  if (pending) {
+    return reply.code(409).send({ error: "You already have a pending application under review." });
+  }
+  const summary = [
+    "[SPECIAL_RESOLVER]",
+    `Category: ${body.category === "escrow_lawyer" ? "Escrow Lawyer / Legal Advocate" : "Traditional / Telegram Escrow Operator"}`,
+    `Firm / Platform: ${body.organization}`,
+    `Evidence / Credentials: ${body.proofUrl}`,
+    `Proposed Resolver Wallet: ${body.walletAddress.toLowerCase()}`,
+    `Notes: ${body.note}`,
+  ].join("\n");
+
+  const application = await prisma.agentApplication.create({
+    data: {
+      userId: auth.id,
+      status: "pending",
+      applicantNote: summary,
+      volumeAtomicAtApply: "0",
+    },
+  });
+  return reply.code(201).send(application);
 });
 
 app.get("/v1/admin/agent-applications", async (req, reply) => {
@@ -1548,6 +1625,7 @@ app.post("/v1/escrows", async (req, reply) => {
     const tokenAddress = tokenAddressForSymbol(body.tokenSymbol, settings) || "0x0000000000000000000000000000000000000000";
     let tradeCode = makeTradeCode();
     while (await prisma.escrow.findUnique({ where: { tradeCode } })) tradeCode = makeTradeCode();
+    const specialPartner = chain === "ethereum" ? await findSpecialResolverForUsers([auth.id]) : null;
     const escrow = await prisma.escrow.create({
       data: {
         chain,
@@ -1561,7 +1639,7 @@ app.post("/v1/escrows", async (req, reply) => {
         amountAtomic: body.amountAtomic,
         title: body.title,
         description: body.description,
-        agentAddress: null,
+        agentAddress: specialPartner?.walletAddress ?? null,
         status: "AwaitingSeller",
         joinDeadlineAt: hoursFromNow(settings.joinWindowHours),
         deliveryWindowHours: body.deliveryWindowHours ?? settings.deliveryWindowHours,
@@ -1659,11 +1737,16 @@ app.post("/v1/escrows/join", async (req, reply) => {
   if (escrow.status !== "AwaitingSeller" || (escrow.joinDeadlineAt && escrow.joinDeadlineAt < new Date())) {
     return reply.code(410).send({ error: "This trade code has expired or is no longer accepting a seller" });
   }
+  const specialPartner =
+    escrow.chain === "ethereum" && !escrow.agentAddress
+      ? await findSpecialResolverForUsers([escrow.buyerUserId, auth.id])
+      : null;
   const updated = await prisma.escrow.update({
     where: { id: escrow.id },
     data: {
       sellerUserId: auth.id,
       sellerAddress: null,
+      ...(specialPartner ? { agentAddress: specialPartner.walletAddress } : {}),
       status: "AwaitingFunding",
       fundDeadlineAt: hoursFromNow((await ensureSettings()).fundWindowHours),
     },
@@ -2240,8 +2323,26 @@ app.post("/v1/escrows/:id/disputes", async (req, reply) => {
     return reply.code(409).send({ error: "You have already used your one dispute opening for this trade" });
   }
   await prisma.escrow.update({ where: { id }, data: { status: "Disputed" } });
+  const specialResolver =
+    escrowRow.chain === "ethereum"
+      ? (await findSpecialResolverByWallet(escrowRow.agentAddress)) ||
+        (await findSpecialResolverForUsers([escrowRow.buyerUserId, escrowRow.sellerUserId]))
+      : null;
   const dispute = await prisma.dispute.create({
-    data: { escrowId: id, openedBy, openedByUserId, status: "open", requestedResolverTier: requestedTier },
+    data: {
+      escrowId: id,
+      openedBy,
+      openedByUserId,
+      status: "open",
+      requestedResolverTier: specialResolver ? "moderator" : requestedTier,
+      ...(specialResolver
+        ? {
+            ownerUserId: specialResolver.userId,
+            assignedModeratorUserId: specialResolver.userId,
+            assignedAt: new Date(),
+          }
+        : {}),
+    },
   });
   await prisma.escrowEvent.create({
     data: {
@@ -2250,14 +2351,20 @@ app.post("/v1/escrows/:id/disputes", async (req, reply) => {
     },
   });
   if (escrowRow.tradeCode) {
-    const tierLabel = requestedTier === "agent" ? "an agent" : requestedTier === "admin" ? "admin staff" : "a moderator";
+    const tierLabel = specialResolver
+      ? "the assigned Special Resolver"
+      : requestedTier === "agent"
+        ? "an agent"
+        : requestedTier === "admin"
+          ? "admin staff"
+          : "a moderator";
     await addTradeSystemMessage(
       id,
       reason
         ? `Dispute opened: ${reason}. Requested resolver: ${tierLabel}. Staff may join this chat to ask questions.`
         : `A party opened a dispute. Requested resolver: ${tierLabel}. Staff may join this chat to ask questions.`,
     );
-    const notifyIds = await staffUserIdsForTier(requestedTier);
+    const notifyIds = specialResolver ? [specialResolver.userId] : await staffUserIdsForTier(requestedTier);
     await notifyStaffUsers(notifyIds, {
       type: "dispute_opened",
       title: "New dispute opened",
@@ -2460,7 +2567,18 @@ app.get("/v1/admin/disputes", async (req, reply) => {
   const staff = await requirePermission(req, reply, "disputes");
   if (!staff) return;
   const activeDispute = { status: { in: [...ACTIVE_DISPUTE_STATUSES] } };
-  const where: Prisma.EscrowWhereInput = { status: "Disputed", disputes: { some: activeDispute } };
+  const where: Prisma.EscrowWhereInput =
+    staff.role === "special_resolver"
+      ? {
+          status: "Disputed",
+          disputes: {
+            some: {
+              ...activeDispute,
+              OR: [{ ownerUserId: staff.id }, { assignedModeratorUserId: staff.id }],
+            },
+          },
+        }
+      : { status: "Disputed", disputes: { some: activeDispute } };
   const rows = await prisma.escrow.findMany({
     where,
     orderBy: { updatedAt: "desc" },
