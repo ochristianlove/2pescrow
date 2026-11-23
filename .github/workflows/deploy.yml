@@ -145,9 +145,9 @@ jobs:
           npx --yes eas-cli@27.10.0 submit --platform android --profile production --id "$(cat production-build-id.txt)" --non-interactive --wait
 
   # Separate from the API deploy. An Apple credential failure must not skip Dokploy.
-  # Ad hoc signing is not in the repo. EAS reuses credentials already stored on the Expo project.
+  # Builds the production iOS store archive and submits it directly to TestFlight.
   phone-ios:
-    name: Build iOS app (EAS preview)
+    name: Build and submit iOS app (TestFlight)
     runs-on: ubuntu-latest
     timeout-minutes: 360
     needs: verify
@@ -159,71 +159,29 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Build the iOS preview on EAS
+      - name: Build the iOS app for TestFlight
         working-directory: apps/mobile
         env:
           EXPO_NO_TELEMETRY: "1"
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          EXPO_APPLE_TEAM_ID: T4Y9L72F8B
+          EXPO_APPLE_TEAM_TYPE: INDIVIDUAL
         run: |
           set -euo pipefail
           if [ -z "${EXPO_TOKEN}" ]; then
             echo "Add the EXPO_TOKEN repository secret (an Expo access token) so EAS can authenticate." >&2
             exit 1
           fi
-          echo "iOS preview is an internal ad hoc build. TestFlight submit uses a separate store build."
-          echo "No Apple certificate, provisioning profile, or App Store Connect API key is stored in this repo."
-          echo "EAS must already have the distribution certificate and ad hoc profile for com.twopescrow.app."
-          npx --yes eas-cli@27.10.0 build --platform ios --profile preview --non-interactive --wait --json > eas-build.json
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          raw = Path("eas-build.json").read_text(encoding="utf-8")
-          positions = [p for p in (raw.find("{"), raw.find("[")) if p != -1]
-          if not positions:
-              raise SystemExit("EAS did not return JSON, so there is no IPA to download.")
-          build, _ = json.JSONDecoder().raw_decode(raw[min(positions):])
-          if isinstance(build, list):
-              build = build[0]
-          status = str(build.get("status") or "").lower()
-          if status and status != "finished":
-              raise SystemExit("EAS iOS build status was %s" % status)
-          artifacts = build.get("artifacts") or {}
-          url = artifacts.get("applicationArchiveUrl") or ""
-          if not url:
-              raise SystemExit("EAS iOS build finished without applicationArchiveUrl.")
-          Path("artifact-url.txt").write_text(url, encoding="utf-8")
-          PY
-      - name: Download the EAS IPA
-        working-directory: apps/mobile
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          curl --silent --show-error --fail --location --retry 3 --retry-delay 5 \
-            --output dist/2pescrow-preview.ipa \
-            --url "$(cat artifact-url.txt)"
-      - name: Verify the IPA is an iOS package
-        working-directory: apps/mobile
-        run: |
-          python3 - <<'PY'
-          import zipfile
-          path = "dist/2pescrow-preview.ipa"
-          with zipfile.ZipFile(path) as ipa:
-              names = ipa.namelist()
-          if not any(name.startswith("Payload/") for name in names):
-              raise SystemExit("Downloaded file is not an iOS IPA")
-          PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: 2pescrow-ios
-          path: apps/mobile/dist/2pescrow-preview.ipa
-          if-no-files-found: error
-      - name: Build the iOS app for TestFlight
-        working-directory: apps/mobile
-        env:
-          EXPO_NO_TELEMETRY: "1"
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: |
-          set -euo pipefail
+          if [ -z "${EXPO_ASC_KEY_ID}" ] || [ -z "${EXPO_ASC_ISSUER_ID}" ] || [ -z "${ASC_PRIVATE_KEY}" ]; then
+            echo "Add the ASC_KEY_ID, ASC_ISSUER_ID, and ASC_PRIVATE_KEY repository secrets." >&2
+            exit 1
+          fi
+          key_path="${RUNNER_TEMP}/AuthKey.p8"
+          printf '%s\n' "$ASC_PRIVATE_KEY" > "$key_path"
+          export EXPO_ASC_API_KEY_PATH="$key_path"
           npx --yes eas-cli@27.10.0 build --platform ios --profile production --non-interactive --wait --json > eas-production.json
           python3 - <<'PY'
           import json

@@ -23,6 +23,8 @@ jobs:
           EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          EXPO_APPLE_TEAM_ID: T4Y9L72F8B
+          EXPO_APPLE_TEAM_TYPE: INDIVIDUAL
         run: |
           set -euo pipefail
           if [ -z "${EXPO_TOKEN}" ] || [ -z "${EXPO_ASC_KEY_ID}" ] || [ -z "${EXPO_ASC_ISSUER_ID}" ] || [ -z "${ASC_PRIVATE_KEY}" ]; then
@@ -32,4 +34,16 @@ jobs:
           key_path="${RUNNER_TEMP}/AuthKey.p8"
           printf '%s\n' "$ASC_PRIVATE_KEY" > "$key_path"
           export EXPO_ASC_API_KEY_PATH="$key_path"
-          npx --yes eas-cli@27.10.0 build --platform ios --profile production --non-interactive --no-wait
+          KEY_PATH="$key_path" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          path = Path("eas.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          ios = data.setdefault("submit", {}).setdefault("production", {}).setdefault("ios", {})
+          ios["ascApiKeyPath"] = os.environ["KEY_PATH"]
+          ios["ascApiKeyId"] = os.environ["EXPO_ASC_KEY_ID"]
+          ios["ascApiKeyIssuerId"] = os.environ["EXPO_ASC_ISSUER_ID"]
+          path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+          PY
+          npx --yes eas-cli@27.10.0 build --platform ios --profile production --non-interactive --auto-submit --no-wait
