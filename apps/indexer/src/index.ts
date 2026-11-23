@@ -12,7 +12,15 @@ const INDEXER_KEY = process.env.INDEXER_API_KEY ?? "";
 if (!INDEXER_KEY) {
   throw new Error("INDEXER_API_KEY is required");
 }
-const FACTORY = process.env.ESCROW_FACTORY_ADDRESS;
+const LEGACY_FACTORIES = ["0x08Be929Ac784E8aEe20403c4F5bbEE2668e183c9"];
+const FACTORIES = Array.from(
+  new Set(
+    [process.env.ESCROW_FACTORY_ADDRESS, ...(process.env.LEGACY_ESCROW_FACTORY_ADDRESSES || "").split(","), ...LEGACY_FACTORIES]
+      .map((a) => (a || "").trim())
+      .filter((a) => /^0x[0-9a-fA-F]{40}$/.test(a))
+      .map((a) => a.toLowerCase()),
+  ),
+) as `0x${string}`[];
 
 const client = createPublicClient({
   chain: mainnet,
@@ -58,34 +66,37 @@ async function watchEscrow(address: `0x${string}`) {
 
 async function main() {
   console.log("2Pescrow indexer starting on Ethereum", RPC);
-  if (!FACTORY) {
+  if (FACTORIES.length === 0) {
     console.warn("ESCROW_FACTORY_ADDRESS not set — polling disabled until factory deployed");
     setInterval(() => {}, 60_000);
     return;
   }
 
-  client.watchContractEvent({
-    address: FACTORY as `0x${string}`,
-    abi: escrowFactoryAbi,
-    eventName: "EscrowCreated",
-    onLogs: async (logs) => {
-      for (const log of logs) {
-        const args = log.args as { escrow?: `0x${string}` };
-        const escrow = args.escrow;
-        if (escrow) {
-          console.log("Watching escrow", escrow);
-          await watchEscrow(escrow);
-          await ingest({
-            contractAddress: escrow,
-            eventName: "EscrowCreated",
-            txHash: log.transactionHash,
-            blockNumber: log.blockNumber?.toString(),
-            payload: log.args as Record<string, unknown>,
-          });
+  for (const factory of FACTORIES) {
+    console.log("Watching factory", factory);
+    client.watchContractEvent({
+      address: factory,
+      abi: escrowFactoryAbi,
+      eventName: "EscrowCreated",
+      onLogs: async (logs) => {
+        for (const log of logs) {
+          const args = log.args as { escrow?: `0x${string}` };
+          const escrow = args.escrow;
+          if (escrow) {
+            console.log("Watching escrow", escrow);
+            await watchEscrow(escrow);
+            await ingest({
+              contractAddress: escrow,
+              eventName: "EscrowCreated",
+              txHash: log.transactionHash,
+              blockNumber: log.blockNumber?.toString(),
+              payload: log.args as Record<string, unknown>,
+            });
+          }
         }
-      }
-    },
-  });
+      },
+    });
+  }
 }
 
 main().catch(console.error);

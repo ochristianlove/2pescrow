@@ -8,17 +8,19 @@ export const fundingReadAbi = parseAbi([
   "function fund()", "function allowance(address,address) view returns (uint256)",
   "function balanceOf(address) view returns (uint256)", "function approve(address,uint256) returns (bool)",
 ]);
-export type FundingTerms = { factory: Address; buyer: Address; seller: Address; token: Address; amount: bigint };
+export type FundingTerms = { factory: Address; allowedFactories?: Address[]; buyer: Address; seller: Address; token: Address; amount: bigint };
 export const same = (a: string | null | undefined, b: string | null | undefined) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
+const allowedFactoryMatch = (candidate: string | null | undefined, terms: FundingTerms) =>
+  (terms.allowedFactories?.length ? terms.allowedFactories : [terms.factory]).some((f) => same(candidate, f));
 const zero = "0x0000000000000000000000000000000000000000";
 
 export function creationChild(receipt: TransactionReceipt, terms: FundingTerms): Address {
-  if (receipt.status !== "success" || !same(receipt.from, terms.buyer) || !same(receipt.to, terms.factory)) {
+  if (receipt.status !== "success" || !same(receipt.from, terms.buyer) || !allowedFactoryMatch(receipt.to, terms)) {
     throw new Error("The creation receipt does not match this buyer and factory.");
   }
   const matches: Address[] = [];
   for (const log of receipt.logs) {
-    if (!same(log.address, terms.factory)) continue;
+    if (!allowedFactoryMatch(log.address, terms)) continue;
     try {
       const e = decodeEventLog({ abi: escrowFactoryAbi, data: log.data, topics: log.topics });
       if (e.eventName === "EscrowCreated" && same(e.args.buyer, terms.buyer) && same(e.args.seller, terms.seller)
@@ -50,7 +52,7 @@ export async function verifyChild(client: PublicClient, child: Address, terms: F
     client.readContract({ address: child, abi: fundingReadAbi, functionName: "escrowAmount", blockNumber }),
     client.readContract({ address: child, abi: fundingReadAbi, functionName: "state", blockNumber }),
   ]);
-  if (!same(factory, terms.factory) || !same(buyer, terms.buyer) || !same(seller, terms.seller) || !same(token, terms.token) || amount !== terms.amount) {
+  if (!allowedFactoryMatch(factory, terms) || !same(buyer, terms.buyer) || !same(seller, terms.seller) || !same(token, terms.token) || amount !== terms.amount) {
     throw new Error("The saved escrow does not match this trade. Funding is paused for review.");
   }
   return Number(state);

@@ -6,7 +6,7 @@ import { notifyTradeFunded, notifyTradeCompleted, notifyTradeCancelled } from ".
 import { classifyFundingReceipt, creationChild, findNonceTransaction, fundingReadAbi, nextFundingCall, receiptIfMined, same, verifyChild, type FundingTerms } from "./ethereumFundingChain";
 
 type Db = Prisma.TransactionClient;
-type Settings = { factory: string; tokens: Record<string, string | null | undefined> };
+type Settings = { factory: string; allowedFactories?: string[]; tokens: Record<string, string | null | undefined> };
 const states = ["Created", "Funded", "InProgress", "Completed", "Cancelled", "Disputed", "Resolved"];
 const isCreation = (kind: string) => kind === "create" || kind === "createAndFund";
 const view = (a: EthereumFundingAttempt): FundingAttemptView => ({ id: a.id, kind: a.kind as FundingKind, status: a.status, hash: a.txHash, nonce: a.nonce, gasPaidWei: a.gasPaidWei });
@@ -34,7 +34,10 @@ export class EthereumFundingService {
       await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 1))`;
       const row = await db.escrow.findUniqueOrThrow({ where: { id } });
       if (row.buyerAddress !== initial.buyerAddress || row.sellerAddress !== initial.sellerAddress || row.amountAtomic !== initial.amountAtomic || row.tokenAddress !== initial.tokenAddress) throw new FundingError("Trade details changed. Refresh before continuing.");
-      const terms: FundingTerms = { factory: settings.factory as Address, buyer: row.buyerAddress as Address, seller: row.sellerAddress as Address, token: token as Address, amount: BigInt(row.amountAtomic) };
+      const allowedFactories = Array.from(
+        new Set([settings.factory, ...(settings.allowedFactories ?? [])].filter((f): f is Address => isAddress(f)).map((f) => f.toLowerCase())),
+      ) as Address[];
+      const terms: FundingTerms = { factory: settings.factory as Address, allowedFactories, buyer: row.buyerAddress as Address, seller: row.sellerAddress as Address, token: token as Address, amount: BigInt(row.amountAtomic) };
       const latest = await this.client.getBlockNumber({ cacheTime: 0 });
       const head = latest > 2n ? latest - 2n : 0n; // Three confirmations before advancing a step.
       return run(db, row, terms, head);

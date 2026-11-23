@@ -44,21 +44,31 @@ async function main() {
     throw new Error("The deployer key does not match DEPLOYER_WALLET");
   }
 
+  const block = await provider.getBlock("latest");
   const fee = await provider.getFeeData();
-  const maxPriorityFeePerGas = 10_000_000n;
-  const maxFeePerGas = (fee.gasPrice ?? 400_000_000n) + maxPriorityFeePerGas;
+  const baseFee = block?.baseFeePerGas ?? fee.gasPrice ?? 400_000_000n;
+  const maxPriorityFeePerGas = 50_000_000n; // 0.05 gwei tip for prompt inclusion
+  const maxFeePerGas = (baseFee * 150n) / 100n + maxPriorityFeePerGas;
+  const HARD_MAX_FEE_PER_GAS = 2_000_000_000n; // 2 gwei hard ceiling (~$8 worst-case cap)
+  if (maxFeePerGas > HARD_MAX_FEE_PER_GAS) {
+    throw new Error(`Refusing to deploy: gas price ${ethers.formatUnits(maxFeePerGas, "gwei")} gwei exceeds 2 gwei safety cap`);
+  }
   const overrides = { maxFeePerGas, maxPriorityFeePerGas };
 
   const deal = JSON.parse(fs.readFileSync(path.join(__dirname, "../artifacts/contracts/EscrowDeal.sol/EscrowDeal.json"), "utf8"));
   const factoryJson = JSON.parse(fs.readFileSync(path.join(__dirname, "../artifacts/contracts/EscrowFactory.sol/EscrowFactory.json"), "utf8"));
 
-  const balance = await provider.getBalance(wallet.address);
-  if (balance < 600_000_000_000_000n) {
-    throw new Error(`Deployer balance is too low: ${ethers.formatEther(balance)} ETH`);
+  const startBalance = await provider.getBalance(wallet.address);
+  if (startBalance < 600_000_000_000_000n) {
+    throw new Error(`Deployer balance is too low: ${ethers.formatEther(startBalance)} ETH`);
   }
 
+  console.log("Deploying V2 EscrowDeal implementation at maxFee", ethers.formatUnits(maxFeePerGas, "gwei"), "gwei...");
   const implementation = await new ContractFactory(deal.abi, deal.bytecode, wallet).deploy(overrides);
+  const implTx = implementation.deploymentTransaction();
+  console.log("EscrowDeal tx:", implTx?.hash);
   await implementation.waitForDeployment();
+  const implReceipt = await implTx.wait();
   const implementationAddress = await implementation.getAddress();
 
   const remaining = await provider.getBalance(wallet.address);
@@ -66,6 +76,7 @@ async function main() {
     throw new Error(`Implementation deployed at ${implementationAddress}, but ${ethers.formatEther(remaining)} ETH is left, which is not enough for the factory.`);
   }
 
+  console.log("Deploying V2 EscrowFactory...");
   const factory = await new ContractFactory(factoryJson.abi, factoryJson.bytecode, wallet).deploy(
     implementationAddress,
     feeRecipient,
@@ -75,10 +86,16 @@ async function main() {
     third,
     overrides
   );
+  const factoryTx = factory.deploymentTransaction();
+  console.log("EscrowFactory tx:", factoryTx?.hash);
   await factory.waitForDeployment();
+  const factoryReceipt = await factoryTx.wait();
+  const factoryAddress = await factory.getAddress();
 
-  console.log("EscrowDeal implementation:", implementationAddress);
-  console.log("EscrowFactory:", await factory.getAddress());
+  const endBalance = await provider.getBalance(wallet.address);
+  console.log("EscrowDeal implementation:", implementationAddress, "gasUsed:", implReceipt.gasUsed.toString());
+  console.log("EscrowFactory:", factoryAddress, "gasUsed:", factoryReceipt.gasUsed.toString());
+  console.log("Total ETH spent:", ethers.formatEther(startBalance - endBalance), "Remaining ETH:", ethers.formatEther(endBalance));
 }
 
 main().catch((error) => {

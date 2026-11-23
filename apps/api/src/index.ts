@@ -1302,7 +1302,7 @@ app.get("/v1/config/wallets", async () => {
       USDT: config.usdtAddress,
       TRON_USDT: settings.tronUsdtAddress || config.tronUsdtAddress || null,
     },
-    factoryAddress: config.factoryAddress,
+    factoryAddress: settings.factoryAddress || config.factoryAddress || null,
     ethereumExplorer: "https://etherscan.io",
     tronSupportEnabled: settings.tronSupportEnabled,
     tronFactoryAddress: settings.tronFactoryAddress || config.tronFactoryAddress || null,

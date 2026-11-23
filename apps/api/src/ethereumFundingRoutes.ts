@@ -9,9 +9,13 @@ import { broadcast } from "./wsHub";
 import { EthereumFundingService, FundingError } from "./ethereumFunding";
 
 const client = createPublicClient({ chain: mainnet, transport: http(config.ethereumRpcUrl, { timeout: 10_000, retryCount: 0 }) });
+const LEGACY_ETHEREUM_FACTORIES = ["0x08Be929Ac784E8aEe20403c4F5bbEE2668e183c9"];
+
 export const ethereumFunding = new EthereumFundingService(prisma, client, async () => {
   const s = await prisma.platformSettings.findUnique({ where: { id: 1 } });
-  return { factory: s?.factoryAddress || config.factoryAddress || "", tokens: {
+  const activeFactory = s?.factoryAddress || config.factoryAddress || "";
+  const allowedFactories = [activeFactory, config.factoryAddress || "", ...LEGACY_ETHEREUM_FACTORIES].filter(Boolean);
+  return { factory: activeFactory, allowedFactories, tokens: {
     USDT: s?.usdtAddress || config.usdtAddress, USDC: s?.usdcAddress || config.usdcAddress,
     THIRD: s?.thirdStablecoinAddress || config.thirdStablecoinAddress,
   } };
