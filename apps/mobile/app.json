@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.twopescrow.app",
-      "buildNumber": "10",
+      "buildNumber": "12",
       "appleTeamId": "T4Y9L72F8B",
       "associatedDomains": [
         "applinks:2pescrow.com"
@@ -35,7 +35,7 @@
     "android": {
       "package": "com.twopescrow.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 8,
+      "versionCode": 10,
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

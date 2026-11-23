@@ -34,6 +34,16 @@ jobs:
           key_path="${RUNNER_TEMP}/AuthKey.p8"
           printf '%s\n' "$ASC_PRIVATE_KEY" > "$key_path"
           export EXPO_ASC_API_KEY_PATH="$key_path"
+          python3 - <<'PY'
+          import json, time
+          from pathlib import Path
+          path = Path("app.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          build_num = max(12, int((time.time() - 1767225600) // 60))
+          data["expo"]["ios"]["buildNumber"] = str(build_num)
+          path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+          print("Stamped iOS buildNumber:", build_num)
+          PY
           KEY_PATH="$key_path" python3 - <<'PY'
           import json
           import os
