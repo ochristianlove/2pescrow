@@ -2189,6 +2189,40 @@ app.post("/v1/escrows/:id/wallet", async (req, reply) => {
   return updated;
 });
 
+app.delete("/v1/escrows/:id/wallet", async (req, reply) => {
+  const auth = await requireUser(req, reply);
+  if (!auth) return;
+  const { id } = req.params as { id: string };
+  const escrow = await prisma.escrow.findUnique({ where: { id } });
+  if (!escrow || !escrow.tradeCode) return reply.code(404).send({ error: "Shared trade not found" });
+  const role = await escrowPartyRole(auth, escrow);
+  if (role !== "buyer" && role !== "seller") return reply.code(403).send({ error: "Only the buyer or seller can unlink a trade wallet" });
+  const updated = await prisma.$transaction(async (tx) => {
+    if (escrow.chain === "ethereum") {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${escrow.buyerAddress?.toLowerCase() || id}, 0))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 1))`;
+    }
+    const current = await tx.escrow.findUniqueOrThrow({ where: { id } });
+    const lockedByStatus = ["Funded", "InProgress", "Completed", "Cancelled", "Disputed", "Resolved"].includes(current.status);
+    const hasAttempts =
+      escrow.chain === "ethereum" && (await tx.ethereumFundingAttempt.count({ where: { escrowId: id } })) > 0;
+    if (lockedByStatus || current.contractAddress || current.createTxHash || hasAttempts) {
+      return null;
+    }
+    return tx.escrow.update({
+      where: { id },
+      data: role === "buyer" ? { buyerAddress: null } : { sellerAddress: null },
+    });
+  });
+  if (!updated) {
+    return reply.code(409).send({ error: "Wallets cannot be removed after funding has started." });
+  }
+  const roleLabel = role === "buyer" ? "Buyer" : "Seller";
+  await addTradeSystemMessage(escrow.id, `${roleLabel} unlinked their wallet from this trade.`);
+  broadcast("trade:timeline-updated", { escrowId: updated.id });
+  return updated;
+});
+
 app.patch("/v1/escrows/:id", async (req, reply) => {
   const auth = await requireUser(req, reply);
   if (!auth) return;

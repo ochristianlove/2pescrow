@@ -45,6 +45,7 @@ import { userDisplayLabel } from "../lib/userDisplay";
 import { TradeRoleTags } from "../components/TradeRoleTags";
 import { EthereumFundingProgress } from "../components/EthereumFundingProgress";
 import { useEthereumFunding } from "../lib/useEthereumFunding";
+import { playTradeBell } from "../lib/tradeSound";
 
 const erc20ReadAbi = [
   { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ name: "owner", type: "address" }], outputs: [{ type: "uint256" }] },
@@ -255,7 +256,24 @@ export function TradeDetailPage({ id }: { id: string }) {
   const { live: liveUpdates } = useLiveTradeUpdates(load, {
     escrowId: id,
     enabled: Boolean(user),
-    pollMs: 4_000,
+    pollMs: 3_000,
+    onEvent: (event) => {
+      if (event === "trade:funding-submitted") {
+        playTradeBell("sent");
+        setLiveNotice(t("🔔 Deposit transaction sent — confirming on Ethereum…"));
+      } else if (event === "trade:funded") {
+        playTradeBell("confirmed");
+        setLiveNotice(t("🔔 Escrow funded on Ethereum! Funds are locked in the smart contract."));
+      } else if (event === "trade:release-requested") {
+        playTradeBell("update");
+        setLiveNotice(t("🔔 Seller confirmed fulfilment — ready for buyer review and release."));
+      } else if (event === "trade:completed") {
+        playTradeBell("confirmed");
+        setLiveNotice(t("🔔 Trade completed! Funds have been released on-chain."));
+      } else if (event === "dispute:opened" || event === "dispute:resolved") {
+        playTradeBell("update");
+      }
+    },
   });
 
   useEffect(() => {
@@ -327,7 +345,13 @@ export function TradeDetailPage({ id }: { id: string }) {
   const isSeller = participatesAsSeller;
   const isTradeParticipant = participatesAsBuyer || participatesAsSeller;
   const isCodeTrade = !!escrow?.tradeCode;
-  const managedFunding = useEthereumFunding(id, Boolean(user && isBuyer && isCodeTrade && escrow?.chain === "ethereum" && escrow?.buyerAddress && escrow?.sellerAddress), authHeaders, load);
+  const managedFunding = useEthereumFunding(
+    id,
+    Boolean(user && isBuyer && isCodeTrade && escrow?.chain === "ethereum" && escrow?.buyerAddress && escrow?.sellerAddress),
+    authHeaders,
+    load,
+    (alertMsg) => setLiveNotice(alertMsg),
+  );
   async function startManagedFunding() {
     if (!address || chainId !== mainnet.id || !isBuyer) { setError("Connect the buyer wallet on Ethereum mainnet."); return; }
     await managedFunding.run(address, connector);
@@ -820,6 +844,26 @@ export function TradeDetailPage({ id }: { id: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ address: walletAddress }),
+      });
+      setEscrow((current) => (current ? { ...current, ...updated, partyRole: current.partyRole ?? updated.partyRole } : updated));
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      actionLock.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function unlinkPartyWallet() {
+    if (!escrow || !user || actionLock.current) return;
+    actionLock.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await api<Escrow>(`/v1/escrows/${id}/wallet`, {
+        method: "DELETE",
+        headers: authHeaders(),
       });
       setEscrow((current) => (current ? { ...current, ...updated, partyRole: current.partyRole ?? updated.partyRole } : updated));
       await load();
@@ -1535,9 +1579,9 @@ export function TradeDetailPage({ id }: { id: string }) {
           <h2>{t("Two profiles. One escrow.")}</h2>
           <ol>
             <li><strong>{t("Connect wallets.")}</strong> {t("Each party connects a wallet and taps “Link my wallet” in the trade room. Joining or signing in does not link a wallet by itself.")}</li>
-            <li><strong>{t("Fund the escrow.")}</strong> {t("The buyer deploys the trade contract and approves the token deposit. The invitation does not lock funds.")}</li>
-            <li><strong>{t("Chat and fulfilment.")}</strong> {t("Both parties can message and share evidence. After funds are on-chain, the seller uploads fulfilment proof here.")}</li>
-            <li><strong>{t("Review and release.")}</strong> {t("Once proof is confirmed on-chain, the buyer reviews it and approves release to the seller.")}</li>
+            <li><strong>{t("Fund the escrow.")}</strong> {t("The buyer approves USDT and funds the V2 escrow in one smart-contract transaction.")}</li>
+            <li><strong>{t("Chat and fulfilment.")}</strong> {t("Both parties message and share proof here. On V2, the seller confirms fulfilment off-chain with zero gas.")}</li>
+            <li><strong>{t("Review and release.")}</strong> {t("The buyer reviews the fulfilment proof and approves release to the seller directly on-chain.")}</li>
           </ol>
         </section>
       )}
@@ -1663,7 +1707,14 @@ export function TradeDetailPage({ id }: { id: string }) {
               )}
               {currentPartyWallet && (isBuyer || isSeller) ? (
                 currentWalletMatchesTrade ? (
-                  <p className="ok-banner">{t("Your connected wallet is linked to this trade.")}</p>
+                  <>
+                    <p className="ok-banner">{t("Your connected wallet is linked to this trade.")}</p>
+                    {!hasOnChainContract && !escrow.createTxHash && !isDisputeEligibleStatus(effectiveStatus) && !["Completed", "Cancelled", "Resolved"].includes(effectiveStatus) && (
+                      <button type="button" className="secondary" disabled={busy} onClick={() => void unlinkPartyWallet()}>
+                        {t(isBuyer ? "Unlink buyer wallet" : "Unlink seller wallet")}
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <>
                     <p className="ok-banner">
@@ -1680,21 +1731,28 @@ export function TradeDetailPage({ id }: { id: string }) {
                     ) : walletAddress && !currentWalletMatchesTrade ? (
                       <p className="hint">{t("The connected header wallet is not the wallet linked to this trade.")}</p>
                     ) : null}
-                    {!(hasOnChainContract && isDisputeEligibleStatus(effectiveStatus)) && (
-                      <button type="button" className="secondary" disabled={busy} onClick={linkPartyWallet}>
-                        {t(isBuyer ? "Update buyer wallet" : "Update seller wallet")}
-                      </button>
+                    {!hasOnChainContract && !escrow.createTxHash && !isDisputeEligibleStatus(effectiveStatus) && !["Completed", "Cancelled", "Resolved"].includes(effectiveStatus) && (
+                      <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+                        {walletAddress && (
+                          <button type="button" className="secondary" disabled={busy} onClick={() => void linkPartyWallet()}>
+                            {t(isBuyer ? "Switch to connected buyer wallet" : "Switch to connected seller wallet")} · {shortAddr(walletAddress)}
+                          </button>
+                        )}
+                        <button type="button" className="secondary" disabled={busy} onClick={() => void unlinkPartyWallet()}>
+                          {t(isBuyer ? "Unlink buyer wallet" : "Unlink seller wallet")}
+                        </button>
+                      </div>
                     )}
-                    {hasOnChainContract && isDisputeEligibleStatus(effectiveStatus) && (
+                    {(hasOnChainContract || isDisputeEligibleStatus(effectiveStatus)) && (
                       <p className="hint">
-                        {t("The escrow contract wallet was fixed at funding. Use “Link saved … wallet” if needed, or connect that same wallet in the header for on-chain steps — do not change to a different address.")}
+                        {t("The escrow contract wallet was fixed at funding. Connect that same wallet in the header for on-chain steps — do not change to a different address.")}
                       </p>
                     )}
                   </>
                 )
               ) : walletAddress ? (
-                <button type="button" className="secondary" disabled={busy} onClick={linkPartyWallet}>
-                  {t(isBuyer ? (buyerWalletLinked ? "Update buyer wallet" : "Link my buyer wallet") : (sellerWalletLinked ? "Update seller wallet" : "Link my seller wallet"))}
+                <button type="button" className="secondary" disabled={busy} onClick={() => void linkPartyWallet()}>
+                  {t(isBuyer ? "Link connected buyer wallet" : "Link connected seller wallet")} · {shortAddr(walletAddress)}
                 </button>
               ) : isTronEscrow ? (
                 <p className="muted">{t("Connect a TRON wallet from the header.")}</p>
@@ -1703,15 +1761,6 @@ export function TradeDetailPage({ id }: { id: string }) {
               ) : (
                 <ConnectEvmWalletButton>{t("Connect Ethereum wallet")}</ConnectEvmWalletButton>
               )}
-              {user?.wallets?.filter((wallet) => isTronEscrow
-                ? !wallet.address.startsWith("0x")
-                : wallet.address.startsWith("0x"))
-                .filter((wallet) => !walletAddress || !partyMatches(escrow.chain, wallet.address, walletAddress))
-                .map((wallet) => (
-                  <button key={wallet.id} type="button" className="secondary" disabled={busy} onClick={() => linkPartyWallet(wallet.address)}>
-                    {t(isBuyer ? "Link saved buyer wallet" : "Link saved seller wallet")} · {shortAddr(wallet.address)}
-                  </button>
-                ))}
             </div>
           )}
 

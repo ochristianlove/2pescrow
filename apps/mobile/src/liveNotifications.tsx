@@ -47,6 +47,7 @@ const TRADE_EVENTS = new Set([
   "trade:cancel-refused",
   "trade:cancelled",
   "trade:funded",
+  "trade:funding-submitted",
   "trade:release-requested",
   "trade:completed",
   "notification:new",
@@ -131,6 +132,8 @@ function messageForEvent(event: string, payload: WsEnvelope["payload"]): string 
       return "The cancel request was refused.";
     case "trade:cancelled":
       return "The trade was cancelled. The buyer was refunded the trade amount minus the $1 cancel commission.";
+    case "trade:funding-submitted":
+      return "Funds left the buyer's wallet — confirming on Ethereum…";
     case "trade:funded":
       return "The buyer funded the on-chain escrow.";
     case "trade:release-requested":

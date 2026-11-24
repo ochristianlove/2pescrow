@@ -47,6 +47,9 @@ export function registerEthereumFundingRoutes(app: FastifyInstance) {
           } else if (action === "report") {
             const body = z.object({ attemptId: z.string().uuid(), hash: z.string().regex(/^0x[0-9a-fA-F]{64}$/).optional(), outcome: z.enum(["rejected", "uncertain"]).optional() }).refine(b => Boolean(b.hash) !== Boolean(b.outcome)).parse(req.body);
             result = await ethereumFunding.report(id, body.attemptId, body);
+            if (body.hash) {
+              broadcast("trade:funding-submitted", { escrowId: id, attemptId: body.attemptId, hash: body.hash.toLowerCase() });
+            }
           } else {
             const body = z.object({ hash: z.string().regex(/^0x[0-9a-fA-F]{64}$/) }).parse(req.body);
             result = await ethereumFunding.recover(id, body.hash as `0x${string}`);

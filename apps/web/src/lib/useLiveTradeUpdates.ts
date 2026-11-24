@@ -18,6 +18,7 @@ const TRADE_EVENTS = new Set([
   "trade:cancel-refused",
   "trade:cancelled",
   "trade:funded",
+  "trade:funding-submitted",
   "trade:release-requested",
   "trade:completed",
 ]);
@@ -42,6 +43,8 @@ type Options = {
   enabled?: boolean;
   /** Poll interval when WebSocket is down (default 20s). No polling while WS is connected. */
   pollMs?: number;
+  /** Optional callback receiving the exact WebSocket event name for instant alerts/chimes. */
+  onEvent?: (event: string, payload?: WsEnvelope["payload"]) => void;
 };
 
 /**
@@ -53,6 +56,8 @@ export function useLiveTradeUpdates(onRefresh: () => void, options?: Options) {
   const pollMs = options?.pollMs ?? 20_000;
   const onRefreshRef = useRef(onRefresh);
   onRefreshRef.current = onRefresh;
+  const onEventRef = useRef(options?.onEvent);
+  onEventRef.current = options?.onEvent;
   const [live, setLive] = useState(false);
 
   useEffect(() => {
@@ -108,7 +113,10 @@ export function useLiveTradeUpdates(onRefresh: () => void, options?: Options) {
         try {
           const msg = JSON.parse(String(ev.data)) as WsEnvelope;
           const id = payloadEscrowId(msg.payload);
-          if (eventApplies(msg.event, id, filterEscrowId)) onRefreshRef.current();
+          if (eventApplies(msg.event, id, filterEscrowId)) {
+            if (msg.event) onEventRef.current?.(msg.event, msg.payload);
+            onRefreshRef.current();
+          }
         } catch {
           onRefreshRef.current();
         }

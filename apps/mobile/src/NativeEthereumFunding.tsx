@@ -1,7 +1,7 @@
 import "react-native-get-random-values";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Linking, View } from "react-native";
+import { AppState, Linking, Vibration, View } from "react-native";
 import { formatEther } from "ethers";
 import { continueFunding, fundingStepLabel, sendPreparedFundingTransaction, type FundingSnapshot, type PreparedFunding } from "../../../packages/shared/src/funding";
 import { api } from "./api";
@@ -16,6 +16,7 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
   trade: TradeRow; requireWallet: () => { from: string; provider: WalletProvider }; onChanged: () => Promise<void>;
 }) {
   const [state, setState] = useState<FundingSnapshot | null>(null);
+  const [liveAlert, setLiveAlert] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [support, setSupport] = useState(false);
@@ -23,6 +24,7 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
   const lock = useRef(false);
   const syncing = useRef(false);
   const mounted = useRef(true);
+  const prevStage = useRef<string | null>(null);
   const idRef = useRef(trade.id);
   idRef.current = trade.id;
   const base = `/v1/escrows/${encodeURIComponent(trade.id)}/ethereum-funding`;
@@ -38,19 +40,31 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
         await post("report", body).then(() => AsyncStorage.removeItem(storage)).catch(() => undefined);
       }
       const next = await api<FundingSnapshot>(base);
-      if (mounted.current && idRef.current === trade.id) setState(next);
+      if (mounted.current && idRef.current === trade.id) {
+        if (prevStage.current && prevStage.current !== "funded" && next.stage === "funded") {
+          Vibration.vibrate([0, 60, 70, 90]);
+          setLiveAlert("🔔 Deposit confirmed on Ethereum! Funds are secured in escrow.");
+          void onChanged();
+        }
+        prevStage.current = next.stage;
+        setState(next);
+      }
       return next;
     } catch (e) {
       if (mounted.current && idRef.current === trade.id) setError(e instanceof Error ? e.message : "Could not check saved payment progress.");
     } finally { syncing.current = false; }
-  }, [base, post, storage, trade.id, trade.buyerAddress, trade.sellerAddress]);
+  }, [base, post, storage, trade.id, trade.buyerAddress, trade.sellerAddress, onChanged]);
+  const isPending = busy || state?.stage === "pending";
   useEffect(() => {
-    mounted.current = true; setState(null); setError(null);
+    mounted.current = true; prevStage.current = null; setState(null); setLiveAlert(null); setError(null);
     void refresh();
-    const timer = setInterval(() => { if (AppState.currentState === "active") void refresh(); }, 3500);
     const listener = AppState.addEventListener("change", value => { if (value === "active") void refresh(); });
-    return () => { mounted.current = false; clearInterval(timer); listener.remove(); };
+    return () => { mounted.current = false; listener.remove(); };
   }, [refresh]);
+  useEffect(() => {
+    const timer = setInterval(() => { if (AppState.currentState === "active") void refresh(); }, isPending ? 1500 : 3500);
+    return () => clearInterval(timer);
+  }, [isPending, refresh]);
 
   async function run() {
     if (lock.current) return;
@@ -62,7 +76,18 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
         get: () => api<FundingSnapshot>(base),
         prepare: (requestId, resume) => post<PreparedFunding>("prepare", { requestId, resume, buyerAddress: from }),
         report: (attemptId, body) => post("report", { attemptId, ...body }),
-        remember: (attemptId, txHash) => AsyncStorage.setItem(storage, JSON.stringify({ attemptId, hash: txHash })),
+        remember: async (attemptId, txHash) => {
+          await AsyncStorage.setItem(storage, JSON.stringify({ attemptId, hash: txHash }));
+          Vibration.vibrate([0, 45, 55, 45]);
+          if (mounted.current && idRef.current === trade.id) {
+            setLiveAlert(`🔔 Transaction broadcast (${txHash.slice(0, 10)}…)! Funds left your wallet — confirming on Ethereum…`);
+            setState((prev) => prev ? {
+              ...prev,
+              stage: "pending",
+              message: `Transaction broadcast (${txHash.slice(0, 10)}…). Waiting for Ethereum confirmation…`,
+            } : prev);
+          }
+        },
         send: async tx => {
           let timeout: ReturnType<typeof setTimeout> | undefined;
           try {
@@ -72,7 +97,16 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
             ]);
           } finally { if (timeout) clearTimeout(timeout); }
         },
-        progress: next => { if (mounted.current && idRef.current === trade.id) setState(next); },
+        progress: next => {
+          if (mounted.current && idRef.current === trade.id) {
+            if (prevStage.current !== "funded" && next.stage === "funded") {
+              Vibration.vibrate([0, 60, 70, 90]);
+              setLiveAlert("🔔 Deposit confirmed on Ethereum! Funds are secured in escrow.");
+            }
+            prevStage.current = next.stage;
+            setState(next);
+          }
+        },
         // crypto.getRandomValues is initialized by react-native-get-random-values in index.js.
         requestId: () => {
           const bytes = new Uint8Array(16); globalThis.crypto.getRandomValues(bytes);
@@ -80,7 +114,7 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
           const value = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
           return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
         },
-        pause: () => new Promise(resolve => setTimeout(resolve, 2000)),
+        pause: () => new Promise(resolve => setTimeout(resolve, 1500)),
       });
     } catch (e) {
       if (mounted.current) setError(e instanceof Error ? e.message : "The wallet request stopped. Your progress is saved.");
@@ -100,6 +134,11 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
 
   return <View style={{ gap: 12 }}>
     <Text style={{ color: colors.text, fontSize: 18, fontWeight: "700" }}>Payment progress</Text>
+    {liveAlert ? (
+      <View style={{ backgroundColor: "rgba(62, 207, 142, 0.14)", borderColor: colors.accent, borderWidth: 1, borderRadius: 12, padding: 12 }}>
+        <Text style={{ color: colors.accent, fontWeight: "700", fontSize: 14, lineHeight: 20 }}>{liveAlert}</Text>
+      </View>
+    ) : null}
     <Text accessibilityLiveRegion="polite" style={{ color: colors.muted, fontSize: 16, lineHeight: 24 }}>{state?.message || "Checking saved payment progress…"}</Text>
     {error && <Text accessibilityRole="alert" style={{ color: colors.text }}>{error}</Text>}
     {state && <>
