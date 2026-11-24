@@ -76,9 +76,13 @@
       "expo-secure-store",
       "./queries.js",
       "./plugins/withEmbeddedAndroidBundle.js",
+      "./plugins/withIosDeploymentTarget.js",
       [
         "expo-build-properties",
         {
+          "ios": {
+            "deploymentTarget": "15.1"
+          },
           "android": {
             "kotlinVersion": "1.9.25",
             "compileSdkVersion": 36,

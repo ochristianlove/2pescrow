@@ -328,7 +328,7 @@ jobs:
   api:
     name: Deploy API
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     # Backend migrations must be ready before the website; phone builds are independent artifacts.
     needs: verify
     steps:
@@ -373,7 +373,7 @@ jobs:
             -d "$(jq -n --arg applicationId "${APPLICATION_ID}" --arg title "GitHub Actions ${SHA}" '{applicationId:$applicationId, title:$title}')" > /dev/null
           seen_running=0
           finished=0
-          for _ in $(seq 1 40); do
+          for _ in $(seq 1 80); do
             status=$(curl -fsS "${DOKPLOY_URL}/api/application.one?applicationId=${APPLICATION_ID}" \
               -H "x-api-key: ${DOKPLOY_API_KEY}" | jq -r '.applicationStatus')
             echo "API deploy status: ${status}"
