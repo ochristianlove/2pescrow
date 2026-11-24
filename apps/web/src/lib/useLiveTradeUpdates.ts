@@ -41,19 +41,22 @@ type Options = {
   /** When set, only refreshes for this shared-trade id (trade room). */
   escrowId?: string;
   enabled?: boolean;
-  /** Poll interval when WebSocket is down (default 20s). No polling while WS is connected. */
+  /** Poll interval when WebSocket is down (default 20s). */
   pollMs?: number;
+  /** Optional light foreground safety refresh even while WebSocket is connected (e.g. 4s on active trade rooms). */
+  safetyPollMs?: number;
   /** Optional callback receiving the exact WebSocket event name for instant alerts/chimes. */
   onEvent?: (event: string, payload?: WsEnvelope["payload"]) => void;
 };
 
 /**
- * Keeps trade views fresh: WebSocket push from API + light polling only if the socket drops.
+ * Keeps trade views fresh: WebSocket push from API + optional foreground safety sync + fallback polling when disconnected.
  */
 export function useLiveTradeUpdates(onRefresh: () => void, options?: Options) {
   const enabled = options?.enabled !== false;
   const filterEscrowId = options?.escrowId;
   const pollMs = options?.pollMs ?? 20_000;
+  const safetyPollMs = options?.safetyPollMs;
   const onRefreshRef = useRef(onRefresh);
   onRefreshRef.current = onRefresh;
   const onEventRef = useRef(options?.onEvent);
@@ -69,7 +72,13 @@ export function useLiveTradeUpdates(onRefresh: () => void, options?: Options) {
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let pollTimer: ReturnType<typeof setInterval> | undefined;
+    let safetyTimer: ReturnType<typeof setInterval> | undefined;
+    let hasOpenedOnce = false;
     let stopped = false;
+
+    function isVisible() {
+      return typeof document === "undefined" || document.visibilityState === "visible";
+    }
 
     function stopPolling() {
       if (pollTimer) {
@@ -80,9 +89,17 @@ export function useLiveTradeUpdates(onRefresh: () => void, options?: Options) {
 
     function startPolling() {
       if (stopped) return;
-      onRefreshRef.current();
+      if (isVisible()) onRefreshRef.current();
       if (pollTimer) return;
-      pollTimer = setInterval(() => onRefreshRef.current(), pollMs);
+      pollTimer = setInterval(() => {
+        if (isVisible()) onRefreshRef.current();
+      }, pollMs);
+    }
+
+    if (safetyPollMs && safetyPollMs > 0) {
+      safetyTimer = setInterval(() => {
+        if (!stopped && isVisible()) onRefreshRef.current();
+      }, safetyPollMs);
     }
 
     function scheduleReconnect() {
@@ -107,6 +124,10 @@ export function useLiveTradeUpdates(onRefresh: () => void, options?: Options) {
       ws.onopen = () => {
         setLive(true);
         stopPolling();
+        if (hasOpenedOnce) {
+          onRefreshRef.current();
+        }
+        hasOpenedOnce = true;
       };
 
       ws.onmessage = (ev) => {
@@ -140,10 +161,11 @@ export function useLiveTradeUpdates(onRefresh: () => void, options?: Options) {
       stopped = true;
       setLive(false);
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (safetyTimer) clearInterval(safetyTimer);
       stopPolling();
       ws?.close();
     };
-  }, [enabled, filterEscrowId, pollMs]);
+  }, [enabled, filterEscrowId, pollMs, safetyPollMs]);
 
   return { live };
 }

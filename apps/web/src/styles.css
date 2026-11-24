@@ -1432,7 +1432,7 @@ label { display: block; font-size: 0.85rem; color: var(--muted); margin-top: 0.7
 .trade-action > .file-btn { width: 100%; }
 .trade-action-hint { margin: 0; color: var(--muted); font-size: 0.78rem; line-height: 1.4; }
 .file-btn.is-locked { opacity: 0.55; cursor: not-allowed; pointer-events: none; }
-.trade-action > button.is-locked { opacity: 0.55; cursor: not-allowed; }
+.trade-action > button.is-locked { background: var(--bg2, #0c1a24); color: var(--muted); border: 1px solid var(--border); box-shadow: none; opacity: 0.72; cursor: not-allowed; }
 .back-btn { margin-bottom: 1rem; }
 
 .dispute-box, .dispute-card, .role-box {

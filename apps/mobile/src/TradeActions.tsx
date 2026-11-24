@@ -157,7 +157,8 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
   const linked = permission.buyer ? trade.buyerAddress : trade.sellerAddress;
   const matches = Boolean(address && linked && address.toLowerCase() === linked.toLowerCase());
   const walletReady = Boolean(isConnected && address && provider && mainnet && (matches || !linked));
-  const fulfilmentReady = trade.status === "InProgress" || Boolean(trade.proofHash) || Boolean(trade.messages?.some((message) => message.kind === "fulfilment" && message.fileName));
+  const sellerConfirmedFulfilment = trade.status === "InProgress" || chain?.state === 2;
+  const fulfilmentReady = sellerConfirmedFulfilment;
   const capabilities = chain?.capabilities ?? null;
   const isV1Deal = capabilities?.requiresOnChainSellerProof === true;
   const v1OnChainProofNeeded = isV1Deal && chain?.state === 1;
@@ -294,7 +295,7 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
             ? "Waiting for the seller to submit fulfilment proof on-chain before you can release funds."
             : capabilitiesPending
               ? "Checking escrow contract version…"
-              : "Available after the seller shares fulfilment in chat."}
+              : "Waiting for the seller to confirm fulfilment before you can release funds."}
         </Text>
       ) : null}
       {permission.buyer && openTrade && !disputed ? (
@@ -304,6 +305,7 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
           disabled={Boolean(busy) || !releaseReady}
           onPress={() => void run("release", async () => {
             if (!trade.contractAddress) throw new Error("No on-chain contract yet.");
+            if (!releaseReady) throw new Error("Waiting for the seller to confirm fulfilment before you can release funds.");
             const caps = capabilities ?? await readDealCapabilities(trade.contractAddress);
             const { from, provider: wallet } = requireWallet();
             if (caps.releaseMode === "v1-zero-arg") {

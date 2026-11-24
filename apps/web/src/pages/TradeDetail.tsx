@@ -253,11 +253,17 @@ export function TradeDetailPage({ id }: { id: string }) {
     }
   }, [id, authHeaders]);
 
+  const managedFundingRefreshRef = useRef<(() => Promise<void>) | null>(null);
+  const tradeIsActive = !escrow || !["Completed", "Resolved", "Cancelled"].includes(escrow.status);
   const { live: liveUpdates } = useLiveTradeUpdates(load, {
     escrowId: id,
     enabled: Boolean(user),
     pollMs: 3_000,
+    safetyPollMs: tradeIsActive ? 4_000 : undefined,
     onEvent: (event) => {
+      if (event === "trade:funding-submitted" || event === "trade:funded" || event === "trade:timeline-updated") {
+        void managedFundingRefreshRef.current?.();
+      }
       if (event === "trade:funding-submitted") {
         playTradeBell("sent");
         setLiveNotice(t("🔔 Deposit transaction sent — confirming on Ethereum…"));
@@ -352,6 +358,7 @@ export function TradeDetailPage({ id }: { id: string }) {
     load,
     (alertMsg) => setLiveNotice(alertMsg),
   );
+  managedFundingRefreshRef.current = managedFunding.refresh;
   async function startManagedFunding() {
     if (!address || chainId !== mainnet.id || !isBuyer) { setError("Connect the buyer wallet on Ethereum mainnet."); return; }
     await managedFunding.run(address, connector);
@@ -370,10 +377,8 @@ export function TradeDetailPage({ id }: { id: string }) {
   const isEthereumV1 = !isTronEscrow && !isLegacyEvm && dealCapabilities?.requiresOnChainSellerProof === true;
   const isEthereumCapabilitiesPending = !isTronEscrow && !isLegacyEvm && Boolean(escrow?.contractAddress) && dealCapabilities === null;
   const v1OnChainProofNeeded = isEthereumV1 && chainView.state === 1;
-  const fulfilmentReady =
-    effectiveStatus === "InProgress"
-    || Boolean(escrow?.proofHash)
-    || (escrow?.messages || []).some((m) => m.kind === "fulfilment" && m.fileName);
+  const sellerConfirmedFulfilment = effectiveStatus === "InProgress" || chainView.state === 2;
+  const fulfilmentReady = sellerConfirmedFulfilment;
   const releaseReady =
     Boolean(escrow?.contractAddress)
     && effectiveStatus !== "Disputed"
@@ -401,6 +406,19 @@ export function TradeDetailPage({ id }: { id: string }) {
 
       if (prevTradeStatus.current !== undefined && prevTradeStatus.current !== escrow.status) {
         shouldRing = true;
+        if (escrow.status === "Funded" && ["AwaitingSeller", "AwaitingFunding", "Created"].includes(prevTradeStatus.current)) {
+          playTradeBell("confirmed");
+          setLiveNotice(t("🔔 Escrow funded on Ethereum! Funds are locked in the smart contract."));
+          shouldRing = false;
+        } else if (escrow.status === "InProgress" && prevTradeStatus.current === "Funded") {
+          playTradeBell("update");
+          setLiveNotice(t("🔔 Seller confirmed fulfilment — ready for buyer review and release."));
+          shouldRing = false;
+        } else if (escrow.status === "Completed") {
+          playTradeBell("confirmed");
+          setLiveNotice(t("🔔 Trade completed! Funds have been released on-chain."));
+          shouldRing = false;
+        }
       }
       if (!shouldRing) {
         for (const id of eventIds) {
@@ -1048,6 +1066,9 @@ export function TradeDetailPage({ id }: { id: string }) {
         throw new Error("No on-chain contract yet.");
       }
       if (isTronEscrow) {
+        if (!fulfilmentReady) {
+          throw new Error("Waiting for the seller to confirm fulfilment before you can release funds.");
+        }
         const { proofHash } = await api<{ proofHash: string }>(`/v1/escrows/${id}/fulfilment-proof-hash`, { headers: authHeaders() });
         if (!/^0x[0-9a-fA-F]{64}$/.test(proofHash)) {
           throw new Error("Waiting for fulfilment proof in chat before release.");
@@ -1078,6 +1099,9 @@ export function TradeDetailPage({ id }: { id: string }) {
         return;
       }
       if (caps.releaseMode === "v2-proof-hash") {
+        if (!fulfilmentReady && onChainState !== 2) {
+          throw new Error("Waiting for the seller to confirm fulfilment before you can release funds.");
+        }
         if (onChainState !== 1 && onChainState !== 2) {
           throw new Error("This escrow contract is not in a releasable state.");
         }
@@ -1939,10 +1963,10 @@ export function TradeDetailPage({ id }: { id: string }) {
                     : isEthereumCapabilitiesPending
                       ? t("Checking escrow contract version…")
                       : !releaseReady
-                        ? t("Available after the seller shares fulfilment in chat.")
+                        ? t("Waiting for the seller to confirm fulfilment before you can release funds.")
                         : ""}
                 onBlockedClick={(hint) =>
-                  showActionError(hint || t("Available after the seller shares fulfilment in chat."))
+                  showActionError(hint || t("Waiting for the seller to confirm fulfilment before you can release funds."))
                 }
                 onClick={() => void buyerReleaseFunds()}
               />

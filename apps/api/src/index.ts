@@ -3712,11 +3712,17 @@ app.register(async (fastify) => {
   fastify.get("/v1/ws", { websocket: true }, (socket) => {
     const client = { send: (d: string) => socket.send(d) };
     const off = registerClient(client);
-    socket.on("close", off);
+    const heartbeat = setInterval(() => {
+      try { socket.send('{"event":"ping"}'); } catch { clearInterval(heartbeat); off(); }
+    }, 25_000);
+    const cleanup = () => { clearInterval(heartbeat); off(); };
+    socket.on("error", cleanup);
+    socket.on("close", cleanup);
   });
 });
 
 function signalForIndexedEvent(eventName: string, payload?: Record<string, unknown>): string | null {
+  if (eventName === "Funded") return "trade:funded";
   if (eventName === "CancelRequested") return "trade:cancel-requested";
   if (eventName === "CancelRefused") return "trade:cancel-refused";
   if (eventName === "Cancelled") return "trade:cancelled";
@@ -3724,6 +3730,7 @@ function signalForIndexedEvent(eventName: string, payload?: Record<string, unkno
   if (eventName === "Released") return "trade:completed";
   if (eventName === "StateChanged") {
     const next = Number(payload?.newState);
+    if (next === 1) return "trade:funded";
     if (next === 2) return "trade:release-requested";
     if (next === 3) return "trade:completed";
     if (next === 4) return "trade:cancelled";
@@ -3742,6 +3749,9 @@ app.post("/v1/escrows/:id/signals", async (req, reply) => {
   const body = z.object({
     kind: z.enum(["cancel-requested", "cancel-refused", "cancelled", "funded", "release-requested", "completed"]),
   }).parse(req.body);
+  if (body.kind === "release-requested" && role !== "seller") {
+    return reply.code(403).send({ error: "Only the seller can confirm fulfilment" });
+  }
   const statusForKind: Partial<Record<typeof body.kind, string>> = {
     funded: "Funded",
     "release-requested": "InProgress",

@@ -3,10 +3,12 @@ import type { Escrow, EthereumFundingAttempt, Prisma, PrismaClient } from "@pris
 import { isAddress, type Address, type Hash, type PublicClient, type Transaction, type TransactionReceipt } from "viem";
 import { escrowFactoryAbi, fundingStepLabel, type FundingAttemptView, type FundingKind, type FundingSnapshot, type PreparedFunding } from "@2pescrow/shared";
 import { notifyTradeFunded, notifyTradeCompleted, notifyTradeCancelled } from "./notifications";
+import { broadcast } from "./wsHub";
 import { classifyFundingReceipt, creationChild, findNonceTransaction, fundingReadAbi, nextFundingCall, receiptIfMined, same, verifyChild, type FundingTerms } from "./ethereumFundingChain";
 
 type Db = Prisma.TransactionClient;
 type Settings = { factory: string; allowedFactories?: string[]; tokens: Record<string, string | null | undefined> };
+type BroadcastEvent = { event: string; payload: { escrowId: string } };
 const states = ["Created", "Funded", "InProgress", "Completed", "Cancelled", "Disputed", "Resolved"];
 const isCreation = (kind: string) => kind === "create" || kind === "createAndFund";
 const view = (a: EthereumFundingAttempt): FundingAttemptView => ({ id: a.id, kind: a.kind as FundingKind, status: a.status, hash: a.txHash, nonce: a.nonce, gasPaidWei: a.gasPaidWei });
@@ -17,7 +19,7 @@ export class FundingError extends Error {
 export class EthereumFundingService {
   constructor(private db: PrismaClient, private client: PublicClient, private settings: () => Promise<Settings>) {}
 
-  private async locked<T>(id: string, run: (db: Db, row: Escrow, terms: FundingTerms, head: bigint) => Promise<T>) {
+  private async locked<T>(id: string, run: (db: Db, row: Escrow, terms: FundingTerms, head: bigint, emit: (event: string) => void) => Promise<T>) {
     const initial = await this.db.escrow.findUnique({ where: { id } });
     if (!initial || initial.chain !== "ethereum" || initial.chainId !== 1) throw new FundingError("This funding flow requires an Ethereum mainnet trade.", 400);
     if (!initial.buyerAddress || !initial.sellerAddress) throw new FundingError("Both parties must link their Ethereum wallets before funding.", 400);
@@ -28,7 +30,14 @@ export class EthereumFundingService {
     // Token configuration must not silently substitute a token already recorded on the trade.
     if (isAddress(initial.tokenAddress) && !same(initial.tokenAddress, token)) throw new FundingError("The trade token differs from the configured token. Funding is paused for review.");
     if (await this.client.getChainId() !== 1) throw new FundingError("The server RPC is not Ethereum mainnet.", 503);
-    return this.db.$transaction(async db => {
+    const pendingEvents: BroadcastEvent[] = [];
+    const seenEvents = new Set<string>();
+    const emit = (event: string) => {
+      if (seenEvents.has(event)) return;
+      seenEvents.add(event);
+      pendingEvents.push({ event, payload: { escrowId: id } });
+    };
+    const result = await this.db.$transaction(async db => {
       // Serialize across devices and API processes. The unique active indexes are the second line of defence.
       await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${initial.buyerAddress!.toLowerCase()}, 0))`;
       await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 1))`;
@@ -41,28 +50,36 @@ export class EthereumFundingService {
       const terms: FundingTerms = { factory: settings.factory as Address, allowedFactories, optionalAgent, buyer: row.buyerAddress as Address, seller: row.sellerAddress as Address, token: token as Address, amount: BigInt(row.amountAtomic) };
       const latest = await this.client.getBlockNumber({ cacheTime: 0 });
       const head = latest > 2n ? latest - 2n : 0n; // Three confirmations before advancing a step.
-      return run(db, row, terms, head);
+      return run(db, row, terms, head, emit);
     }, { timeout: 90_000, maxWait: 15_000 });
+    // Broadcast only after the DB transaction has committed so Web/Mobile fetch the new status immediately.
+    for (const item of pendingEvents) {
+      broadcast(item.event, item.payload);
+    }
+    return result;
   }
 
-  private async bindCreation(db: Db, row: Escrow, terms: FundingTerms, receipt: TransactionReceipt) {
+  private async bindCreation(db: Db, row: Escrow, terms: FundingTerms, receipt: TransactionReceipt, emit: (event: string) => void) {
     const child = creationChild(receipt, terms).toLowerCase();
     if (row.contractAddress && !same(row.contractAddress, child)) throw new FundingError("This trade is already linked to a different escrow. It cannot be replaced.");
     const used = await db.escrow.findUnique({ where: { contractAddress: child } });
     if (used && used.id !== row.id) throw new FundingError("This escrow is already linked to another trade.");
+    const changed = !row.contractAddress || row.createTxHash !== receipt.transactionHash;
     await db.escrow.update({ where: { id: row.id }, data: { contractAddress: child, createTxHash: receipt.transactionHash } });
     row.contractAddress = child;
     row.createTxHash = receipt.transactionHash;
+    if (changed) emit("trade:timeline-updated");
   }
 
-  private async reconcile(db: Db, row: Escrow, terms: FundingTerms, head: bigint) {
+  private async reconcile(db: Db, row: Escrow, terms: FundingTerms, head: bigint, emit: (event: string) => void) {
     if (row.createTxHash && !row.contractAddress) {
       const receipt = await receiptIfMined(this.client, row.createTxHash as Hash);
       if (receipt && receipt.blockNumber <= head) {
-        if (receipt.status === "success") await this.bindCreation(db, row, terms, receipt);
+        if (receipt.status === "success") await this.bindCreation(db, row, terms, receipt, emit);
         else {
           await db.escrow.update({ where: { id: row.id }, data: { createTxHash: null } });
           row.createTxHash = null;
+          emit("trade:timeline-updated");
         }
       }
     }
@@ -87,16 +104,17 @@ export class EthereumFundingService {
       }
       if (!receipt || !tx || receipt.blockNumber > head) continue;
       const status = classifyFundingReceipt(a, tx, receipt);
-      if (status === "confirmed" && isCreation(a.kind)) await this.bindCreation(db, row, terms, receipt);
+      if (status === "confirmed" && isCreation(a.kind)) await this.bindCreation(db, row, terms, receipt, emit);
       await db.ethereumFundingAttempt.update({ where: { id: a.id }, data: {
         status, active: false, txHash: receipt.transactionHash,
         gasPaidWei: (receipt.gasUsed * receipt.effectiveGasPrice).toString(),
       } });
+      emit("trade:timeline-updated");
     }
   }
 
-  private async inspect(db: Db, row: Escrow, terms: FundingTerms, head: bigint) {
-    await this.reconcile(db, row, terms, head);
+  private async inspect(db: Db, row: Escrow, terms: FundingTerms, head: bigint, emit: (event: string) => void) {
+    await this.reconcile(db, row, terms, head, emit);
     const attempts = await db.ethereumFundingAttempt.findMany({ where: { escrowId: row.id }, orderBy: { createdAt: "asc" } });
     const active = attempts.find(a => a.active);
     const fee = await this.client.readContract({ address: terms.factory, abi: escrowFactoryAbi, functionName: "creationFee", blockNumber: head });
@@ -112,6 +130,8 @@ export class EthereumFundingService {
       const previousStatus = row.status;
       row.status = states[state];
       if (states[state] === "Funded" && previousStatus !== "Funded") {
+        emit("trade:funded");
+        emit("trade:timeline-updated");
         void notifyTradeFunded({
           escrowId: row.id,
           title: row.title,
@@ -120,6 +140,8 @@ export class EthereumFundingService {
           sellerUserId: row.sellerUserId,
         }).catch(() => undefined);
       } else if (states[state] === "Completed" && previousStatus !== "Completed") {
+        emit("trade:completed");
+        emit("trade:timeline-updated");
         void notifyTradeCompleted({
           escrowId: row.id,
           title: row.title,
@@ -128,12 +150,16 @@ export class EthereumFundingService {
           sellerUserId: row.sellerUserId,
         }).catch(() => undefined);
       } else if (states[state] === "Cancelled" && previousStatus !== "Cancelled") {
+        emit("trade:cancelled");
+        emit("trade:timeline-updated");
         void notifyTradeCancelled({
           escrowId: row.id,
           title: row.title,
           buyerUserId: row.buyerUserId,
           sellerUserId: row.sellerUserId,
         }).catch(() => undefined);
+      } else {
+        emit("trade:timeline-updated");
       }
     }
     const allowance = child ? await this.client.readContract({ address: terms.token, abi: fundingReadAbi, functionName: "allowance", args: [terms.buyer, child], blockNumber: head }) : 0n;
@@ -166,11 +192,11 @@ export class EthereumFundingService {
     return { snapshot, active, fee, nonce, allowance, child };
   }
 
-  get(id: string) { return this.locked(id, async (db, row, terms, head) => (await this.inspect(db, row, terms, head)).snapshot); }
+  get(id: string) { return this.locked(id, async (db, row, terms, head, emit) => (await this.inspect(db, row, terms, head, emit)).snapshot); }
 
   prepare(id: string, requestId: string, resume = false): Promise<PreparedFunding> {
-    return this.locked(id, async (db, row, terms, head) => {
-      const current = await this.inspect(db, row, terms, head);
+    return this.locked(id, async (db, row, terms, head, emit) => {
+      const current = await this.inspect(db, row, terms, head, emit);
       const prior = await db.ethereumFundingAttempt.findUnique({ where: { requestId } });
       if (prior || !current.snapshot.canContinue) return { snapshot: current.snapshot };
       const accountCode = await this.client.getBytecode({ address: terms.buyer, blockNumber: head });
@@ -211,7 +237,7 @@ export class EthereumFundingService {
   }
 
   report(id: string, attemptId: string, body: { hash?: string; outcome?: "rejected" | "uncertain" }) {
-    return this.locked(id, async (db, row, terms, head) => {
+    return this.locked(id, async (db, row, terms, head, emit) => {
       const a = await db.ethereumFundingAttempt.findFirst({ where: { id: attemptId, escrowId: id } });
       if (!a) throw new FundingError("Saved wallet request not found.", 404);
       if (body.hash) {
@@ -222,16 +248,16 @@ export class EthereumFundingService {
       } else if (a.active && !a.txHash) {
         await db.ethereumFundingAttempt.update({ where: { id: a.id }, data: { status: body.outcome || "uncertain" } });
       }
-      return (await this.inspect(db, row, terms, head)).snapshot;
+      return (await this.inspect(db, row, terms, head, emit)).snapshot;
     });
   }
 
   recover(id: string, hash: Hash) {
-    return this.locked(id, async (db, row, terms, head) => {
+    return this.locked(id, async (db, row, terms, head, emit) => {
       const receipt = await receiptIfMined(this.client, hash);
       if (!receipt || receipt.blockNumber > head) throw new FundingError("The creation transaction is still pending or confirming. Check again shortly.");
-      await this.bindCreation(db, row, terms, receipt);
-      return (await this.inspect(db, row, terms, head)).snapshot;
+      await this.bindCreation(db, row, terms, receipt, emit);
+      return (await this.inspect(db, row, terms, head, emit)).snapshot;
     });
   }
 }

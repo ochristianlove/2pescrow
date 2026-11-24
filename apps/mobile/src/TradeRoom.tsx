@@ -6,7 +6,7 @@ import { formatAmount, shortAddr, tokenLabel } from "./format";
 import { dateLabel, plainTerms, readableLabel, statusColor, tradeActivity, tradePermissions } from "./tradePresentation";
 import { colors } from "./theme";
 import type { TradeRow } from "./types";
-import { Button, Card } from "./ui";
+import { Button, Card, Notice } from "./ui";
 import { downloadTradeAgreement, MessageFile } from "./TradeFiles";
 import { TradeActions } from "./TradeActions";
 import { TradeRoleTags } from "./TradeRoleTags";
@@ -18,6 +18,7 @@ export function TradeRoom({ trade, userId, onWeb, onError, onChanged, composer, 
   const { t, language } = useLanguage();
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const downloadLock = useRef(false);
   const date = (value?: string | null) => dateLabel(value, language);
   const permission = tradePermissions(trade, userId);
@@ -31,8 +32,12 @@ export function TradeRoom({ trade, userId, onWeb, onError, onChanged, composer, 
     if (downloadLock.current) return;
     downloadLock.current = true;
     setDownloading(true);
+    setSavedNotice(null);
     try {
-      await downloadTradeAgreement(trade.id);
+      const res = await downloadTradeAgreement(trade.id);
+      if (res.saved) {
+        setSavedNotice(t("Saved {name} to device.", { name: res.filename }));
+      }
     } catch (error) {
       onError(error instanceof Error ? error.message : "Could not create the agreement record");
     } finally {
@@ -128,6 +133,7 @@ export function TradeRoom({ trade, userId, onWeb, onError, onChanged, composer, 
       {canDownloadSigned ? (
         <View style={{ marginTop: 14, gap: 8 }}>
           <Button label={downloading ? "Preparing agreement…" : "Download signed agreement PDF"} tone="ghost" busy={downloading} onPress={() => void downloadAgreement()} />
+          {savedNotice ? <Notice text={savedNotice} tone="ok" /> : null}
           <Text style={s.note}>Includes the agreed terms, linked wallets, on-chain escrow reference, and a public verification link. It does not include private chat or evidence.</Text>
         </View>
       ) : null}
@@ -142,6 +148,7 @@ export function TradeRoom({ trade, userId, onWeb, onError, onChanged, composer, 
         </View>
       </View>
       {canDownload ? <Button label={downloading ? "Preparing agreement…" : "Download agreement PDF"} tone="ghost" busy={downloading} onPress={() => void downloadAgreement()} /> : null}
+      {savedNotice && !canDownloadSigned ? <Notice text={savedNotice} tone="ok" /> : null}
       {activity.map(item => item.type === "event" ? <View key={item.key} style={s.event}>
         <Text style={s.body}>{readableLabel(item.event.eventName)}</Text><Text style={s.note}>{date(item.at)}</Text>
         {item.event.txHash ? <Text selectable style={s.note}>Transaction {item.event.txHash}</Text> : null}
