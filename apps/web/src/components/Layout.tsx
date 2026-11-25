@@ -52,7 +52,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const { settings } = usePlatformSettings();
   const { t } = useLanguage();
   const brandTitle = settings?.siteTitle?.trim() || "2Pescrow";
-  const escrowFactory = settings?.factoryAddress?.trim() || "0x08Be929Ac784E8aEe20403c4F5bbEE2668e183c9";
+  const escrowFactory = settings?.factoryAddress?.trim() || "0x8F18c320771a93D76832BbB30072c011f3e3c015";
   const logoUrl = brandSrc(settings?.siteLogoUrl, DEFAULT_LOGO);
 
   return (
@@ -144,7 +144,10 @@ export function Layout({ children }: { children: ReactNode }) {
           <div>
             <h2>{t("Read")}</h2>
             <Link to="/blog">{t("Blog")}</Link>
+            <a href="https://github.com/ochristianlove/2pescrow" target="_blank" rel="noreferrer">{t("GitHub (Open Source)")}</a>
+            <a href="https://github.com/ochristianlove/2pescrow/releases/latest" target="_blank" rel="noreferrer">{t("Android APK")}</a>
             <a href={`https://etherscan.io/address/${escrowFactory}`} target="_blank" rel="noreferrer">Etherscan</a>
+            <a href={`https://repo.sourcify.dev/1/${escrowFactory}`} target="_blank" rel="noreferrer">{t("Sourcify Verified")}</a>
             <Link to="/terms">{t("Terms")}</Link>
             <Link to="/privacy">{t("Privacy")}</Link>
           </div>

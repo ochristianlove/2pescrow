@@ -27,6 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     needs: verify
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -91,6 +93,40 @@ jobs:
           name: 2pescrow-android
           path: apps/mobile/dist/2pescrow-preview.apk
           if-no-files-found: error
+      - name: Publish signed Android APK to GitHub Releases
+        working-directory: apps/mobile
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./app.json').expo.version")
+          TAG="v${VERSION}"
+          APK_NAME="2pescrow-${TAG}.apk"
+          cp dist/2pescrow-preview.apk "dist/${APK_NAME}"
+          (cd dist && sha256sum "${APK_NAME}" > "${APK_NAME}.sha256")
+          SHA256=$(awk '{print $1}' "dist/${APK_NAME}.sha256")
+          cat > dist/release-notes.md <<EOF
+          ## 2Pescrow Android ${TAG}
+
+          Signed standalone Android release APK built from commit \`${GITHUB_SHA}\`.
+
+          - **APK:** \`${APK_NAME}\`
+          - **SHA-256:** \`${SHA256}\`
+          - **Open-source updater:** Compatible with [Obtainium](https://github.com/ImranR98/Obtainium) using \`https://github.com/ochristianlove/2pescrow\`
+          - **Source code:** https://github.com/ochristianlove/2pescrow
+          - **Ethereum Mainnet V2 EscrowFactory (Sourcify exact_match):** \`0x8F18c320771a93D76832BbB30072c011f3e3c015\`
+
+          > Note: Direct GitHub APKs use our EAS release signing key, while Google Play installs use Play App Signing. Uninstall one before switching to the other.
+          EOF
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" "dist/${APK_NAME}" "dist/${APK_NAME}.sha256" --clobber
+            gh release edit "${TAG}" --title "2Pescrow Android ${TAG}" --notes-file dist/release-notes.md --latest
+          else
+            gh release create "${TAG}" "dist/${APK_NAME}" "dist/${APK_NAME}.sha256" \
+              --title "2Pescrow Android ${TAG}" \
+              --notes-file dist/release-notes.md \
+              --latest
+          fi
       - name: Build the Android app bundle for Play internal testing
         working-directory: apps/mobile
         env:
