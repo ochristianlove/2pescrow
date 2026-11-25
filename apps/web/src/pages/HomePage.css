@@ -576,6 +576,89 @@
   border: none;
 }
 
+.home-partner-band {
+  position: relative;
+  display: grid;
+  gap: 1.5rem;
+  margin: 2.5rem 0;
+  padding: clamp(1.4rem, 4vw, 2.25rem);
+  border-radius: 1.25rem;
+  border: 1px solid rgba(232, 184, 74, 0.42);
+  background:
+    radial-gradient(110% 80% at 95% 0%, rgba(232, 184, 74, 0.16), transparent 55%),
+    radial-gradient(90% 70% at 5% 100%, rgba(62, 207, 142, 0.14), transparent 55%),
+    linear-gradient(155deg, rgba(14, 28, 38, 0.96), rgba(5, 14, 22, 0.98));
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.38);
+}
+@media (min-width: 900px) {
+  .home-partner-band {
+    grid-template-columns: 1.15fr 0.85fr;
+    align-items: center;
+    gap: 2rem;
+  }
+}
+.home-partner-eyebrow {
+  color: var(--home-gold);
+  letter-spacing: 0.16em;
+  margin: 0 0 0.45rem;
+}
+.home-partner-copy h2 {
+  margin: 0 0 0.7rem;
+  font-size: clamp(1.5rem, 3.4vw, 2.15rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.home-partner-lead {
+  margin: 0 0 1.2rem;
+  font-size: 0.95rem;
+  line-height: 1.62;
+  color: rgba(232, 244, 242, 0.82);
+}
+.home-partner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.home-partner-cta-primary {
+  background: linear-gradient(135deg, var(--home-gold), #d4a043);
+  color: #161004;
+  font-weight: 700;
+  border: none;
+  box-shadow: 0 8px 26px rgba(232, 184, 74, 0.28);
+}
+.home-partner-highlights {
+  display: grid;
+  gap: 0.7rem;
+}
+.home-partner-stat {
+  padding: 0.95rem 1.05rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(138, 170, 184, 0.18);
+  background: rgba(4, 14, 22, 0.76);
+  display: grid;
+  gap: 0.25rem;
+}
+.home-partner-stat.is-gold {
+  border-color: rgba(232, 184, 74, 0.45);
+  background: rgba(232, 184, 74, 0.08);
+}
+.home-partner-stat strong {
+  color: var(--text);
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+.home-partner-stat.is-gold strong {
+  color: var(--home-gold);
+  font-size: 1.45rem;
+  line-height: 1.05;
+}
+.home-partner-stat span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 .home-community {
   display: grid;
   gap: 1.25rem;

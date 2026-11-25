@@ -35,7 +35,7 @@ function Routes() {
   if (path === "/app") return <DashboardPage />;
   if (path === "/app/profile") return <ProfilePage />;
   if (path === "/referrals") return <ReferralProgramPage />;
-  if (path === "/special-resolvers") return <SpecialResolversPage />;
+  if (path === "/special-resolvers" || path === "/partners") return <SpecialResolversPage />;
   if (path === "/feedback") return <FeedbackPage />;
   if (path === "/terms") return <TermsPage />;
   if (path === "/privacy") return <PrivacyPage />;

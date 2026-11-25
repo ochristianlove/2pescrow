@@ -369,6 +369,40 @@ export function HomePage() {
         </div>
       </section>
 
+      <section className="home-partner-band" aria-labelledby="home-partner-title">
+        <div className="home-partner-copy">
+          <p className="eyebrow home-partner-eyebrow">{t("Partner Program · Special Resolvers")}</p>
+          <h2 id="home-partner-title">{t("Run your own escrow service on 2Pescrow. Keep 50% of every fee.")}</h2>
+          <p className="home-partner-lead">
+            {t(
+              "Built for existing escrow providers, OTC desks, and escrow lawyers. Register your dedicated resolver wallet, bring clients through your partner link, resolve your own clients' disputes on-chain, and receive 50% of protocol trade fees automatically—paid straight to your wallet on every completed deal.",
+            )}
+          </p>
+          <div className="home-partner-actions">
+            <button type="button" className="home-partner-cta-primary" onClick={() => navigate("/special-resolvers#apply")}>
+              {t("Become a Special Resolver")}
+            </button>
+            <button type="button" className="secondary" onClick={() => navigate("/special-resolvers")}>
+              {t("See how the 50% split works")}
+            </button>
+          </div>
+        </div>
+        <div className="home-partner-highlights" aria-label={t("Partner highlights")}>
+          <div className="home-partner-stat is-gold">
+            <strong>50%</strong>
+            <span>{t("Automatic on-chain share of the 10% protocol fee (= 5% of volume), replacing standard referral payouts.")}</span>
+          </div>
+          <div className="home-partner-stat">
+            <strong>{t("Your clients, your cases")}</strong>
+            <span>{t("Every trade opened via your partner link binds strictly to your resolver wallet with exclusive dispute authority.")}</span>
+          </div>
+          <div className="home-partner-stat">
+            <strong>{t("Non-custodial rail")}</strong>
+            <span>{t("Smart contracts hold the funds on Ethereum while you run your legal or escrow practice on top.")}</span>
+          </div>
+        </div>
+      </section>
+
       <section className="home-community" aria-labelledby="home-community-title">
         <div>
           <p className="eyebrow">{t("Community")}</p>

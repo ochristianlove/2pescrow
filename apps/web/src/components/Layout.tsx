@@ -48,7 +48,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const dash = dashboardPath(user);
   const hideChrome = path.startsWith("/sys/");
   const isHome = path === "/";
-  const showFooter = isHome || path === "/blog" || path.startsWith("/blog/") || path === "/terms" || path === "/privacy" || path === "/faq" || path === "/help";
+  const showFooter = isHome || path === "/special-resolvers" || path === "/partners" || path === "/blog" || path.startsWith("/blog/") || path === "/terms" || path === "/privacy" || path === "/faq" || path === "/help";
   const { settings } = usePlatformSettings();
   const { t } = useLanguage();
   const brandTitle = settings?.siteTitle?.trim() || "2Pescrow";
