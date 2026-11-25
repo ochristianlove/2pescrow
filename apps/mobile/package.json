@@ -1,6 +1,6 @@
 {
   "name": "@2pescrow/mobile",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "main": "index.js",
   "scripts": {
@@ -27,6 +27,7 @@
     "expo-constants": "~17.0.0",
     "expo-document-picker": "~13.0.3",
     "expo-file-system": "~18.0.12",
+    "expo-image-picker": "~16.0.6",
     "expo-linking": "~7.0.0",
     "expo-notifications": "~0.29.14",
     "expo-router": "~4.0.0",

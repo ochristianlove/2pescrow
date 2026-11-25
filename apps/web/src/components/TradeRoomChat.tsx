@@ -11,10 +11,11 @@ export type TradeThreadUpdate = {
   createdAt?: string;
 };
 
-function fileKind(name?: string | null): "image" | "pdf" | "file" | null {
+function fileKind(name?: string | null): "image" | "video" | "pdf" | "file" | null {
   if (!name) return null;
   const ext = name.split(".").pop()?.toLowerCase() || "";
   if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) return "image";
+  if (["mp4", "mov", "m4v", "webm"].includes(ext)) return "video";
   if (ext === "pdf") return "pdf";
   return "file";
 }
@@ -26,6 +27,10 @@ function mimeFor(name: string) {
   if (ext === "gif") return "image/gif";
   if (ext === "webp") return "image/webp";
   if (ext === "pdf") return "application/pdf";
+  if (ext === "mp4") return "video/mp4";
+  if (ext === "mov") return "video/quicktime";
+  if (ext === "m4v") return "video/x-m4v";
+  if (ext === "webm") return "video/webm";
   return "application/octet-stream";
 }
 
@@ -42,7 +47,7 @@ function formatWhen(iso: string | undefined, language: string) {
 function useAuthedPreview(url: string | null, fileName: string | null, headers: () => Record<string, string>) {
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
-    if (!url || !fileName || fileKind(fileName) !== "image") {
+    if (!url || !fileName || (fileKind(fileName) !== "image" && fileKind(fileName) !== "video")) {
       setSrc(null);
       return;
     }
@@ -80,7 +85,7 @@ function MessageFile({
 }) {
   const { t: localizeCopy } = useCopyLanguage();
   const kind = fileKind(message.fileName);
-  const preview = useAuthedPreview(kind === "image" ? fileUrl : null, message.fileName || null, headers);
+  const preview = useAuthedPreview(kind === "image" || kind === "video" ? fileUrl : null, message.fileName || null, headers);
   return (
     <div className={`chat-file chat-file-${kind || "file"}`}>
       {kind === "image" && preview && (
@@ -88,9 +93,12 @@ function MessageFile({
           <img src={preview} alt={localizeCopy(message.fileName || "Shared image")} />
         </button>
       )}
-      {kind === "image" && !preview && <div className="chat-file-pending"><TranslatedText text={"Loading preview…"} /></div>}
+      {kind === "video" && preview && (
+        <video src={preview} controls playsInline style={{ width: "100%", maxHeight: "320px", borderRadius: "10px", background: "#040a10" }} />
+      )}
+      {(kind === "image" || kind === "video") && !preview && <div className="chat-file-pending"><TranslatedText text={"Loading preview…"} /></div>}
       <div className="chat-file-row">
-        <span className="chat-file-mark"><TranslatedText text={kind === "pdf" ? "PDF" : kind === "image" ? "IMG" : "FILE"} /></span>
+        <span className="chat-file-mark"><TranslatedText text={kind === "pdf" ? "PDF" : kind === "image" ? "IMG" : kind === "video" ? "VID" : "FILE"} /></span>
         <span className="chat-file-name">{message.fileName}</span>
         <button type="button" className="linkish" onClick={onDownload}>
           {downloadLabel}
@@ -258,7 +266,7 @@ export function TradeRoomChat({
               <span className="sr-only">{t("Share a photo or PDF")}</span>
               <input
                 type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
+                accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/x-m4v,video/webm,application/pdf,.jpg,.jpeg,.png,.webp,.mp4,.mov,.m4v,.webm,.pdf"
                 hidden
                 disabled={busy}
                 onChange={(e) => {

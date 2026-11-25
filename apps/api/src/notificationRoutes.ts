@@ -31,6 +31,7 @@ const PreferencesUpdateSchema = z.object({
   deadlineReminders: z.boolean().optional(),
   lockScreenPrivacy: z.enum(["private", "detailed"]).optional(),
   soundEnabled: z.boolean().optional(),
+  muteCompletedTrades: z.boolean().optional(),
 });
 
 async function requireAuth(req: FastifyRequest, reply: FastifyReply): Promise<string | null> {

@@ -535,8 +535,9 @@ model NotificationPreference {
   tradeUpdates       Boolean  @default(true) @map("trade_updates")
   chatMessages       Boolean  @default(true) @map("chat_messages")
   deadlineReminders  Boolean  @default(true) @map("deadline_reminders")
-  lockScreenPrivacy  String   @default("private") @map("lock_screen_privacy") // "private" | "detailed"
-  soundEnabled       Boolean  @default(true) @map("sound_enabled")
+  lockScreenPrivacy   String   @default("private") @map("lock_screen_privacy") // "private" | "detailed"
+  soundEnabled        Boolean  @default(true) @map("sound_enabled")
+  muteCompletedTrades Boolean  @default(false) @map("mute_completed_trades")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 }

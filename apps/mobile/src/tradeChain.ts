@@ -1,11 +1,18 @@
-import { AbiCoder, Interface, JsonRpcProvider } from "ethers";
+import { AbiCoder, Interface } from "ethers";
+import { apiUrl } from "./config";
 import {
   inspectEscrowDealCapabilities,
   type EscrowDealCapabilities,
 } from "../../../packages/shared/src/escrowCompat";
 
-const RPC = "https://ethereum-rpc.publicnode.com";
 const CHAIN = "eip155:1";
+
+const FALLBACK_PUBLIC_RPCS = [
+  "https://eth.llamarpc.com",
+  "https://1rpc.io/eth",
+  "https://rpc.ankr.com/eth",
+  "https://ethereum-rpc.publicnode.com",
+];
 
 const deal = new Interface([
   "function state() view returns (uint8)",
@@ -50,8 +57,57 @@ export type DealChainView = {
   capabilities?: EscrowDealCapabilities | null;
 };
 
-const publicClient = new JsonRpcProvider(RPC, 1, { staticNetwork: true });
+type RpcErrorPayload = { code?: number; message?: string; data?: unknown };
+type RpcReceipt = { transactionHash: string; status?: string | number | null };
+
 const capabilitiesCache = new Map<string, EscrowDealCapabilities>();
+
+class RpcRevertError extends Error {
+  data?: unknown;
+  constructor(message: string, data?: unknown) {
+    super(message);
+    this.data = data;
+  }
+}
+
+async function ethRpc<T = unknown>(method: string, params: unknown[]): Promise<T> {
+  const endpoints = [`${apiUrl()}/v1/ethereum/rpc`, ...FALLBACK_PUBLIC_RPCS];
+  const payload = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
+  let lastError: Error | null = null;
+
+  for (const endpoint of endpoints) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 9000);
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
+
+      if (!response.ok) {
+        lastError = new Error(`Ethereum RPC unavailable (${response.status})`);
+        continue;
+      }
+      const body = await response.json() as { result?: T; error?: RpcErrorPayload };
+      if (body.error) {
+        const msg = body.error.message || "Ethereum call failed.";
+        // Contract execution reverts must bubble up directly rather than failing over to another node.
+        if (body.error.code === 3 || /execution reverted/i.test(msg) || body.error.data) {
+          throw new RpcRevertError(msg, body.error.data);
+        }
+        lastError = new Error(msg);
+        continue;
+      }
+      return body.result as T;
+    } catch (error) {
+      if (error instanceof RpcRevertError) throw error;
+      lastError = error instanceof Error ? error : new Error("Ethereum RPC request failed.");
+    }
+  }
+  throw lastError ?? new Error("Could not reach Ethereum network right now. Please try again.");
+}
 
 function proofIsSet(value: unknown): boolean {
   const hex = typeof value === "string" ? value : "";
@@ -90,15 +146,36 @@ export function chainError(error: unknown) {
   return short.slice(0, 280) || "The wallet action failed.";
 }
 
-async function read(to: string, data: string) {
-  return publicClient.call({ to, data });
+async function read(to: string, data: string): Promise<string> {
+  return ethRpc<string>("eth_call", [{ to, data }, "latest"]);
+}
+
+async function getCode(address: string): Promise<string> {
+  return ethRpc<string>("eth_getCode", [address, "latest"]);
+}
+
+async function waitForReceipt(hash: string, timeoutMs = 180_000): Promise<{ hash: string; status: number }> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const receipt = await ethRpc<RpcReceipt | null>("eth_getTransactionReceipt", [hash]);
+      if (receipt && receipt.status != null) {
+        const status = typeof receipt.status === "number" ? receipt.status : parseInt(receipt.status, 16);
+        return { hash: receipt.transactionHash || hash, status };
+      }
+    } catch {
+      // Keep polling until mined or timed out
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+  }
+  throw new Error("Transaction is still pending on Ethereum. Check the explorer or refresh shortly.");
 }
 
 export async function readDealCapabilities(address: string): Promise<EscrowDealCapabilities> {
   const key = address.toLowerCase();
   const cached = capabilitiesCache.get(key);
   if (cached && cached.releaseMode !== "unknown") return cached;
-  const caps = await inspectEscrowDealCapabilities(address, (target) => publicClient.getCode(target));
+  const caps = await inspectEscrowDealCapabilities(address, (target) => getCode(target));
   if (caps.releaseMode !== "unknown") {
     capabilitiesCache.set(key, caps);
   }
@@ -145,7 +222,7 @@ async function ensureMainnet(provider: WalletProvider) {
 
 async function simulateCall(from: string, to: string, data: string) {
   try {
-    await publicClient.call({ from, to, data });
+    await ethRpc<string>("eth_call", [{ from, to, data }, "latest"]);
   } catch (error) {
     throw new Error(chainError(error));
   }
@@ -159,7 +236,7 @@ async function send(provider: WalletProvider, from: string, to: string, data: st
     params: [{ from, to, data }],
   }, CHAIN);
   if (typeof hash !== "string" || !hash.startsWith("0x")) throw new Error("The wallet did not return a transaction.");
-  const receipt = await publicClient.waitForTransaction(hash);
+  const receipt = await waitForReceipt(hash);
   if (!receipt || receipt.status !== 1) throw new Error("The transaction failed.");
   return receipt;
 }

@@ -332,10 +332,82 @@ const app = Fastify({ logger: true });
 
 async function build() {
 await app.register(cors, { origin: true });
-await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } });
+await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 await app.register(websocket);
 
 fs.mkdirSync(config.uploadDir, { recursive: true });
+
+// Silent 90-day automatic cleanup for uploaded video attachments (photos and PDFs remain preserved).
+const VIDEO_FILE_EXTS = [".mp4", ".mov", ".m4v", ".webm"];
+async function cleanupExpiredVideoAttachments() {
+  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const oldVideos = await prisma.chatMessage.findMany({
+    where: {
+      createdAt: { lt: cutoff },
+      filePath: { not: null },
+      OR: VIDEO_FILE_EXTS.map((ext) => ({ fileName: { endsWith: ext, mode: "insensitive" as const } })),
+    },
+    select: { id: true, filePath: true },
+    take: 250,
+  });
+  for (const row of oldVideos) {
+    if (row.filePath) {
+      try {
+        if (fs.existsSync(row.filePath)) fs.unlinkSync(row.filePath);
+      } catch (err) {
+        console.warn("[VideoCleanup] Could not unlink expired video:", err);
+      }
+    }
+    await prisma.chatMessage.update({ where: { id: row.id }, data: { filePath: null } }).catch(() => undefined);
+  }
+}
+setTimeout(() => { void cleanupExpiredVideoAttachments().catch(() => undefined); }, 15_000);
+setInterval(() => { void cleanupExpiredVideoAttachments().catch(() => undefined); }, 12 * 60 * 60 * 1000);
+
+// Read-only Ethereum JSON-RPC proxy so mobile/web clients never fail with public RPC 403 rate limits.
+const ALLOWED_ETH_RPC_METHODS = new Set(["eth_call", "eth_getCode", "eth_getTransactionReceipt", "eth_chainId", "eth_blockNumber"]);
+const ETH_RPC_FALLBACKS = [
+  config.ethereumRpcUrl,
+  "https://eth.llamarpc.com",
+  "https://1rpc.io/eth",
+  "https://ethereum-rpc.publicnode.com",
+].filter((url): url is string => Boolean(url && url.startsWith("http")));
+
+app.post("/v1/ethereum/rpc", async (req, reply) => {
+  const body = z.object({
+    jsonrpc: z.string().optional(),
+    id: z.union([z.number(), z.string(), z.null()]).optional(),
+    method: z.string(),
+    params: z.array(z.unknown()).optional(),
+  }).parse(req.body);
+  if (!ALLOWED_ETH_RPC_METHODS.has(body.method)) {
+    return reply.code(403).send({ error: "Method not allowed on read-only RPC proxy" });
+  }
+  const payload = JSON.stringify({ jsonrpc: "2.0", id: body.id ?? 1, method: body.method, params: body.params ?? [] });
+  let lastStatus = 502;
+  for (const upstream of ETH_RPC_FALLBACKS) {
+    try {
+      const res = await fetch(upstream, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!res.ok) {
+        lastStatus = res.status;
+        continue;
+      }
+      const data = await res.json();
+      if (data && typeof data === "object" && "error" in data && (data as { error?: { code?: number } }).error?.code === -32005) {
+        continue;
+      }
+      return data;
+    } catch {
+      lastStatus = 502;
+    }
+  }
+  return reply.code(lastStatus >= 400 ? 503 : lastStatus).send({ error: "Ethereum RPC temporarily unavailable" });
+});
 registerNotificationRoutes(app);
 
 app.get("/health", async () => ({ ok: true, chainId: config.ethereumChainId }));
@@ -2137,10 +2209,35 @@ app.get("/v1/escrows/:id/messages/:messageId/file", async (req, reply) => {
     : ext === "gif" ? "image/gif"
     : ext === "webp" ? "image/webp"
     : ext === "pdf" ? "application/pdf"
+    : ext === "mp4" ? "video/mp4"
+    : ext === "mov" ? "video/quicktime"
+    : ext === "m4v" ? "video/x-m4v"
+    : ext === "webm" ? "video/webm"
     : "application/octet-stream";
-  const inline = mime.startsWith("image/") || mime === "application/pdf";
+  const inline = mime.startsWith("image/") || mime.startsWith("video/") || mime === "application/pdf";
+  const stat = fs.statSync(message.filePath);
+  const range = req.headers.range;
+  if (range && mime.startsWith("video/")) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+    if (match) {
+      const start = match[1] ? Number(match[1]) : 0;
+      const end = match[2] ? Math.min(Number(match[2]), stat.size - 1) : stat.size - 1;
+      if (Number.isFinite(start) && Number.isFinite(end) && start <= end && start < stat.size) {
+        return reply
+          .code(206)
+          .type(mime)
+          .header("Accept-Ranges", "bytes")
+          .header("Content-Range", `bytes ${start}-${end}/${stat.size}`)
+          .header("Content-Length", String(end - start + 1))
+          .header("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`)
+          .send(fs.createReadStream(message.filePath, { start, end }));
+      }
+    }
+  }
   return reply
     .type(mime)
+    .header("Accept-Ranges", "bytes")
+    .header("Content-Length", String(stat.size))
     .header("Content-Disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(fileName)}`)
     .send(fs.createReadStream(message.filePath));
 });
@@ -3761,9 +3858,30 @@ app.post("/v1/escrows/:id/signals", async (req, reply) => {
   const nextStatus = statusForKind[body.kind];
   if (escrow.chain === "ethereum" && ["funded", "completed", "cancelled"].includes(body.kind)) {
     try {
-      const confirmed = await ethereumFunding.get(id);
-      const valid = body.kind === "funded" ? [1, 2, 3].includes(confirmed.chainState ?? -1)
-        : body.kind === "completed" ? confirmed.chainState === 3 : confirmed.chainState === 4;
+      let stateNum: number | null = null;
+      if ((body.kind === "completed" || body.kind === "cancelled") && escrow.contractAddress) {
+        // Check latest on-chain state immediately so just-mined release/cancel txs don't fail 409 waiting 3 blocks.
+        const rpcRes = await fetch(config.ethereumRpcUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "eth_call",
+            params: [{ to: escrow.contractAddress, data: "0xc19d93fb" }, "latest"],
+          }),
+          signal: AbortSignal.timeout(8_000),
+        }).then((r) => (r.ok ? r.json() as Promise<{ result?: string }> : null)).catch(() => null);
+        if (rpcRes?.result && /^0x[0-9a-fA-F]+$/.test(rpcRes.result)) {
+          stateNum = Number(BigInt(rpcRes.result));
+        }
+      }
+      if (stateNum === null) {
+        const confirmed = await ethereumFunding.get(id);
+        stateNum = confirmed.chainState ?? -1;
+      }
+      const valid = body.kind === "funded" ? [1, 2, 3].includes(stateNum)
+        : body.kind === "completed" ? stateNum === 3 : stateNum === 4;
       if (!valid) return reply.code(409).send({ error: "The Ethereum payment state is not confirmed. Token approval is not payment." });
     } catch {
       return reply.code(409).send({ error: "Could not verify the Ethereum payment state. The requested status change was not applied." });

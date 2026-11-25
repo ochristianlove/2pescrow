@@ -40,6 +40,7 @@ export async function getOrCreateNotificationPreferences(userId: string) {
     deadlineReminders: true,
     lockScreenPrivacy: "private",
     soundEnabled: true,
+    muteCompletedTrades: false,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -48,6 +49,15 @@ export async function getOrCreateNotificationPreferences(userId: string) {
 export async function createTradeNotification(input: TradeNotificationInput) {
   const { recipientUserId, escrowId, type, title, message, data, eventId } = input;
   if (!recipientUserId) return null;
+
+  // Respect user's Privacy setting to mute incoming messages on completed/closed trades
+  const prefs = await getOrCreateNotificationPreferences(recipientUserId);
+  if (type.startsWith("chat:") && escrowId && prefs.muteCompletedTrades) {
+    const trade = await prisma.escrow.findUnique({ where: { id: escrowId }, select: { status: true } }).catch(() => null);
+    if (trade && ["Completed", "Resolved", "Cancelled"].includes(trade.status)) {
+      return null;
+    }
+  }
 
   // 1. Deduplication check via eventId if provided
   if (eventId) {
@@ -102,7 +112,6 @@ export async function createTradeNotification(input: TradeNotificationInput) {
   }
 
   // 4. Check recipient push preferences
-  const prefs = await getOrCreateNotificationPreferences(recipientUserId);
   if (!prefs.pushEnabled) {
     return notification;
   }

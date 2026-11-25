@@ -2,7 +2,7 @@ import { Text, useLanguage } from "./language";
 import { useEffect, useRef, useState } from "react";
 import { Image, Modal, Platform, Pressable, SafeAreaView, StyleSheet, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { DocumentPickerAsset } from "expo-document-picker";
+import { ResizeMode, Video } from "expo-av";
 import * as FileSystem from "expo-file-system";
 import { api } from "./api";
 import { apiUrl } from "./config";
@@ -11,14 +11,24 @@ import { colors } from "./theme";
 import type { TradeMessage, TradeRow } from "./types";
 import { Button, Field, Notice } from "./ui";
 
-const accepted = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"];
+const imageMimes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const videoMimes = ["video/mp4", "video/quicktime", "video/x-m4v", "video/webm"];
+const documentMimes = ["application/pdf"];
+const acceptedAll = [...imageMimes, ...videoMimes, ...documentMimes];
+const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+
 const mimeByExtension: Record<string, string> = {
-  jpg: accepted[0],
-  jpeg: accepted[0],
-  png: accepted[1],
-  webp: accepted[2],
-  gif: accepted[3],
-  pdf: accepted[4],
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+  pdf: "application/pdf",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  m4v: "video/x-m4v",
+  webm: "video/webm",
 };
 const utiByExtension: Record<string, string> = {
   jpg: "public.jpeg",
@@ -27,40 +37,110 @@ const utiByExtension: Record<string, string> = {
   webp: "org.webmproject.webp",
   gif: "com.compuserve.gif",
   pdf: "com.adobe.pdf",
+  mp4: "public.mpeg-4",
+  mov: "com.apple.quicktime-movie",
+  m4v: "com.apple.m4v-video",
+  webm: "org.webmproject.webm",
 };
 const DOWNLOAD_DIR_KEY = "twopescrow.downloadDirUri";
+
+type PickedAttachment = {
+  uri: string;
+  name: string;
+  mimeType: string;
+  size: number;
+};
 
 export function EvidenceComposer({ trade, seller, disabled, onBusy, onUploaded }: {
   trade: TradeRow; seller: boolean; disabled: boolean; onBusy: (value: boolean) => void; onUploaded: () => Promise<void>;
 }) {
-  const [file, setFile] = useState<DocumentPickerAsset | null>(null);
+  const [file, setFile] = useState<PickedAttachment | null>(null);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const locked = useRef(false);
-  useEffect(() => () => { if (file?.uri.startsWith(FileSystem.cacheDirectory || "__none__")) void FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {}); }, [file]);
-  async function pick() {
+
+  useEffect(() => () => {
+    if (file?.uri.startsWith(FileSystem.cacheDirectory || "__none__")) {
+      void FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {});
+    }
+  }, [file]);
+
+  function validatePicked(uri: string, rawName: string, rawMime: string | undefined, size: number | undefined): PickedAttachment {
+    const ext = rawName.split(".").pop()?.toLowerCase() || "";
+    const mimeType = rawMime || mimeByExtension[ext] || "";
+    const isVideo = mimeType.startsWith("video/");
+    const maxSize = isVideo ? MAX_VIDEO_BYTES : MAX_MEDIA_BYTES;
+    if (!mimeType || !acceptedAll.includes(mimeType) || size == null || size === 0 || size > maxSize) {
+      throw new Error(
+        isVideo
+          ? "Choose an MP4, MOV, or WebM video up to 50 MB."
+          : "Choose a JPG, PNG, WebP, GIF, PDF (up to 20 MB), or video (up to 50 MB).",
+      );
+    }
+    return { uri, name: rawName, mimeType, size };
+  }
+
+  async function pickMedia() {
     if (locked.current || disabled) return;
-    locked.current = true; setError(null);
+    locked.current = true;
+    setError(null);
+    try {
+      const ImagePicker = await import("expo-image-picker");
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        throw new Error("Allow photo library access in Settings to attach photos or videos.");
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images", "videos"],
+        allowsMultipleSelection: false,
+        quality: 0.9,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      const info = await FileSystem.getInfoAsync(asset.uri);
+      const size = asset.fileSize ?? (info.exists && "size" in info ? info.size : undefined);
+      const isVid = asset.type === "video" || asset.mimeType?.startsWith("video/");
+      const fallbackExt = isVid ? "mp4" : "jpg";
+      const fileName = asset.fileName || asset.uri.split("/").pop() || `evidence-${Date.now()}.${fallbackExt}`;
+      const mime = asset.mimeType || mimeByExtension[fileName.split(".").pop()?.toLowerCase() || ""] || (isVid ? "video/mp4" : "image/jpeg");
+      setFile(validatePicked(asset.uri, fileName, mime, size));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not choose a photo or video. Please try again.");
+    } finally {
+      locked.current = false;
+    }
+  }
+
+  async function pickDocument() {
+    if (locked.current || disabled) return;
+    locked.current = true;
+    setError(null);
     try {
       const picker = await import("expo-document-picker");
-      const result = await picker.getDocumentAsync({ type: accepted, copyToCacheDirectory: true, multiple: false });
-      if (result.canceled) return;
+      const result = await picker.getDocumentAsync({
+        type: [...documentMimes, ...imageMimes, ...videoMimes],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
       const selected = result.assets[0];
       const info = await FileSystem.getInfoAsync(selected.uri);
-      const size = selected.size ?? (info.exists ? info.size : undefined);
-      const mimeType = selected.mimeType || mimeByExtension[selected.name.split(".").pop()?.toLowerCase() || ""];
-      if (!mimeType || !accepted.includes(mimeType) || size == null || size > 20 * 1024 * 1024 || size === 0) {
-        await FileSystem.deleteAsync(selected.uri, { idempotent: true });
-        throw new Error("Choose a JPG, PNG, WebP, GIF, or PDF file up to 20 MB.");
-      }
-      setFile({ ...selected, mimeType, size });
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not choose a file. Please try again."); }
-    finally { locked.current = false; }
+      const size = selected.size ?? (info.exists && "size" in info ? info.size : undefined);
+      setFile(validatePicked(selected.uri, selected.name, selected.mimeType, size));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not choose a file. Please try again.");
+    } finally {
+      locked.current = false;
+    }
   }
+
   async function upload() {
     if (!file || disabled || locked.current) return;
-    locked.current = true; setUploading(true); onBusy(true); setError(null);
+    locked.current = true;
+    setUploading(true);
+    onBusy(true);
+    setError(null);
     try {
       const form = new FormData();
       // React Native's FormData accepts local file descriptors; DOM types only declare Blob.
@@ -69,21 +149,69 @@ export function EvidenceComposer({ trade, seller, disabled, onBusy, onUploaded }
       form.append("kind", fulfilment ? "fulfilment" : "evidence");
       form.append("note", note.trim() || (fulfilment ? "Seller shared fulfilment proof" : "Evidence shared by a trade party"));
       await api(`/v1/escrows/${encodeURIComponent(trade.id)}/evidence`, { method: "POST", body: form });
-      setFile(null); setNote(""); await onUploaded();
-    } catch (err) { setError(err instanceof Error ? err.message : "Upload failed. Your file is still selected; try again."); }
-    finally { locked.current = false; setUploading(false); onBusy(false); }
+      setFile(null);
+      setNote("");
+      await onUploaded();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed. Your file is still selected; try again.");
+    } finally {
+      locked.current = false;
+      setUploading(false);
+      onBusy(false);
+    }
   }
-  return <View style={{ gap: 10 }}>
-    {error ? <Notice text={error} /> : null}
-    <Button label={file ? "Choose another file" : "Attach photo or PDF"} tone="ghost" disabled={disabled} onPress={() => void pick()} />
-    {file ? <>
-      <Text translate={false} style={{ color: colors.text }}>{file.name} · {((file.size || 0) / 1024 / 1024).toFixed(1)} MB</Text>
-      {file.mimeType?.startsWith("image/") ? <Image source={{ uri: file.uri }} style={{ width: "100%", height: 180, borderRadius: 10 }} resizeMode="contain" accessibilityLabel={file.name} /> : null}
-      <Field label="Evidence note (optional)" value={note} onChangeText={setNote} editable={!disabled} maxLength={1000} multiline />
-      <Button label="Upload to this trade" busy={uploading} disabled={disabled} onPress={() => void upload()} />
-      <Button label="Remove attachment" tone="ghost" disabled={disabled} onPress={() => setFile(null)} />
-    </> : <Text style={{ color: colors.muted, fontSize: 12 }}>Photos and PDFs up to 20 MB. Review your file before uploading.</Text>}
-  </View>;
+
+  const isSelectedVideo = Boolean(file?.mimeType.startsWith("video/"));
+
+  return (
+    <View style={{ gap: 10 }}>
+      {error ? <Notice text={error} /> : null}
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <Button
+            label={file ? "Change media" : "Photo / Video"}
+            tone="ghost"
+            disabled={disabled || uploading}
+            onPress={() => void pickMedia()}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button
+            label="PDF / File"
+            tone="ghost"
+            disabled={disabled || uploading}
+            onPress={() => void pickDocument()}
+          />
+        </View>
+      </View>
+      {file ? (
+        <>
+          <Text translate={false} style={{ color: colors.text }}>
+            {file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB
+          </Text>
+          {file.mimeType.startsWith("image/") ? (
+            <Image source={{ uri: file.uri }} style={{ width: "100%", height: 180, borderRadius: 10 }} resizeMode="contain" accessibilityLabel={file.name} />
+          ) : isSelectedVideo ? (
+            <View style={viewerStyles.videoPreviewBox}>
+              <Video
+                source={{ uri: file.uri }}
+                style={{ width: "100%", height: 200 }}
+                useNativeControls
+                resizeMode={ResizeMode.CONTAIN}
+              />
+            </View>
+          ) : null}
+          <Field label="Evidence note (optional)" value={note} onChangeText={setNote} editable={!disabled} maxLength={1000} multiline />
+          <Button label="Upload to this trade" busy={uploading} disabled={disabled} onPress={() => void upload()} />
+          <Button label="Remove attachment" tone="ghost" disabled={disabled || uploading} onPress={() => setFile(null)} />
+        </>
+      ) : (
+        <Text style={{ color: colors.muted, fontSize: 12 }}>
+          Photos & PDFs up to 20 MB, or videos up to 50 MB. Review your file before uploading.
+        </Text>
+      )}
+    </View>
+  );
 }
 
 function bytesToBase64(bytes: Uint8Array) {
@@ -150,6 +278,18 @@ async function saveLocalFileToDevice(localUri: string, filename: string, mimeTyp
   return { saved: true };
 }
 
+export async function saveTextFileToDevice(filename: string, mimeType: string, content: string, uti = "public.comma-separated-values-text"): Promise<{ saved: boolean; cancelled?: boolean }> {
+  const directory = FileSystem.cacheDirectory;
+  if (!directory) throw new Error("File storage is not available on this device.");
+  const destination = `${directory}${filename}`;
+  try {
+    await FileSystem.writeAsStringAsync(destination, content, { encoding: FileSystem.EncodingType.UTF8 });
+    return await saveLocalFileToDevice(destination, filename, mimeType, uti);
+  } finally {
+    await FileSystem.deleteAsync(destination, { idempotent: true }).catch(() => {});
+  }
+}
+
 export async function downloadTradeAgreement(tradeId: string): Promise<{ saved: boolean; cancelled?: boolean; filename: string }> {
   const token = getToken();
   if (!token) throw new Error("Sign in to download the agreement.");
@@ -199,6 +339,7 @@ export function MessageFile({ tradeId, message }: { tradeId: string; message: Tr
   const mime = mimeByExtension[ext] || "application/octet-stream";
   const uti = utiByExtension[ext];
   const isImage = mime.startsWith("image/");
+  const isVideo = mime.startsWith("video/");
   const cleanName = (message.fileName || "evidence").replace(/[^a-zA-Z0-9._-]/g, "_");
 
   async function downloadFile() {
@@ -266,16 +407,33 @@ export function MessageFile({ tradeId, message }: { tradeId: string; message: Tr
               />
               <Text style={viewerStyles.thumbHint}>Tap image to view full screen</Text>
             </Pressable>
+          ) : isVideo ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("Play video")}
+              onPress={() => setViewerOpen(true)}
+              style={viewerStyles.videoCard}
+            >
+              <View style={viewerStyles.playBadge}>
+                <Text translate={false} style={{ color: colors.primaryFg, fontWeight: "800", fontSize: 16 }}>▶</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text translate={false} numberOfLines={1} style={{ color: colors.text, fontWeight: "700", fontSize: 14 }}>
+                  {message.fileName || "Video"}
+                </Text>
+                <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>Tap to play video</Text>
+              </View>
+            </Pressable>
           ) : null}
           <View style={{ flexDirection: "row", gap: 8 }}>
             <View style={{ flex: 1 }}>
               <Button
-                label={isImage ? "View image" : "Open file"}
+                label={isImage ? "View image" : isVideo ? "Play video" : "Open file"}
                 tone="ghost"
                 busy={busy === "open"}
                 disabled={Boolean(busy)}
                 onPress={() => {
-                  if (isImage) setViewerOpen(true);
+                  if (isImage || isVideo) setViewerOpen(true);
                   else void openExternalDocument();
                 }}
               />
@@ -290,7 +448,7 @@ export function MessageFile({ tradeId, message }: { tradeId: string; message: Tr
               />
             </View>
           </View>
-          {isImage ? (
+          {isImage || isVideo ? (
             <Modal
               visible={viewerOpen}
               transparent={false}
@@ -300,7 +458,7 @@ export function MessageFile({ tradeId, message }: { tradeId: string; message: Tr
               <SafeAreaView style={viewerStyles.modalBackdrop}>
                 <View style={viewerStyles.modalHeader}>
                   <Text translate={false} numberOfLines={1} style={viewerStyles.modalTitle}>
-                    {message.fileName || "Image"}
+                    {message.fileName || (isVideo ? "Video" : "Image")}
                   </Text>
                   <Pressable
                     accessibilityRole="button"
@@ -312,12 +470,22 @@ export function MessageFile({ tradeId, message }: { tradeId: string; message: Tr
                   </Pressable>
                 </View>
                 <View style={viewerStyles.modalBody}>
-                  <Image
-                    source={{ uri: url, headers }}
-                    style={viewerStyles.fullImage}
-                    resizeMode="contain"
-                    accessibilityLabel={message.fileName || "Shared image"}
-                  />
+                  {isImage ? (
+                    <Image
+                      source={{ uri: url, headers }}
+                      style={viewerStyles.fullImage}
+                      resizeMode="contain"
+                      accessibilityLabel={message.fileName || "Shared image"}
+                    />
+                  ) : (
+                    <Video
+                      source={{ uri: url, headers }}
+                      style={viewerStyles.fullImage}
+                      useNativeControls
+                      shouldPlay
+                      resizeMode={ResizeMode.CONTAIN}
+                    />
+                  )}
                 </View>
                 <View style={viewerStyles.modalFooter}>
                   {savedNotice ? <Notice text={savedNotice} tone="ok" /> : null}
@@ -355,6 +523,31 @@ const viewerStyles = StyleSheet.create({
     textAlign: "center",
     paddingVertical: 6,
     backgroundColor: colors.bg2,
+  },
+  videoPreviewBox: {
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: "#040a10",
+  },
+  videoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.bg2,
+  },
+  playBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalBackdrop: {
     flex: 1,

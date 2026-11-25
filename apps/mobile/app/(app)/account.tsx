@@ -61,7 +61,7 @@ function WalletConnectLink({ onAddress }: { onAddress: (address: string) => Prom
 export default function AccountScreen() {
   const router = useRouter();
   const { user, refresh, signOut } = useAuth();
-  const { soundEnabled, setSoundEnabled } = useLiveNotifications();
+  const { soundEnabled, setSoundEnabled, preferences, updatePreferences } = useLiveNotifications();
   const [soundTone, setSoundTone] = useState<SoundTone>("subtle");
 
   useEffect(() => {
@@ -281,24 +281,43 @@ export default function AccountScreen() {
       <Card>
         <Pressable accessibilityRole="button" onPress={() => setPrivacyOpen((open) => !open)}>
           <Text style={{ color: colors.text, fontWeight: "700" }}>Privacy</Text>
-          <Text style={{ color: colors.muted, marginTop: 4 }}>Ledger visibility</Text>
+          <Text style={{ color: colors.muted, marginTop: 4 }}>Ledger visibility & completed-trade alerts</Text>
         </Pressable>
         {privacyOpen ? (
-          <View style={{ marginTop: 12 }}>
-            <Text style={{ color: colors.muted, lineHeight: 20, marginBottom: 10 }}>
-              Hide your trades from the public ledger and the activity feed. You and the other party still see them when signed in.
-            </Text>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-              <Switch
-                value={Boolean(user?.hideFromPublicLedger)}
-                onValueChange={(value) => void setLedgerPrivacy(value)}
-                disabled={busy === "privacy"}
-                trackColor={{ false: colors.line, true: "#1f6b4a" }}
-                thumbColor={user?.hideFromPublicLedger ? colors.accent : colors.muted}
-              />
-              <Text style={{ color: colors.text, flex: 1, lineHeight: 20 }}>Hide my trades from the public ledger</Text>
+          <View style={{ marginTop: 12, gap: 14 }}>
+            <View>
+              <Text style={{ color: colors.muted, lineHeight: 20, marginBottom: 10 }}>
+                Hide your trades from the public ledger and the activity feed. You and the other party still see them when signed in.
+              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Switch
+                  value={Boolean(user?.hideFromPublicLedger)}
+                  onValueChange={(value) => void setLedgerPrivacy(value)}
+                  disabled={busy === "privacy"}
+                  trackColor={{ false: colors.line, true: "#1f6b4a" }}
+                  thumbColor={user?.hideFromPublicLedger ? colors.accent : colors.muted}
+                />
+                <Text style={{ color: colors.text, flex: 1, lineHeight: 20 }}>Hide my trades from the public ledger</Text>
+              </View>
             </View>
-            {privacyMsg ? <Text style={{ color: colors.muted, marginTop: 8 }}>{privacyMsg}</Text> : null}
+            <View style={{ paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.line }}>
+              <Text style={{ color: colors.muted, lineHeight: 20, marginBottom: 10 }}>
+                Silence incoming message notifications from completed, resolved, or cancelled trades so you can focus only on open trades.
+              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Switch
+                  value={Boolean(preferences?.muteCompletedTrades)}
+                  onValueChange={(value) => {
+                    void updatePreferences({ muteCompletedTrades: value });
+                    setPrivacyMsg(value ? "Messages from completed trades are muted." : "Messages from completed trades will alert normally.");
+                  }}
+                  trackColor={{ false: colors.line, true: "#1f6b4a" }}
+                  thumbColor={preferences?.muteCompletedTrades ? colors.accent : colors.muted}
+                />
+                <Text style={{ color: colors.text, flex: 1, lineHeight: 20 }}>Mute messages from completed trades</Text>
+              </View>
+            </View>
+            {privacyMsg ? <Text style={{ color: colors.muted }}>{privacyMsg}</Text> : null}
           </View>
         ) : null}
       </Card>

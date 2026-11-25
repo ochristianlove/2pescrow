@@ -1,5 +1,5 @@
 import { Text } from "./language";
-import { Image, Linking, Pressable, StyleSheet, View } from "react-native";
+import { Image, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import { api } from "./api";
@@ -8,7 +8,7 @@ import { webOrigin } from "./config";
 import { LegalSheet, type LegalDoc } from "./LegalSheet";
 
 const logo = require("../assets/logo.png");
-const factoryFallback = "0x08Be929Ac784E8aEe20403c4F5bbEE2668e183c9";
+const factoryFallback = "0x8F18c320771a93D76832BbB30072c011f3e3c015";
 
 type Settings = {
   factoryAddress?: string | null;
@@ -62,11 +62,17 @@ export function HomeFooter() {
       <FooterLink label="Join a trade" onPress={() => router.push(user ? "/join-trade" : "/sign-in")} />
       <FooterLink label="Open trades" onPress={() => router.push("/(app)/ledger")} />
       <FooterLink label="Referrals" onPress={() => router.push(user ? "/(app)/referrals" : "/sign-in")} />
+      <FooterLink label="Special Resolvers" onPress={() => void Linking.openURL(`${origin}/special-resolvers`)} />
       <FooterLink label="FAQ" onPress={() => router.push("/(app)/faq")} />
 
       <Text style={styles.heading}>Read</Text>
       <FooterLink label="Blog" onPress={() => void Linking.openURL(`${origin}/blog`)} />
+      <FooterLink label="GitHub (Open Source)" onPress={() => void Linking.openURL("https://github.com/ochristianlove/2pescrow")} />
+      {Platform.OS !== "ios" ? (
+        <FooterLink label="Android APK" onPress={() => void Linking.openURL("https://github.com/ochristianlove/2pescrow/releases/latest")} />
+      ) : null}
       <FooterLink label="Etherscan" onPress={() => void Linking.openURL(`https://etherscan.io/address/${factory}`)} />
+      <FooterLink label="Sourcify Verified" onPress={() => void Linking.openURL(`https://repo.sourcify.dev/1/${factory}`)} />
       <FooterLink label="Terms" onPress={() => setLegal("terms")} />
       <FooterLink label="Privacy" onPress={() => setLegal("privacy")} />
 

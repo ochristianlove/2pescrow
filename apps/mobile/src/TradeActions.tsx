@@ -327,6 +327,7 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
         trade={trade}
         userId={userId}
         chain={chain}
+        setChain={setChain}
         busy={busy}
         reason={reason}
         setReason={setReason}
@@ -348,6 +349,7 @@ function DisputeAndCancel({
   trade,
   userId,
   chain,
+  setChain,
   busy,
   reason,
   setReason,
@@ -359,6 +361,7 @@ function DisputeAndCancel({
   trade: TradeRow;
   userId?: string;
   chain: ChainView | null;
+  setChain?: (view: ChainView) => void;
   busy: string | null;
   reason: string;
   setReason: (value: string) => void;
@@ -367,6 +370,7 @@ function DisputeAndCancel({
   run: (name: string, work: () => Promise<void>) => Promise<void>;
   requireWallet?: () => { from: string; provider: WalletProvider };
 }) {
+  const { t } = useLanguage();
   const { user } = useAuth();
   const actorId = userId || user?.id;
   const access = tradeDisputeAccess(trade, actorId, user?.email, chain?.state);
@@ -381,32 +385,40 @@ function DisputeAndCancel({
     if (!reason.trim()) throw new Error("Write what went wrong before opening a dispute.");
     if (!trade.contractAddress) throw new Error("Available after the on-chain escrow exists.");
     if (mode === "tron") {
-      if (chain && ![1, 2, 5].includes(chain.state)) {
+      if (chain && ![1, 2, 3, 5].includes(chain.state)) {
         throw new Error("The on-chain escrow must be Funded or In Progress before opening a dispute.");
       }
     } else {
-      const wallet = requireWallet?.();
-      if (!wallet) throw new Error("Connect the Ethereum wallet linked to this trade.");
-      const view = chain ?? await readDeal(trade.contractAddress);
-      if (!view || (view.state !== 5 && view.state !== 1 && view.state !== 2)) {
+      const view = (await readDeal(trade.contractAddress)) ?? chain;
+      if (!view || ![1, 2, 3, 5].includes(view.state)) {
         throw new Error("The on-chain escrow must be Funded or In Progress before opening a dispute.");
       }
-      if (view.state !== 5) await openDisputeOnChain(wallet.provider, wallet.from, trade.contractAddress);
+      if (view.state === 1 || view.state === 2) {
+        const wallet = requireWallet?.();
+        if (!wallet) throw new Error("Connect the Ethereum wallet linked to this trade.");
+        await openDisputeOnChain(wallet.provider, wallet.from, trade.contractAddress);
+      }
     }
     await api(`/v1/escrows/${encodeURIComponent(trade.id)}/disputes`, {
       method: "POST",
       body: JSON.stringify({ reason: reason.trim() }),
     });
     setReason("");
+    if (mode === "ethereum") {
+      const refreshed = await readDeal(trade.contractAddress);
+      if (refreshed) setChain?.(refreshed);
+    }
   }
 
   async function withdrawDispute() {
     if (!access.openDispute) return;
     let txHash: string | undefined;
-    if (mode === "ethereum") {
-      const wallet = requireWallet?.();
-      if (!wallet) throw new Error("Connect the wallet linked to this trade to close the on-chain dispute.");
-      if (access.frozen && trade.contractAddress) {
+    if (mode === "ethereum" && trade.contractAddress) {
+      const liveView = (await readDeal(trade.contractAddress)) ?? chain;
+      const needsOnChainUnfreeze = liveView?.state === 5 || access.frozen;
+      if (needsOnChainUnfreeze) {
+        const wallet = requireWallet?.();
+        if (!wallet) throw new Error("Connect the wallet linked to this trade to close the on-chain dispute.");
         const receipt = await withdrawDisputeOnChain(wallet.provider, wallet.from, trade.contractAddress);
         txHash = receipt.hash;
       }
@@ -415,6 +427,10 @@ function DisputeAndCancel({
       method: "POST",
       body: JSON.stringify(txHash ? { txHash } : {}),
     });
+    if (mode === "ethereum" && trade.contractAddress) {
+      const refreshed = await readDeal(trade.contractAddress);
+      if (refreshed) setChain?.(refreshed);
+    }
   }
 
   async function cancelTrade() {
@@ -422,6 +438,7 @@ function DisputeAndCancel({
     if (!wallet || !trade.contractAddress) throw new Error("Connect the Ethereum wallet linked to this trade.");
     await requestCancel(wallet.provider, wallet.from, trade.contractAddress);
     const view = await readDeal(trade.contractAddress);
+    if (view) setChain?.(view);
     await signal(trade.id, view?.state === 4 ? "cancelled" : "cancel-requested");
   }
 
@@ -429,6 +446,8 @@ function DisputeAndCancel({
     const wallet = requireWallet?.();
     if (!wallet || !trade.contractAddress) throw new Error("Connect the Ethereum wallet linked to this trade.");
     await refuseCancel(wallet.provider, wallet.from, trade.contractAddress);
+    const view = await readDeal(trade.contractAddress);
+    if (view) setChain?.(view);
     await signal(trade.id, "cancel-refused");
   }
 
@@ -455,8 +474,22 @@ function DisputeAndCancel({
           busy={busy === "cancel"}
           disabled={Boolean(busy)}
           onPress={() => {
-            if (chainOnWebsite) onWeb();
-            else void run("cancel", cancelTrade);
+            if (chainOnWebsite) {
+              onWeb();
+              return;
+            }
+            Alert.alert(
+              t(permission.seller ? "Cancel trade?" : "Request cancel?"),
+              t(
+                permission.seller
+                  ? "This closes the escrow on-chain and refunds the buyer the trade amount minus a $1 cancel commission."
+                  : "This records a cancellation request on-chain. The seller can refuse it or accept to cancel and refund you.",
+              ),
+              [
+                { text: t("Keep trade open"), style: "cancel" },
+                { text: t(permission.seller ? "Cancel trade" : "Request cancel"), style: "destructive", onPress: () => void run("cancel", cancelTrade) },
+              ],
+            );
           }}
         />
       ) : null}

@@ -42,6 +42,37 @@ export function ProfilePage() {
   const [nameMsg, setNameMsg] = useState<string | null>(null);
   const [privacyBusy, setPrivacyBusy] = useState(false);
   const [privacyMsg, setPrivacyMsg] = useState<string | null>(null);
+  const [muteCompleted, setMuteCompleted] = useState(false);
+
+  useEffect(() => {
+    if (!ready || !user) return;
+    api<{ muteCompletedTrades?: boolean }>("/v1/me/notification-preferences", { headers: authHeaders() })
+      .then((prefs) => setMuteCompleted(Boolean(prefs?.muteCompletedTrades)))
+      .catch(() => {});
+  }, [ready, user, authHeaders]);
+
+  async function setMuteCompletedPrivacy(mute: boolean) {
+    setPrivacyBusy(true);
+    setErr(null);
+    setPrivacyMsg(null);
+    try {
+      await api("/v1/me/notification-preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ muteCompletedTrades: mute }),
+      });
+      setMuteCompleted(mute);
+      setPrivacyMsg(
+        mute
+          ? t("Messages from completed trades are muted.")
+          : t("Messages from completed trades will alert normally."),
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPrivacyBusy(false);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -360,6 +391,18 @@ export function ProfilePage() {
             onChange={(e) => void setLedgerPrivacy(e.target.checked)}
           />
           {t("Hide my trades from the public ledger")}
+        </label>
+        <p className="muted" style={{ marginTop: "0.75rem" }}>
+          {t("Silence incoming message alerts from completed, resolved, or cancelled trades so you can focus on open trades.")}
+        </p>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={muteCompleted}
+            disabled={privacyBusy}
+            onChange={(e) => void setMuteCompletedPrivacy(e.target.checked)}
+          />
+          {t("Mute messages from completed trades")}
         </label>
         {privacyMsg && <p className="muted">{privacyMsg}</p>}
       </details>

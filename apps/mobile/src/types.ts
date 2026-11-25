@@ -22,6 +22,7 @@ export type TradeRow = {
   createTxHash?: string | null;
   buyerAddress?: string | null;
   sellerAddress?: string | null;
+  createdAt?: string | null;
   updatedAt?: string;
   messages?: TradeMessage[];
   events?: TradeEvent[];

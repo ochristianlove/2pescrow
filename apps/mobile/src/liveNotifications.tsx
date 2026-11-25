@@ -71,6 +71,7 @@ export type NotificationPreferences = {
   deadlineReminders: boolean;
   lockScreenPrivacy: boolean;
   soundEnabled: boolean;
+  muteCompletedTrades?: boolean;
 };
 
 type ApiNotificationItem = {
