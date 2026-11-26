@@ -143,17 +143,22 @@ function withTimeout<T>(promise: Promise<T>, ms: number, tag: string): Promise<T
   });
 }
 
-let activeVerifyPromise: Promise<{ alive: boolean; reason?: string }> | null = null;
+let activeFastVerifyPromise: Promise<{ alive: boolean; reason?: string }> | null = null;
+let activePingVerifyPromise: Promise<{ alive: boolean; reason?: string }> | null = null;
 
 /**
  * Verifies that the persisted WalletConnect session is genuinely active and unexpired.
- * Restarts a dropped relayer WebSocket (common after iOS/Android backgrounding or offline periods),
- * checks local session expiry/topic membership, and optionally pings the session.
+ * - Interactive transaction calls should pass `{ activePing: false }` for instant (<1ms) local
+ *   expiry/topic/account verification (restarting the relayer only if actually disconnected).
+ * - Background guards (`<WalletSessionGuard />`) pass `{ activePing: true }` without blocking UI taps.
  * Automatically clears stale state via disconnectWallet() if the session is dead.
  */
 export function verifyWalletSession(options?: { activePing?: boolean; timeoutMs?: number }): Promise<{ alive: boolean; reason?: string }> {
-  if (activeVerifyPromise) return activeVerifyPromise;
-  activeVerifyPromise = (async () => {
+  const shouldPing = options?.activePing === true;
+  if (!shouldPing && activeFastVerifyPromise) return activeFastVerifyPromise;
+  if (shouldPing && activePingVerifyPromise) return activePingVerifyPromise;
+
+  const task = (async () => {
     const provider = getWalletConnectProvider();
     const session = provider?.session;
     const topic = session?.topic;
@@ -185,8 +190,8 @@ export function verifyWalletSession(options?: { activePing?: boolean; timeoutMs?
     const relayer = provider.client?.core?.relayer;
     if (relayer && relayer.connected === false && typeof relayer.restartTransport === "function") {
       try {
-        await withTimeout(relayer.restartTransport(), 3500, "__RELAYER_TIMEOUT__");
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        await withTimeout(relayer.restartTransport(), shouldPing ? 3000 : 1200, "__RELAYER_TIMEOUT__");
+        await new Promise((resolve) => setTimeout(resolve, shouldPing ? 250 : 100));
       } catch {
         // Continue to session re-check below.
       }
@@ -197,7 +202,7 @@ export function verifyWalletSession(options?: { activePing?: boolean; timeoutMs?
       }
     }
 
-    if (options?.activePing !== false && typeof provider.client?.ping === "function") {
+    if (shouldPing && typeof provider.client?.ping === "function") {
       try {
         await withTimeout(provider.client.ping({ topic }), options?.timeoutMs ?? 2500, "__PING_TIMEOUT__");
       } catch (err) {
@@ -217,9 +222,13 @@ export function verifyWalletSession(options?: { activePing?: boolean; timeoutMs?
 
     return { alive: true };
   })().finally(() => {
-    activeVerifyPromise = null;
+    if (shouldPing) activePingVerifyPromise = null;
+    else activeFastVerifyPromise = null;
   });
-  return activeVerifyPromise;
+
+  if (shouldPing) activePingVerifyPromise = task;
+  else activeFastVerifyPromise = task;
+  return task;
 }
 
 /**

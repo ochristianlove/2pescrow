@@ -125,7 +125,9 @@ function WalletSessionGuard() {
       if (nextState === "active") {
         const awayMs = backgroundedAt.current ? Date.now() - backgroundedAt.current : 0;
         backgroundedAt.current = null;
-        if (awayMs >= 10_000) {
+        // Only run background session ping after prolonged inactivity (5+ minutes),
+        // never right after a quick round-trip to MetaMask / Trust Wallet.
+        if (awayMs >= 5 * 60 * 1000) {
           void verifyWalletSession({ activePing: true, timeoutMs: 2500 });
         }
       }

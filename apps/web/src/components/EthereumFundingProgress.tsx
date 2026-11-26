@@ -20,7 +20,7 @@ export function EthereumFundingProgress({ state, error, busy, walletReady, onCon
         <li>{t(state.stage === "funded" ? "Deposit confirmed — trade funds are in escrow" : state.stage === "closed" ? "Trade closed — no further deposit" : "Deposit not yet confirmed")}</li>
       </ul>
       <p>{t("Trade deposit")}: {formatAmount(state.amountAtomic)} {state.tokenSymbol}. {t("Creation fee")}: {formatAmount(state.feeAtomic)} {state.tokenSymbol}.</p>
-      <p>{t("Approval grants permission; it is not payment. A wallet showing 0 ETH can still approve or transfer tokens. Network fees are separate.")}</p>
+      <p>{t("Approval grants permission to deposit your tokens — it is not payment. A small amount of ETH is still required to pay the Ethereum network (gas) fee.")}</p>
       {state.attempts.length > 0 && <details>
         <summary>{t("Transactions and network fees")}</summary>
         <ul>{state.attempts.map(a => <li key={a.id}>

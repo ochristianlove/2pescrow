@@ -430,39 +430,53 @@ export function LiveNotificationsProvider({ children }: { children: ReactNode })
     return cleanup;
   }, [user, refreshInbox]);
 
-  // 6. WebSocket connection for live trade room and inbox updates
+  // 6. WebSocket connection for live trade room and inbox updates (resilient across Android/iOS backgrounding)
   useEffect(() => {
     if (!user) return;
 
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+    let lastActivityAt = Date.now();
     let stopped = false;
 
-    function scheduleReconnect() {
+    function scheduleReconnect(delayMs = 1500) {
       if (stopped || reconnectTimer) return;
       reconnectTimer = setTimeout(() => {
         reconnectTimer = undefined;
         connect();
-      }, 4000);
+      }, delayMs);
     }
 
     function connect() {
       if (stopped) return;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = undefined;
+      }
+      if (ws) {
+        try { ws.close(); } catch { /* ignore */ }
+        ws = null;
+      }
       try {
         ws = new WebSocket(wsUrl());
       } catch {
-        scheduleReconnect();
+        scheduleReconnect(2000);
         return;
       }
 
       ws.onopen = () => {
+        lastActivityAt = Date.now();
         const token = getToken();
         if (token && ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "auth", token }));
         }
+        // Trigger an immediate trade refresh whenever the live socket (re)connects.
+        notifyTradeSubscribers();
       };
 
       ws.onmessage = (ev) => {
+        lastActivityAt = Date.now();
         try {
           const msg = JSON.parse(String(ev.data)) as WsEnvelope;
           const event = msg.event;
@@ -502,7 +516,7 @@ export function LiveNotificationsProvider({ children }: { children: ReactNode })
 
       ws.onclose = () => {
         ws = null;
-        if (!stopped) scheduleReconnect();
+        if (!stopped) scheduleReconnect(1500);
       };
 
       ws.onerror = () => ws?.close();
@@ -510,8 +524,38 @@ export function LiveNotificationsProvider({ children }: { children: ReactNode })
 
     connect();
 
+    // Android often leaves WebSockets half-open after switching to MetaMask or sleeping.
+    // Force an immediate socket health check + trade refresh on foreground resume.
+    const appSub = AppState.addEventListener("change", (nextState: AppStateStatus) => {
+      if (nextState !== "active" || stopped) return;
+      notifyTradeSubscribers();
+      const stale = Date.now() - lastActivityAt > 30_000;
+      if (!ws || ws.readyState !== WebSocket.OPEN || stale) {
+        connect();
+      }
+    });
+
+    heartbeatTimer = setInterval(() => {
+      if (stopped || AppState.currentState !== "active") return;
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        connect();
+        return;
+      }
+      if (Date.now() - lastActivityAt > 45_000) {
+        connect();
+        return;
+      }
+      try {
+        ws.send(JSON.stringify({ type: "ping" }));
+      } catch {
+        connect();
+      }
+    }, 20_000);
+
     return () => {
       stopped = true;
+      appSub.remove();
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       ws?.close();
     };

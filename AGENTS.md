@@ -21,3 +21,6 @@ Follow these project rules on every task in this repository:
 - Standard trades (`optionalAgent == address(0)`) route **100%** of the 10% platform fee to `feeRecipient` and **0%** to resolvers.
 - Special Resolver partner trades (`optionalAgent != address(0)`) automatically split the 10% fee **50/50** on-chain between the partner wallet and `feeRecipient`, and void manual referral commissions.
 - Special Resolvers (`role = "special_resolver"`) are external partners scoped strictly to their own referred clients' trades—they must never view or claim general platform disputes.
+
+## 4. Automated Translations (8 Languages)
+- Whenever new user-facing copy or features are added to `apps/web` or `apps/mobile`, run `npm run i18n:sync` (followed by `npm run check:i18n` and `npm run check:mobile-parity`) before committing so all 7 non-English languages (`fr`, `zh`, `es`, `pt-BR`, `ru`, `id`, `vi`) stay automatically synced in `packages/shared/src/i18n/generated.ts`.

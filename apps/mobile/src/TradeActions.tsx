@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, AppState, View } from "react-native";
 import { useAccount, useAppKit, useProvider } from "@reown/appkit-react-native";
 import { api } from "./api";
 import { appKit, verifyWalletSession } from "./appkit";
 import { useAuth } from "./auth";
 import { FundingBreakdown, useFundingQuote, type FundingHint } from "./FundingBreakdown";
 import { Text, useLanguage } from "./language";
+import { useLiveNotifications } from "./liveNotifications";
 import { colors } from "./theme";
 import type { TradeRow } from "./types";
 import { buyerFundingPending, tradeDisputeAccess, tradePermissions } from "./tradePresentation";
@@ -143,6 +144,7 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
   onWeb: () => void;
 }) {
   const { t } = useLanguage();
+  const { subscribeTradeEvents } = useLiveNotifications();
   const { address, isConnected, chainId, chain: walletChain } = useAccount();
   const { open } = useAppKit();
   const { provider } = useProvider();
@@ -182,16 +184,51 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
   const fundingHint: FundingHint = !isConnected ? "connect-ethereum" : !mainnet ? "switch-ethereum" : null;
   const quote = useFundingQuote(trade, fundingWallet, showFunding);
 
+  const refreshChain = useCallback(async () => {
+    if (!trade.contractAddress || trade.chain === "tron") return;
+    const view = await readDeal(trade.contractAddress);
+    if (view) setChain(view);
+  }, [trade.contractAddress, trade.chain]);
+
   useEffect(() => {
     if (!trade.contractAddress || trade.chain === "tron") return;
     let cancelled = false;
-    void readDeal(trade.contractAddress).then((view) => {
-      if (!cancelled && view) setChain(view);
+    const loadChain = () => {
+      void readDeal(trade.contractAddress!).then((view) => {
+        if (!cancelled && view) setChain(view);
+      });
+    };
+    loadChain();
+    const unsub = subscribeTradeEvents((eventEscrowId) => {
+      if (!eventEscrowId || eventEscrowId === trade.id) loadChain();
     });
+    const appSub = AppState.addEventListener("change", (next) => {
+      if (next === "active") loadChain();
+    });
+    const timer = openTrade
+      ? setInterval(() => {
+        if (AppState.currentState === "active") loadChain();
+      }, 5000)
+      : null;
     return () => {
       cancelled = true;
+      unsub();
+      appSub.remove();
+      if (timer) clearInterval(timer);
     };
-  }, [trade.contractAddress, trade.chain, trade.status, trade.updatedAt, trade.buyerAddress, trade.sellerAddress]);
+  }, [
+    trade.id,
+    trade.contractAddress,
+    trade.chain,
+    trade.status,
+    trade.updatedAt,
+    trade.buyerAddress,
+    trade.sellerAddress,
+    trade.events?.length,
+    trade.messages?.length,
+    openTrade,
+    subscribeTradeEvents,
+  ]);
 
   async function run(name: string, work: () => Promise<void>) {
     if (lock.current) return;
@@ -213,7 +250,7 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
       open({ view: "Connect" });
       throw new Error("Connect the Ethereum wallet linked to this trade.");
     }
-    const session = await verifyWalletSession({ activePing: true, timeoutMs: 2500 });
+    const session = await verifyWalletSession({ activePing: false });
     if (!session.alive) {
       open({ view: "Connect" });
       throw new Error(session.reason || "Your wallet disconnected while inactive. Please reconnect your wallet and try again.");
@@ -458,21 +495,57 @@ function DisputeAndCancel({
 
   const chainOnWebsite = mode !== "ethereum";
 
+  const cancelRequested = Boolean(chain?.buyerCancelRequested);
+
   return (
     <>
-      {permission.seller && tradeOpen && !disputed && chain?.buyerCancelRequested ? (
-        <Button
-          label="Refuse cancel"
-          tone="ghost"
-          busy={busy === "refuse"}
-          disabled={Boolean(busy) || !trade.contractAddress}
-          onPress={() => {
-            if (chainOnWebsite) onWeb();
-            else void run("refuse", refuse);
-          }}
-        />
+      {permission.seller && canCancel && cancelRequested ? (
+        <View style={{ backgroundColor: "rgba(232, 184, 74, 0.1)", borderColor: "rgba(232, 184, 74, 0.45)", borderWidth: 1, borderRadius: 12, padding: 12, gap: 10 }}>
+          <Text style={{ color: colors.gold, fontWeight: "700", fontSize: 14 }}>Cancel request from buyer</Text>
+          <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
+            The buyer requested to cancel this trade. Accept to close the escrow and refund the buyer (trade amount minus $1 cancel commission), or refuse to keep the trade open.
+          </Text>
+          <Button
+            label="Accept cancel request"
+            tone="primary"
+            busy={busy === "cancel"}
+            disabled={Boolean(busy)}
+            onPress={() => {
+              if (chainOnWebsite) {
+                onWeb();
+                return;
+              }
+              Alert.alert(
+                t("Accept cancel request?"),
+                t("This closes the escrow on-chain and refunds the buyer the trade amount minus a $1 cancel commission."),
+                [
+                  { text: t("Keep trade open"), style: "cancel" },
+                  { text: t("Accept cancel request"), style: "destructive", onPress: () => void run("cancel", cancelTrade) },
+                ],
+              );
+            }}
+          />
+          <Button
+            label="Refuse cancel request"
+            tone="ghost"
+            busy={busy === "refuse"}
+            disabled={Boolean(busy) || !trade.contractAddress}
+            onPress={() => {
+              if (chainOnWebsite) onWeb();
+              else void run("refuse", refuse);
+            }}
+          />
+        </View>
       ) : null}
-      {canCancel && !buyerWaiting ? (
+      {buyerWaiting && tradeOpen && !disputed ? (
+        <View style={{ backgroundColor: "rgba(232, 184, 74, 0.08)", borderColor: "rgba(232, 184, 74, 0.35)", borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 }}>
+          <Text style={{ color: colors.gold, fontWeight: "700", fontSize: 14 }}>Cancel request pending</Text>
+          <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
+            Waiting for the seller to accept or refuse your cancel request. The trade stays open until they respond.
+          </Text>
+        </View>
+      ) : null}
+      {canCancel && !buyerWaiting && !(permission.seller && cancelRequested) ? (
         <Button
           label={permission.seller ? "Cancel trade" : "Request cancel"}
           tone="ghost"
@@ -498,14 +571,9 @@ function DisputeAndCancel({
           }}
         />
       ) : null}
-      {permission.seller && canCancel ? (
+      {permission.seller && canCancel && !cancelRequested ? (
         <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
           Cancel trade closes the escrow and refunds the buyer the trade amount minus a $1 cancel commission. The buyer’s $1 creation fee paid at funding is not refunded.
-        </Text>
-      ) : null}
-      {chain?.buyerCancelRequested && tradeOpen && !disputed ? (
-        <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
-          Cancel requested. The seller can refuse it, or cancel the trade to refund the buyer (trade amount minus $1 cancel commission). The creation fee stays with the protocol.
         </Text>
       ) : null}
       {access.canOpen && mode === "website" ? (

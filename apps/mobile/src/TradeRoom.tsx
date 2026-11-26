@@ -247,7 +247,7 @@ function nextStep(trade: TradeRow, buyer: boolean) {
   switch (trade.status) {
     case "AwaitingSeller": return buyer ? "Invite the seller using your join code. Funding becomes available once they join and link their receiving wallet." : "The seller needs to join before this trade can be funded.";
     case "Created": case "AwaitingFunding": return buyer ? "Check the seller and receiving wallet, then fund the escrow using the agreed token and network." : "Wait for the buyer to fund the escrow before delivering.";
-    case "Funded": return buyer ? "Funds are locked in escrow. Wait for the seller to deliver and share evidence here." : "Deliver according to the agreed terms, share evidence in this room, then confirm fulfilment (zero gas on V2).";
+    case "Funded": return buyer ? "Funds are locked in escrow. Wait for the seller to deliver and share evidence here." : "Deliver according to the agreed terms, share evidence in this room, then confirm fulfilment.";
     case "InProgress": return buyer ? "Review the delivery and evidence. Release funds when the agreed terms are met, or raise a dispute if there is a problem." : "Fulfilment has been submitted. The buyer can review the delivery and release funds.";
     case "Disputed": return "A dispute is active. Keep evidence in this room and review the case details and any appeal deadline below.";
     case "Completed": case "Resolved": return "This trade has finished. The agreement and shared activity remain available for your records.";

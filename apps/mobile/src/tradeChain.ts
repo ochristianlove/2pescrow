@@ -1,5 +1,5 @@
 import { AbiCoder, Interface } from "ethers";
-import { disconnectWallet, isDeadWalletSessionError, openConnectedWalletApp } from "./appkit";
+import { disconnectWallet, isDeadWalletSessionError } from "./appkit";
 import { apiUrl } from "./config";
 import {
   inspectEscrowDealCapabilities,
@@ -232,7 +232,6 @@ async function simulateCall(from: string, to: string, data: string) {
 async function send(provider: WalletProvider, from: string, to: string, data: string) {
   await ensureMainnet(provider);
   await simulateCall(from, to, data);
-  const openTimer = setTimeout(() => openConnectedWalletApp(), 250);
   let hash: unknown;
   try {
     hash = await provider.request({
@@ -245,8 +244,6 @@ async function send(provider: WalletProvider, from: string, to: string, data: st
       throw new Error("Your wallet disconnected while inactive. Please reconnect your wallet and try again.");
     }
     throw err;
-  } finally {
-    clearTimeout(openTimer);
   }
   if (typeof hash !== "string" || !hash.startsWith("0x")) throw new Error("The wallet did not return a transaction.");
   const receipt = await waitForReceipt(hash);

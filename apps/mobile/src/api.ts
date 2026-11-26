@@ -17,21 +17,39 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const base = apiUrl();
-  let response: Response;
-  const controller = new AbortController();
   const isUpload = init?.body instanceof FormData;
-  const timeoutMs = isUpload ? 60_000 : 12_000;
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    response = await fetch(`${base}${path}`, {
-      ...init,
-      headers,
-      signal: init?.signal ?? controller.signal,
-    });
-  } catch {
+  const isChainFlow = /\/(ethereum-funding|signals|disputes|fulfilment-proof-hash)\b/.test(path);
+  const timeoutMs = isUpload ? 60_000 : isChainFlow ? 45_000 : 15_000;
+  const method = (init?.method || "GET").toUpperCase();
+  const canRetry = method === "GET" && !init?.signal;
+
+  let response: Response | null = null;
+  let lastNetworkError: unknown = null;
+  const attempts = canRetry ? 2 : 1;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      response = await fetch(`${base}${path}`, {
+        ...init,
+        headers,
+        signal: init?.signal ?? controller.signal,
+      });
+      lastNetworkError = null;
+      break;
+    } catch (err) {
+      lastNetworkError = err;
+      if (attempt + 1 < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, 450));
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  if (!response || lastNetworkError) {
     throw new ApiError("Cannot reach the server right now. Try again in a moment.", 0);
-  } finally {
-    clearTimeout(timer);
   }
   const text = await response.text();
   if (!response.ok) {

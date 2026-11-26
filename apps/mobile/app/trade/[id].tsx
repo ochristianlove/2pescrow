@@ -35,8 +35,15 @@ export default function TradeScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const generation = useRef(0);
+  const inFlight = useRef(false);
+  const queued = useRef(false);
   const actionLock = useRef(false);
   const load = useCallback(async () => {
+    if (inFlight.current) {
+      queued.current = true;
+      return;
+    }
+    inFlight.current = true;
     const request = ++generation.current;
     try {
       const result = await api<TradeRow>(`/v1/escrows/${encodeURIComponent(id)}`);
@@ -47,6 +54,12 @@ export default function TradeScreen() {
       }
     } catch (err) {
       if (request === generation.current) setError(err instanceof ApiError ? err.message : "Could not refresh this trade. Pull down to try again.");
+    } finally {
+      inFlight.current = false;
+      if (queued.current) {
+        queued.current = false;
+        void load();
+      }
     }
   }, [id, user?.id]);
   const currentId = useRef(id);
@@ -87,7 +100,7 @@ export default function TradeScreen() {
   useFocusEffect(useCallback(() => {
     rememberTradeReturnPath(id);
     void load();
-    const timer = setInterval(() => { if (AppState.currentState === "active" && !actionLock.current) void load(); }, 4000);
+    const timer = setInterval(() => { if (AppState.currentState === "active" && !actionLock.current) void load(); }, 2500);
     const listener = AppState.addEventListener("change", state => { if (state === "active" && !actionLock.current) void load(); });
     return () => {
       generation.current++;

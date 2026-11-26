@@ -5,7 +5,7 @@ import { AppState, Linking, Vibration, View } from "react-native";
 import { formatEther } from "ethers";
 import { continueFunding, fundingStepLabel, sendPreparedFundingTransaction, type FundingSnapshot, type PreparedFunding } from "../../../packages/shared/src/funding";
 import { api } from "./api";
-import { disconnectWallet, isDeadWalletSessionError, openConnectedWalletApp } from "./appkit";
+import { disconnectWallet, isDeadWalletSessionError } from "./appkit";
 import { Text } from "./language";
 import { Button, Field, Notice } from "./ui";
 import { colors } from "./theme";
@@ -91,12 +91,10 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
         },
         send: async tx => {
           let timeout: ReturnType<typeof setTimeout> | undefined;
-          let openWalletTimer: ReturnType<typeof setTimeout> | undefined;
           if (mounted.current && idRef.current === trade.id) {
-            setLiveAlert("Opening your wallet app — review and confirm the request in your wallet…");
+            setLiveAlert("Check your wallet app to review and confirm the transaction…");
           }
           try {
-            openWalletTimer = setTimeout(() => openConnectedWalletApp(), 250);
             return await Promise.race([
               sendPreparedFundingTransaction({ request: args => provider.request(args, "eip155:1") }, from, tx),
               new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error("Your wallet did not return a response in time. Open your wallet app to check for a pending prompt, or tap Continue saved wallet request to try again.")), 75_000); }),
@@ -109,7 +107,6 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
             throw sendErr;
           } finally {
             if (timeout) clearTimeout(timeout);
-            if (openWalletTimer) clearTimeout(openWalletTimer);
           }
         },
         progress: next => {
@@ -176,7 +173,7 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
           {state.approvalConfirmed ? "Token approval confirmed — permission to spend granted" : "Token approval checked before deposit"}
         </Text>
         <Text style={{ color: colors.muted, fontSize: 12, lineHeight: 18 }}>
-          ℹ 0 ETH is normal for token approval. It grants permission to deposit ${state.tokenSymbol}. Network fees (gas) are separate.
+          ℹ Token approval grants permission to deposit {state.tokenSymbol} — it does not send your trade funds yet. A small amount of ETH is still required to cover the Ethereum network (gas) fee.
         </Text>
 
         <View style={{ height: 1, backgroundColor: colors.line, marginVertical: 4 }} />

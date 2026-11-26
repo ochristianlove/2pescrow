@@ -1604,7 +1604,7 @@ export function TradeDetailPage({ id }: { id: string }) {
           <ol>
             <li><strong>{t("Connect wallets.")}</strong> {t("Each party connects a wallet and taps “Link my wallet” in the trade room. Joining or signing in does not link a wallet by itself.")}</li>
             <li><strong>{t("Fund the escrow.")}</strong> {t("The buyer approves USDT and funds the V2 escrow in one smart-contract transaction.")}</li>
-            <li><strong>{t("Chat and fulfilment.")}</strong> {t("Both parties message and share proof here. On V2, the seller confirms fulfilment off-chain with zero gas.")}</li>
+            <li><strong>{t("Chat and fulfilment.")}</strong> {t("Both parties message and share proof here, then the seller confirms fulfilment in the trade room.")}</li>
             <li><strong>{t("Review and release.")}</strong> {t("The buyer reviews the fulfilment proof and approves release to the seller directly on-chain.")}</li>
           </ol>
         </section>
@@ -1974,7 +1974,7 @@ export function TradeDetailPage({ id }: { id: string }) {
             {isSeller && isCodeTrade && tradeOpen && !disputed && (
               <TradeAction
                 className="secondary"
-                label={t("Refuse cancel")}
+                label={t("Refuse cancel request")}
                 available={Boolean(chainView.buyerCancelRequested && disputeEligible)}
                 busy={busy}
                 hint={!chainView.buyerCancelRequested
@@ -1986,7 +1986,7 @@ export function TradeDetailPage({ id }: { id: string }) {
             {(isBuyer || isSeller) && tradeOpen && (
               <TradeAction
                 className="secondary"
-                label={isSeller ? t("Cancel trade") : t("Request cancel")}
+                label={isSeller ? (chainView.buyerCancelRequested ? t("Accept cancel request") : t("Cancel trade")) : t("Request cancel")}
                 available={!cancelBlock}
                 busy={busy}
                 hint={cancelBlock}
