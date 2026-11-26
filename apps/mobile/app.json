@@ -2,7 +2,8 @@
   "expo": {
     "name": "2Pescrow",
     "slug": "2pescrow",
-    "version": "0.1.8",
+    "version": "0.1.9",
+    "backgroundColor": "#071018",
     "orientation": "portrait",
     "scheme": "twopescrow",
     "icon": "./assets/icon.png",
@@ -37,6 +38,7 @@
       "package": "com.twopescrow.app",
       "googleServicesFile": "./google-services.json",
       "versionCode": 10,
+      "backgroundColor": "#071018",
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

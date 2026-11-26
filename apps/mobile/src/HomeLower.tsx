@@ -151,6 +151,40 @@ export function HomeLower() {
         </View>
       ))}
 
+      <View style={styles.partnerBand}>
+        <Text style={styles.partnerEyebrow}>PARTNER PROGRAM · SPECIAL RESOLVERS</Text>
+        <Text style={styles.partnerTitle}>Run your own escrow service on 2Pescrow. Keep 50% of every fee.</Text>
+        <Text style={styles.body}>
+          Built for existing escrow providers, OTC desks, and escrow lawyers. Register your dedicated resolver wallet, bring clients through your partner link, resolve your own clients' disputes on-chain, and receive 50% of protocol trade fees automatically.
+        </Text>
+        <View style={styles.partnerStatGold}>
+          <Text translate={false} style={styles.partnerStatGoldNum}>50%</Text>
+          <Text style={styles.body}>Automatic on-chain share of the 10% protocol fee (= 5% of volume), replacing standard referral payouts.</Text>
+        </View>
+        <View style={styles.partnerStat}>
+          <Text style={styles.cardTitle}>Your clients, your cases</Text>
+          <Text style={styles.body}>Every trade opened via your partner link binds strictly to your resolver wallet with exclusive dispute authority.</Text>
+        </View>
+        <View style={styles.partnerStat}>
+          <Text style={styles.cardTitle}>Non-custodial rail</Text>
+          <Text style={styles.body}>Smart contracts hold the funds on Ethereum while you run your legal or escrow practice on top.</Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void Linking.openURL(`${webOrigin()}/special-resolvers#apply`)}
+          style={styles.partnerCta}
+        >
+          <Text style={styles.partnerCtaLabel}>Become a Special Resolver</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void Linking.openURL(`${webOrigin()}/special-resolvers`)}
+          style={styles.secondary}
+        >
+          <Text style={styles.secondaryLabel}>See how the 50% split works</Text>
+        </Pressable>
+      </View>
+
       <Text style={styles.kicker}>Community</Text>
       <Text style={styles.sectionTitle}>Ask in the room you already use.</Text>
       <Text style={styles.body}>Telegram for a fast answer, Discord when the thread needs room, X when we ship something. None of these move funds.</Text>
@@ -347,4 +381,58 @@ const styles = StyleSheet.create({
   statusDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
   statusText: { fontWeight: "700", fontSize: 12 },
   activity: { color: "#8aa3ad", fontSize: 14, lineHeight: 21 },
+  partnerBand: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(232, 184, 74, 0.45)",
+    backgroundColor: "#0c1b25",
+    padding: 18,
+    gap: 10,
+    marginTop: 10,
+  },
+  partnerEyebrow: {
+    color: "#e8b84a",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+  },
+  partnerTitle: {
+    color: "#e8f4f2",
+    fontSize: 22,
+    fontWeight: "800",
+    lineHeight: 28,
+    letterSpacing: -0.4,
+  },
+  partnerStatGold: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(232, 184, 74, 0.45)",
+    backgroundColor: "rgba(232, 184, 74, 0.08)",
+    padding: 12,
+  },
+  partnerStatGoldNum: {
+    color: "#e8b84a",
+    fontSize: 24,
+    fontWeight: "800",
+  },
+  partnerStat: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#1f3440",
+    backgroundColor: "rgba(4, 14, 22, 0.72)",
+    padding: 12,
+  },
+  partnerCta: {
+    backgroundColor: "#e8b84a",
+    borderRadius: 12,
+    minHeight: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  partnerCtaLabel: {
+    color: "#161004",
+    fontWeight: "800",
+    fontSize: 15,
+  },
 });

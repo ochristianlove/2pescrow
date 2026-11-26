@@ -385,12 +385,12 @@ function DisputeAndCancel({
     if (!reason.trim()) throw new Error("Write what went wrong before opening a dispute.");
     if (!trade.contractAddress) throw new Error("Available after the on-chain escrow exists.");
     if (mode === "tron") {
-      if (chain && ![1, 2, 3, 5].includes(chain.state)) {
+      if (chain && ![1, 2, 5].includes(chain.state)) {
         throw new Error("The on-chain escrow must be Funded or In Progress before opening a dispute.");
       }
     } else {
       const view = (await readDeal(trade.contractAddress)) ?? chain;
-      if (!view || ![1, 2, 3, 5].includes(view.state)) {
+      if (!view || ![1, 2, 5].includes(view.state)) {
         throw new Error("The on-chain escrow must be Funded or In Progress before opening a dispute.");
       }
       if (view.state === 1 || view.state === 2) {

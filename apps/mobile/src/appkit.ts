@@ -13,7 +13,7 @@ const ethereum: AppKitNetwork = {
   id: 1,
   name: "Ethereum",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: { default: { http: ["https://ethereum-rpc.publicnode.com"] } },
+  rpcUrls: { default: { http: ["https://eth.llamarpc.com"] } },
   blockExplorers: { default: { name: "Etherscan", url: "https://etherscan.io" } },
   chainNamespace: "eip155",
   caipNetworkId: "eip155:1",
@@ -109,8 +109,10 @@ export async function disconnectWallet(): Promise<void> {
   }
 }
 
-export const appKit = walletConnectReady
-  ? createAppKit({
+function initAppKit() {
+  if (!walletConnectReady) return null;
+  try {
+    return createAppKit({
       projectId,
       networks: [ethereum],
       defaultNetwork: ethereum,
@@ -142,5 +144,11 @@ export const appKit = walletConnectReady
           await Clipboard.setStringAsync(value);
         },
       },
-    })
-  : null;
+    });
+  } catch (err) {
+    console.warn("[AppKit] Initialization failed, continuing without WalletConnect:", err);
+    return null;
+  }
+}
+
+export const appKit = initAppKit();

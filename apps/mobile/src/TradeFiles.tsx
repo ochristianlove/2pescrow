@@ -2,8 +2,40 @@ import { Text, useLanguage } from "./language";
 import { useEffect, useRef, useState } from "react";
 import { Image, Modal, Platform, Pressable, SafeAreaView, StyleSheet, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ResizeMode, Video } from "expo-av";
 import * as FileSystem from "expo-file-system";
+
+type ExpoAvModule = typeof import("expo-av");
+function LazyVideo({ source, style, shouldPlay = false }: {
+  source: { uri: string; headers?: Record<string, string> };
+  style: object;
+  shouldPlay?: boolean;
+}) {
+  const [mod, setMod] = useState<ExpoAvModule | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void import("expo-av").then((loaded) => {
+      if (!cancelled) setMod(loaded);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  if (!mod) {
+    return (
+      <View style={[style, { alignItems: "center", justifyContent: "center", backgroundColor: "#040a10" }]}>
+        <Text style={{ color: colors.muted, fontSize: 13 }}>Loading video player…</Text>
+      </View>
+    );
+  }
+  const VideoComponent = mod.Video;
+  return (
+    <VideoComponent
+      source={source}
+      style={style}
+      useNativeControls
+      shouldPlay={shouldPlay}
+      resizeMode={mod.ResizeMode.CONTAIN}
+    />
+  );
+}
 import { api } from "./api";
 import { apiUrl } from "./config";
 import { getToken } from "./session";
@@ -193,12 +225,7 @@ export function EvidenceComposer({ trade, seller, disabled, onBusy, onUploaded }
             <Image source={{ uri: file.uri }} style={{ width: "100%", height: 180, borderRadius: 10 }} resizeMode="contain" accessibilityLabel={file.name} />
           ) : isSelectedVideo ? (
             <View style={viewerStyles.videoPreviewBox}>
-              <Video
-                source={{ uri: file.uri }}
-                style={{ width: "100%", height: 200 }}
-                useNativeControls
-                resizeMode={ResizeMode.CONTAIN}
-              />
+              <LazyVideo source={{ uri: file.uri }} style={{ width: "100%", height: 200 }} />
             </View>
           ) : null}
           <Field label="Evidence note (optional)" value={note} onChangeText={setNote} editable={!disabled} maxLength={1000} multiline />
@@ -478,12 +505,10 @@ export function MessageFile({ tradeId, message }: { tradeId: string; message: Tr
                       accessibilityLabel={message.fileName || "Shared image"}
                     />
                   ) : (
-                    <Video
+                    <LazyVideo
                       source={{ uri: url, headers }}
                       style={viewerStyles.fullImage}
-                      useNativeControls
                       shouldPlay
-                      resizeMode={ResizeMode.CONTAIN}
                     />
                   )}
                 </View>

@@ -29,6 +29,17 @@ function writeCachedProfile(user: SessionUser | null) {
   void AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(user)).catch(() => undefined);
 }
 
+async function readStoredTokenSafe(): Promise<string | null> {
+  try {
+    return await Promise.race([
+      SecureStore.getItemAsync(TOKEN_KEY),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+    ]);
+  } catch {
+    return null;
+  }
+}
+
 type AuthValue = {
   ready: boolean;
   user: SessionUser | null;
@@ -45,8 +56,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const applyToken = useCallback(async (token: string | null) => {
     setMemoryToken(token);
-    if (token) await SecureStore.setItemAsync(TOKEN_KEY, token);
-    else await SecureStore.deleteItemAsync(TOKEN_KEY);
+    try {
+      if (token) await SecureStore.setItemAsync(TOKEN_KEY, token);
+      else await SecureStore.deleteItemAsync(TOKEN_KEY);
+    } catch {
+      // Ignore secure store errors on restricted devices
+    }
   }, []);
 
   const refresh = useCallback(async () => {
@@ -67,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [applyToken, refresh]);
 
-    const signOut = useCallback(async () => {
+  const signOut = useCallback(async () => {
     await unregisterCurrentPushToken().catch(() => undefined);
     await applyToken(null);
     setUser(null);
@@ -78,11 +93,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const stored = await SecureStore.getItemAsync(TOKEN_KEY);
-        if (!stored) return;
+        const stored = await readStoredTokenSafe();
+        if (!stored) {
+          if (!cancelled) setReady(true);
+          return;
+        }
         setMemoryToken(stored);
         const cached = await readCachedProfile();
-        if (!cancelled && cached) setUser(cached);
+        if (!cancelled && cached) {
+          setUser(cached);
+          setReady(true);
+        }
         const me = await api<SessionUser>("/v1/auth/me");
         if (!cancelled) setUser(me);
         writeCachedProfile(me);

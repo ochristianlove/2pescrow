@@ -43,13 +43,18 @@ export default function SignInScreen() {
   }, [params.link, router, signInWithToken]);
 
   async function sendLink() {
+    const trimmed = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
     setBusy(true);
     setError(null);
     setSent(null);
     try {
       const res = await api<{ message?: string }>("/v1/auth/magic-link", {
         method: "POST",
-        body: JSON.stringify({ email: email.trim() }),
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
       setSent(res.message || "Check your email for a sign-in link.");
     } catch (err) {

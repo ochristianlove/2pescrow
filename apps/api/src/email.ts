@@ -57,7 +57,8 @@ async function sendPlainEmail(opts: {
     opts.log.info({ to: opts.to, source: smtp.source }, "Email sent");
     return { sent: true };
   } catch (err) {
-    opts.log.info({ to: opts.to, err: String(err) }, "Email delivery failed");
+    const errText = err instanceof Error ? err.message : String(err);
+    opts.log.warn?.({ to: opts.to, err: errText }, "Email delivery failed");
     return { sent: false, reason: "Email delivery failed" };
   }
 }

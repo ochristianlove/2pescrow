@@ -84,6 +84,9 @@ export async function createMailTransport(): Promise<nodemailer.Transporter | nu
     auth: smtp.auth,
     requireTLS: !smtp.secure && smtp.port === 587,
     tls: { minVersion: "TLSv1.2" },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 15_000,
   });
 }
 

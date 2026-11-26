@@ -43,7 +43,8 @@ export function disputeEligible(trade: TradeRow, chainState?: number | null) {
   if (trade.chain === "tron") {
     return trade.status === "Funded" || trade.status === "InProgress" || chainState === 1 || chainState === 2 || chainState === 5;
   }
-  if (trade.status === "Funded" || trade.status === "InProgress" || trade.status === "Completed") return true;
+  if (trade.status === "Completed" || trade.status === "Cancelled" || trade.status === "Resolved") return false;
+  if (trade.status === "Funded" || trade.status === "InProgress") return true;
   if (!trade.contractAddress) return false;
   if (chainState != null && chainState >= 1 && chainState <= 2) return true;
   return trade.status === "Created" || trade.status === "AwaitingFunding";
@@ -64,7 +65,7 @@ export function tradeDisputeAccess(trade: TradeRow, userId?: string, email?: str
     && !hasActiveDispute
     && !hasUsedDisputeOpening
     && trade.status !== "Disputed"
-    && !["Cancelled", "Resolved"].includes(trade.status)
+    && !["Completed", "Cancelled", "Resolved"].includes(trade.status)
     && disputeEligible(trade, chainState),
   );
   const canWithdraw = Boolean(

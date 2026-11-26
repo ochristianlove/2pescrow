@@ -332,6 +332,27 @@ const app = Fastify({ logger: true });
 
 async function build() {
 await app.register(cors, { origin: true });
+app.setErrorHandler((err, req, reply) => {
+  if (err instanceof z.ZodError) {
+    const first = err.issues[0];
+    const msg = first?.path?.includes("email")
+      ? "Please enter a valid email address."
+      : first?.message || "Invalid request parameters.";
+    return reply.code(400).send({ error: msg });
+  }
+  const status = typeof (err as { statusCode?: unknown }).statusCode === "number"
+    ? (err as { statusCode: number }).statusCode
+    : 500;
+  if (status >= 500) {
+    req.log.error({ err }, "Unhandled API error");
+  }
+  const message = status >= 500
+    ? "Something went wrong on the server. Please try again."
+    : err instanceof Error && err.message
+      ? err.message
+      : "Request failed";
+  return reply.code(status).send({ error: message });
+});
 await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 await app.register(websocket);
 
@@ -424,9 +445,10 @@ app.post("/v1/auth/magic-link", async (req, reply) => {
   const delivery = await sendMagicLinkEmail({ to: email, magicLink, log: req.log });
   if (!delivery.sent) {
     await prisma.magicLink.delete({ where: { tokenHash } }).catch(() => undefined);
-    return reply.code(503).send({
-      error: "Sign-in email could not be sent. Configure SMTP (SMTP_HOST, etc.) on the API server.",
-    });
+    const detail = delivery.reason === "SMTP is not configured"
+      ? "Sign-in email could not be sent. Configure SMTP in Admin → Email."
+      : `Sign-in email could not be delivered (${delivery.reason}). Please verify your email address and try again.`;
+    return reply.code(503).send({ error: detail });
   }
   req.log.info({ email }, "Magic link issued and emailed");
   return {
@@ -2435,6 +2457,9 @@ app.post("/v1/escrows/:id/disputes", async (req, reply) => {
   } else {
     const body = z.object({ openedBy: z.string() }).parse(req.body);
     openedBy = normalizePartyAddress(escrowRow.chain as ChainKey, body.openedBy);
+  }
+  if (["Completed", "Cancelled", "Resolved"].includes(escrowRow.status)) {
+    return reply.code(409).send({ error: "Disputes can only be opened while a trade is open. Completed trades cannot be disputed." });
   }
   const activeDispute = await prisma.dispute.findFirst({
     where: { escrowId: id, status: { in: [...ACTIVE_DISPUTE_STATUSES] } },

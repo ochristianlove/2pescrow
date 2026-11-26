@@ -18,10 +18,20 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const base = apiUrl();
   let response: Response;
+  const controller = new AbortController();
+  const isUpload = init?.body instanceof FormData;
+  const timeoutMs = isUpload ? 60_000 : 12_000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    response = await fetch(`${base}${path}`, { ...init, headers });
+    response = await fetch(`${base}${path}`, {
+      ...init,
+      headers,
+      signal: init?.signal ?? controller.signal,
+    });
   } catch {
     throw new ApiError("Cannot reach the server right now. Try again in a moment.", 0);
+  } finally {
+    clearTimeout(timer);
   }
   const text = await response.text();
   if (!response.ok) {

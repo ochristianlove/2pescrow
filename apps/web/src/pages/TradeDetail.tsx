@@ -152,9 +152,9 @@ function isFundedOrInProgress(status: string) {
   return status === "Funded" || status === "InProgress";
 }
 
-/** Off-chain dispute can be raised while escrow holds funds or shortly after release (staff review). */
+/** Disputes can only be raised while a trade is open and funded (never after completion). */
 function isDisputeEligibleStatus(status: string) {
-  return status === "Funded" || status === "InProgress" || status === "Completed";
+  return status === "Funded" || status === "InProgress";
 }
 
 /** DB status can lag after funding; chain state 1+ means Funded on-chain. */
