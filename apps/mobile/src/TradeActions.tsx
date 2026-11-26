@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, View } from "react-native";
 import { useAccount, useAppKit, useProvider } from "@reown/appkit-react-native";
 import { api } from "./api";
-import { appKit } from "./appkit";
+import { appKit, verifyWalletSession } from "./appkit";
 import { useAuth } from "./auth";
 import { FundingBreakdown, useFundingQuote, type FundingHint } from "./FundingBreakdown";
 import { Text, useLanguage } from "./language";
@@ -208,10 +208,15 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
     }
   }
 
-  function requireWallet() {
+  async function requireWallet() {
     if (!isConnected || !address || !provider) {
       open({ view: "Connect" });
       throw new Error("Connect the Ethereum wallet linked to this trade.");
+    }
+    const session = await verifyWalletSession({ activePing: true, timeoutMs: 2500 });
+    if (!session.alive) {
+      open({ view: "Connect" });
+      throw new Error(session.reason || "Your wallet disconnected while inactive. Please reconnect your wallet and try again.");
     }
     if (!mainnet) throw new Error("Switch your wallet to Ethereum mainnet.");
     if (linked && !matches) throw new Error("Connect the wallet already linked to this trade.");
@@ -241,7 +246,7 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
                     text: t("Submit on-chain"),
                     onPress: () => void run("delivery", async () => {
                       if (!trade.contractAddress) throw new Error("No on-chain contract yet.");
-                      const { from, provider: wallet } = requireWallet();
+                      const { from, provider: wallet } = await requireWallet();
                       let proofHash = "";
                       try {
                         const proof = await api<{ proofHash: string }>(`/v1/escrows/${encodeURIComponent(trade.id)}/fulfilment-proof-hash`);
@@ -270,7 +275,7 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
                     throw new Error("Could not verify the deployed escrow contract version. Refresh and try again.");
                   }
                   if (caps.requiresOnChainSellerProof) {
-                    const { from, provider: wallet } = requireWallet();
+                    const { from, provider: wallet } = await requireWallet();
                     let proofHash = "";
                     try {
                       const proof = await api<{ proofHash: string }>(`/v1/escrows/${encodeURIComponent(trade.id)}/fulfilment-proof-hash`);
@@ -307,7 +312,7 @@ function EthereumActions({ trade, userId, onChanged, onError, onWeb }: {
             if (!trade.contractAddress) throw new Error("No on-chain contract yet.");
             if (!releaseReady) throw new Error("Waiting for the seller to confirm fulfilment before you can release funds.");
             const caps = capabilities ?? await readDealCapabilities(trade.contractAddress);
-            const { from, provider: wallet } = requireWallet();
+            const { from, provider: wallet } = await requireWallet();
             if (caps.releaseMode === "v1-zero-arg") {
               await releaseFunds(wallet, from, trade.contractAddress);
             } else if (caps.releaseMode === "v2-proof-hash") {
@@ -368,7 +373,7 @@ function DisputeAndCancel({
   mode: ActionMode;
   onWeb: () => void;
   run: (name: string, work: () => Promise<void>) => Promise<void>;
-  requireWallet?: () => { from: string; provider: WalletProvider };
+  requireWallet?: () => Promise<{ from: string; provider: WalletProvider }>;
 }) {
   const { t } = useLanguage();
   const { user } = useAuth();
@@ -394,7 +399,7 @@ function DisputeAndCancel({
         throw new Error("The on-chain escrow must be Funded or In Progress before opening a dispute.");
       }
       if (view.state === 1 || view.state === 2) {
-        const wallet = requireWallet?.();
+        const wallet = await requireWallet?.();
         if (!wallet) throw new Error("Connect the Ethereum wallet linked to this trade.");
         await openDisputeOnChain(wallet.provider, wallet.from, trade.contractAddress);
       }
@@ -417,7 +422,7 @@ function DisputeAndCancel({
       const liveView = (await readDeal(trade.contractAddress)) ?? chain;
       const needsOnChainUnfreeze = liveView?.state === 5 || access.frozen;
       if (needsOnChainUnfreeze) {
-        const wallet = requireWallet?.();
+        const wallet = await requireWallet?.();
         if (!wallet) throw new Error("Connect the wallet linked to this trade to close the on-chain dispute.");
         const receipt = await withdrawDisputeOnChain(wallet.provider, wallet.from, trade.contractAddress);
         txHash = receipt.hash;
@@ -434,7 +439,7 @@ function DisputeAndCancel({
   }
 
   async function cancelTrade() {
-    const wallet = requireWallet?.();
+    const wallet = await requireWallet?.();
     if (!wallet || !trade.contractAddress) throw new Error("Connect the Ethereum wallet linked to this trade.");
     await requestCancel(wallet.provider, wallet.from, trade.contractAddress);
     const view = await readDeal(trade.contractAddress);
@@ -443,7 +448,7 @@ function DisputeAndCancel({
   }
 
   async function refuse() {
-    const wallet = requireWallet?.();
+    const wallet = await requireWallet?.();
     if (!wallet || !trade.contractAddress) throw new Error("Connect the Ethereum wallet linked to this trade.");
     await refuseCancel(wallet.provider, wallet.from, trade.contractAddress);
     const view = await readDeal(trade.contractAddress);

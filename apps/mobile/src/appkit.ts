@@ -1,6 +1,7 @@
 import "@walletconnect/react-native-compat";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Linking } from "react-native";
 import { createAppKit, type AppKitNetwork, type Storage } from "@reown/appkit-react-native";
 import { EthersAdapter } from "@reown/appkit-ethers-react-native";
 import { safeJsonParse, safeJsonStringify } from "@walletconnect/safe-json";
@@ -44,6 +45,228 @@ export const walletConnectReady = Boolean(projectId);
 
 const WALLETCONNECT_STORAGE_PREFIXES = ["wc@2:", "@appkit/", "@w3m/"];
 
+type WalletConnectSessionShape = {
+  topic?: string;
+  expiry?: number;
+  namespaces?: Record<string, { accounts?: string[]; chains?: string[] }>;
+  peer?: {
+    metadata?: {
+      name?: string;
+      redirect?: { native?: string; universal?: string };
+    };
+  };
+};
+
+type WalletConnectProviderShape = {
+  session?: WalletConnectSessionShape;
+  namespaces?: unknown;
+  cleanupPendingPairings?: () => Promise<void>;
+  on?: (event: string, listener: (...args: unknown[]) => void) => void;
+  off?: (event: string, listener: (...args: unknown[]) => void) => void;
+  client?: {
+    ping?: (params: { topic: string }) => Promise<void>;
+    on?: (event: string, listener: (...args: unknown[]) => void) => void;
+    off?: (event: string, listener: (...args: unknown[]) => void) => void;
+    core?: {
+      relayer?: {
+        connected?: boolean;
+        restartTransport?: (relayUrl?: string) => Promise<void>;
+      };
+    };
+    session?: {
+      getAll?: () => WalletConnectSessionShape[];
+      delete?: (topic: string, reason: { code: number; message: string }) => Promise<void>;
+    };
+    pairing?: {
+      getAll?: () => { topic: string }[];
+      delete?: (topic: string, reason: { code: number; message: string }) => Promise<void>;
+    };
+  };
+};
+
+type AppKitInternalShape = {
+  disconnect: (namespace?: string, isInternal?: boolean) => Promise<void>;
+  getProvider?: (namespace?: string) => WalletConnectProviderShape | null;
+};
+
+function getWalletConnectProvider(): WalletConnectProviderShape | null {
+  if (!appKit) return null;
+  try {
+    const internal = appKit as unknown as AppKitInternalShape;
+    return internal.getProvider?.("eip155") ?? internal.getProvider?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const DEAD_SESSION_PATTERNS = [
+  /no matching key/i,
+  /session topic doesn't exist/i,
+  /session.*does not exist/i,
+  /session.*not found/i,
+  /session.*expired/i,
+  /session.*deleted/i,
+  /session.*disconnected/i,
+  /wallet.*not connected/i,
+  /not connected/i,
+  /invalid topic/i,
+  /missing or invalid.*topic/i,
+  /unauthorized.*method/i,
+  /provider is not connected/i,
+];
+
+export function isDeadWalletSessionError(error: unknown): boolean {
+  if (!error) return false;
+  const parts: string[] = [];
+  if (typeof error === "string") parts.push(error);
+  else if (error instanceof Error) parts.push(error.message);
+  else if (typeof error === "object") {
+    const rec = error as { message?: unknown; shortMessage?: unknown; reason?: unknown; code?: unknown };
+    if (typeof rec.message === "string") parts.push(rec.message);
+    if (typeof rec.shortMessage === "string") parts.push(rec.shortMessage);
+    if (typeof rec.reason === "string") parts.push(rec.reason);
+    if (Number(rec.code) === 4900 || Number(rec.code) === 4901) return true;
+  }
+  const combined = parts.join(" ");
+  return DEAD_SESSION_PATTERNS.some((pattern) => pattern.test(combined));
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, tag: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(tag)), ms);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+let activeVerifyPromise: Promise<{ alive: boolean; reason?: string }> | null = null;
+
+/**
+ * Verifies that the persisted WalletConnect session is genuinely active and unexpired.
+ * Restarts a dropped relayer WebSocket (common after iOS/Android backgrounding or offline periods),
+ * checks local session expiry/topic membership, and optionally pings the session.
+ * Automatically clears stale state via disconnectWallet() if the session is dead.
+ */
+export function verifyWalletSession(options?: { activePing?: boolean; timeoutMs?: number }): Promise<{ alive: boolean; reason?: string }> {
+  if (activeVerifyPromise) return activeVerifyPromise;
+  activeVerifyPromise = (async () => {
+    const provider = getWalletConnectProvider();
+    const session = provider?.session;
+    const topic = session?.topic;
+
+    if (!provider || !session || !topic) {
+      await disconnectWallet();
+      return { alive: false, reason: "Your wallet disconnected while inactive. Please reconnect your wallet and try again." };
+    }
+
+    if (typeof session.expiry === "number" && session.expiry * 1000 <= Date.now() + 5_000) {
+      await disconnectWallet();
+      return { alive: false, reason: "Your wallet session expired. Please reconnect your wallet and try again." };
+    }
+
+    const accounts = session.namespaces?.eip155?.accounts ?? [];
+    if (accounts.length === 0) {
+      await disconnectWallet();
+      return { alive: false, reason: "Your wallet has no active Ethereum session. Please reconnect your wallet." };
+    }
+
+    const activeSessions = provider.client?.session?.getAll?.();
+    if (Array.isArray(activeSessions) && !activeSessions.some((s) => s.topic === topic)) {
+      await disconnectWallet();
+      return { alive: false, reason: "Your wallet closed this connection. Please reconnect your wallet and try again." };
+    }
+
+    // Revive dropped WalletConnect relay transport after iOS/Android backgrounding or offline gaps
+    // so any queued session_delete events from the wallet are received right away.
+    const relayer = provider.client?.core?.relayer;
+    if (relayer && relayer.connected === false && typeof relayer.restartTransport === "function") {
+      try {
+        await withTimeout(relayer.restartTransport(), 3500, "__RELAYER_TIMEOUT__");
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      } catch {
+        // Continue to session re-check below.
+      }
+      const postRestartSessions = provider.client?.session?.getAll?.();
+      if (!provider.session?.topic || (Array.isArray(postRestartSessions) && !postRestartSessions.some((s) => s.topic === topic))) {
+        await disconnectWallet();
+        return { alive: false, reason: "Your wallet disconnected while you were away. Please reconnect your wallet and try again." };
+      }
+    }
+
+    if (options?.activePing !== false && typeof provider.client?.ping === "function") {
+      try {
+        await withTimeout(provider.client.ping({ topic }), options?.timeoutMs ?? 2500, "__PING_TIMEOUT__");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg !== "__PING_TIMEOUT__" && isDeadWalletSessionError(err)) {
+          await disconnectWallet();
+          return { alive: false, reason: "Your wallet disconnected while inactive. Please reconnect your wallet and try again." };
+        }
+        // Re-check whether the relay delivered a session_delete during the ping window.
+        const postPingSessions = provider.client?.session?.getAll?.();
+        if (!provider.session?.topic || (Array.isArray(postPingSessions) && !postPingSessions.some((s) => s.topic === topic))) {
+          await disconnectWallet();
+          return { alive: false, reason: "Your wallet disconnected while inactive. Please reconnect your wallet and try again." };
+        }
+      }
+    }
+
+    return { alive: true };
+  })().finally(() => {
+    activeVerifyPromise = null;
+  });
+  return activeVerifyPromise;
+}
+
+/**
+ * Best-effort deep link to foreground the connected mobile wallet app right after dispatching
+ * a WalletConnect signing request, preventing Android/iOS prompts from sitting unseen in background.
+ */
+export function openConnectedWalletApp(): void {
+  const provider = getWalletConnectProvider();
+  const redirect = provider?.session?.peer?.metadata?.redirect;
+  const target = (redirect?.native || redirect?.universal || "").trim();
+  if (!target) return;
+  if (!/^(https?:\/\/|[a-z][a-z0-9+.-]*:\/\/)/i.test(target)) return;
+  void Linking.openURL(target).catch(() => undefined);
+}
+
+/**
+ * Subscribes to WalletConnect session_delete / session_expire events on the active provider
+ * so the UI clears its connected state the instant a wallet terminates the session.
+ */
+export function subscribeWalletSessionEvents(onDisconnected: () => void): () => void {
+  const provider = getWalletConnectProvider();
+  if (!provider) return () => {};
+  const handler = () => {
+    onDisconnected();
+  };
+  try {
+    provider.on?.("session_delete", handler);
+    provider.on?.("session_expire", handler);
+    provider.on?.("disconnect", handler);
+    provider.client?.on?.("session_delete", handler);
+    provider.client?.on?.("session_expire", handler);
+  } catch {
+    // Ignore listener attachment errors.
+  }
+  return () => {
+    try {
+      provider.off?.("session_delete", handler);
+      provider.off?.("session_expire", handler);
+      provider.off?.("disconnect", handler);
+      provider.client?.off?.("session_delete", handler);
+      provider.client?.off?.("session_expire", handler);
+    } catch {
+      // Ignore cleanup errors.
+    }
+  };
+}
+
 export async function disconnectWallet(): Promise<void> {
   if (!appKit) return;
 
@@ -59,25 +282,16 @@ export async function disconnectWallet(): Promise<void> {
 
   // 2. Always force local AppKit state teardown (isInternal = false skips the network relay call).
   try {
-    const internal = appKit as unknown as {
-      disconnect: (namespace?: string, isInternal?: boolean) => Promise<void>;
-      getProvider?: (namespace?: string) => {
-        session?: unknown;
-        namespaces?: unknown;
-        cleanupPendingPairings?: () => Promise<void>;
-        client?: {
-          session?: { getAll?: () => { topic: string }[]; delete?: (topic: string, reason: { code: number; message: string }) => Promise<void> };
-          pairing?: { getAll?: () => { topic: string }[]; delete?: (topic: string, reason: { code: number; message: string }) => Promise<void> };
-        };
-      } | null;
-    };
+    const internal = appKit as unknown as AppKitInternalShape;
     const provider = internal.getProvider?.("eip155") ?? internal.getProvider?.();
     if (provider) {
       const reason = { code: 6000, message: "User disconnected." };
       try {
         const sessions = provider.client?.session?.getAll?.() ?? [];
         for (const s of sessions) {
-          await provider.client?.session?.delete?.(s.topic, reason).catch(() => undefined);
+          if (s.topic) {
+            await provider.client?.session?.delete?.(s.topic, reason).catch(() => undefined);
+          }
         }
         const pairings = provider.client?.pairing?.getAll?.() ?? [];
         for (const p of pairings) {

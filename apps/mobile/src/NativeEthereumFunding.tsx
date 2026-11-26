@@ -5,15 +5,16 @@ import { AppState, Linking, Vibration, View } from "react-native";
 import { formatEther } from "ethers";
 import { continueFunding, fundingStepLabel, sendPreparedFundingTransaction, type FundingSnapshot, type PreparedFunding } from "../../../packages/shared/src/funding";
 import { api } from "./api";
+import { disconnectWallet, isDeadWalletSessionError, openConnectedWalletApp } from "./appkit";
 import { Text } from "./language";
-import { Button, Field } from "./ui";
+import { Button, Field, Notice } from "./ui";
 import { colors } from "./theme";
 import { formatAmount } from "./format";
 import type { TradeRow } from "./types";
 import type { WalletProvider } from "./tradeChain";
 
 export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
-  trade: TradeRow; requireWallet: () => { from: string; provider: WalletProvider }; onChanged: () => Promise<void>;
+  trade: TradeRow; requireWallet: () => Promise<{ from: string; provider: WalletProvider }>; onChanged: () => Promise<void>;
 }) {
   const [state, setState] = useState<FundingSnapshot | null>(null);
   const [liveAlert, setLiveAlert] = useState<string | null>(null);
@@ -70,7 +71,7 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
     if (lock.current) return;
     lock.current = true; setBusy(true); setError(null);
     try {
-      const { from, provider } = requireWallet();
+      const { from, provider } = await requireWallet();
       if (from.toLowerCase() !== trade.buyerAddress?.toLowerCase()) throw new Error("Connect the buyer wallet linked to this trade.");
       await continueFunding({
         get: () => api<FundingSnapshot>(base),
@@ -90,12 +91,26 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
         },
         send: async tx => {
           let timeout: ReturnType<typeof setTimeout> | undefined;
+          let openWalletTimer: ReturnType<typeof setTimeout> | undefined;
+          if (mounted.current && idRef.current === trade.id) {
+            setLiveAlert("Opening your wallet app — review and confirm the request in your wallet…");
+          }
           try {
+            openWalletTimer = setTimeout(() => openConnectedWalletApp(), 250);
             return await Promise.race([
               sendPreparedFundingTransaction({ request: args => provider.request(args, "eip155:1") }, from, tx),
-              new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error("Your wallet has not returned a result. The request is saved and will be checked automatically.")), 120_000); }),
+              new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error("Your wallet did not return a response in time. Open your wallet app to check for a pending prompt, or tap Continue saved wallet request to try again.")), 75_000); }),
             ]);
-          } finally { if (timeout) clearTimeout(timeout); }
+          } catch (sendErr) {
+            if (isDeadWalletSessionError(sendErr)) {
+              await disconnectWallet();
+              throw new Error("Your wallet disconnected while inactive. Reconnect your wallet, then tap Continue saved wallet request.");
+            }
+            throw sendErr;
+          } finally {
+            if (timeout) clearTimeout(timeout);
+            if (openWalletTimer) clearTimeout(openWalletTimer);
+          }
         },
         progress: next => {
           if (mounted.current && idRef.current === trade.id) {
@@ -117,7 +132,10 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
         pause: () => new Promise(resolve => setTimeout(resolve, 1500)),
       });
     } catch (e) {
-      if (mounted.current) setError(e instanceof Error ? e.message : "The wallet request stopped. Your progress is saved.");
+      if (mounted.current) {
+        setLiveAlert(null);
+        setError(e instanceof Error ? e.message : "The wallet request stopped. Your progress is saved.");
+      }
     } finally {
       lock.current = false; if (mounted.current) setBusy(false);
       await refresh(); await onChanged();
@@ -140,7 +158,7 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
       </View>
     ) : null}
     <Text accessibilityLiveRegion="polite" style={{ color: colors.muted, fontSize: 16, lineHeight: 24 }}>{state?.message || "Checking saved payment progress…"}</Text>
-    {error && <Text accessibilityRole="alert" style={{ color: colors.text }}>{error}</Text>}
+    {!state && error ? <Notice text={error} /> : null}
     {state && <>
       <View style={{ backgroundColor: "rgba(62, 207, 142, 0.05)", borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: 14, gap: 8 }}>
         <Text style={{ color: colors.text, fontWeight: "600" }}>Escrow Contract Status</Text>
@@ -172,13 +190,25 @@ export function NativeEthereumFunding({ trade, requireWallet, onChanged }: {
         </Text>
       </View>
 
+      {error ? <Notice text={error} /> : null}
       {!["funded", "closed"].includes(state.stage) && (
-        <Button
-          busy={busy}
-          disabled={!state.canContinue}
-          label={state.active ? "Continue saved wallet request" : state.contractAddress ? "Resume funding existing escrow" : "Start funding"}
-          onPress={() => void run()}
-        />
+        <View style={{ gap: 6 }}>
+          <Button
+            busy={busy}
+            disabled={!state.canContinue}
+            label={state.active ? "Continue saved wallet request" : state.contractAddress ? "Resume funding existing escrow" : "Start funding"}
+            onPress={() => void run()}
+          />
+          {!state.canContinue ? (
+            <Text style={{ color: colors.muted, fontSize: 12, lineHeight: 18 }}>
+              Waiting for your pending Ethereum transaction to confirm before continuing. Tap "Check payment status" in a few seconds.
+            </Text>
+          ) : state.active?.status === "uncertain" ? (
+            <Text style={{ color: colors.muted, fontSize: 12, lineHeight: 18 }}>
+              The previous wallet prompt did not finish. Tap above to reopen your wallet and send the saved request again.
+            </Text>
+          ) : null}
+        </View>
       )}
 
       {state.attempts.length > 0 ? (

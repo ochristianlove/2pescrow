@@ -89,16 +89,39 @@ export class EthereumFundingService {
       let tx: Transaction | undefined = receipt ? await this.client.getTransaction({ hash: receipt.transactionHash }) : undefined;
       const count = await this.client.getTransactionCount({ address: terms.buyer, blockNumber: head });
       if (!receipt && count > a.nonce) {
-        try { tx = await findNonceTransaction(this.client, terms.buyer, a.nonce, a.startBlock, head); }
-        catch {
+        let scanFinished = false;
+        try {
+          tx = await findNonceTransaction(this.client, terms.buyer, a.nonce, a.startBlock, head);
+          scanFinished = true;
+        } catch {
           // Some RPC providers cannot serve old account state. Persist a bounded full-block scan cursor.
-          const end = a.scanBlock + 20n < head ? a.scanBlock + 20n : head;
+          const end = a.scanBlock + 60n < head ? a.scanBlock + 60n : head;
           for (let blockNumber = a.scanBlock; blockNumber <= end; blockNumber++) {
             const block = await this.client.getBlock({ blockNumber, includeTransactions: true });
             tx = block.transactions.find(t => same(t.from, terms.buyer) && t.nonce === a.nonce);
             if (tx) break;
           }
-          if (!tx) await db.ethereumFundingAttempt.update({ where: { id: a.id }, data: { scanBlock: end + 1n } });
+          scanFinished = end >= head;
+          if (!tx && !scanFinished) {
+            await db.ethereumFundingAttempt.update({ where: { id: a.id }, data: { scanBlock: end + 1n } });
+          }
+        }
+        if (!tx && scanFinished && a.startBlock > 0n) {
+          // Brief safety check before startBlock in case a small reorg shifted the mined block.
+          const floor = a.startBlock > 5n ? a.startBlock - 5n : 0n;
+          for (let blockNumber = a.startBlock - 1n; blockNumber >= floor; blockNumber--) {
+            const block = await this.client.getBlock({ blockNumber, includeTransactions: true });
+            tx = block.transactions.find(t => same(t.from, terms.buyer) && t.nonce === a.nonce);
+            if (tx) break;
+            if (blockNumber === 0n) break;
+          }
+        }
+        if (!tx && scanFinished) {
+          // Nonce a.nonce is already consumed at or before head and no matching transaction exists up to head;
+          // release the stale active lock so the user is never permanently blocked.
+          await db.ethereumFundingAttempt.update({ where: { id: a.id }, data: { status: "replaced", active: false, scanBlock: head + 1n } });
+          emit("trade:timeline-updated");
+          continue;
         }
         if (tx) receipt = await receiptIfMined(this.client, tx.hash);
       }

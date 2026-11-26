@@ -1,6 +1,6 @@
 import { Text, useLanguage } from "../../src/language";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { FlatList, Modal, Platform, Pressable, RefreshControl, SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
+import { Modal, Platform, Pressable, RefreshControl, SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { api, ApiError } from "../../src/api";
 import { AppBottomNav } from "../../src/AppBottomNav";
@@ -69,6 +69,7 @@ export default function TradesScreen({ publicOnly = false }: { publicOnly?: bool
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const generation = useRef(0);
+  const hasLoaded = useRef(false);
 
   const load = useCallback(async () => {
     const request = ++generation.current;
@@ -76,6 +77,7 @@ export default function TradesScreen({ publicOnly = false }: { publicOnly?: bool
     try {
       const next = await api<TradeRow[]>(user && !showPublic ? "/v1/me/trades" : "/v1/escrows");
       if (request !== generation.current) return;
+      hasLoaded.current = true;
       setRows(next);
       if (user && !showPublic) syncEscrowIds(next.map((trade) => trade.id));
     } catch (err) {
@@ -86,10 +88,10 @@ export default function TradesScreen({ publicOnly = false }: { publicOnly?: bool
   }, [user, showPublic, syncEscrowIds]);
 
   useFocusEffect(useCallback(() => {
-    if (rows.length === 0) setLoading(true);
+    if (!hasLoaded.current) setLoading(true);
     void load();
     return () => { generation.current++; };
-  }, [load, rows.length]));
+  }, [load]));
 
   const availableYears = useMemo(() => {
     const set = new Set<number>();
@@ -151,11 +153,9 @@ export default function TradesScreen({ publicOnly = false }: { publicOnly?: bool
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <AppTopBar />
-      <FlatList
+      <ScrollView
         style={{ backgroundColor: colors.bg, flex: 1 }}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 22, paddingBottom: 36 }}
-        data={visibleRows}
-        keyExtractor={(item) => item.id}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -166,152 +166,152 @@ export default function TradesScreen({ publicOnly = false }: { publicOnly?: bool
             }}
           />
         }
-        ListHeaderComponent={
-          <View style={{ marginBottom: 8 }}>
-            <Text style={{ color: colors.text, fontSize: 32, fontWeight: "800", letterSpacing: -0.8, lineHeight: 34, marginBottom: 8 }}>
-              {showPublic ? "Public ledger" : user ? "My trades" : "Trades"}
-            </Text>
-            <Text style={{ color: colors.muted, marginBottom: 14, fontSize: 15, lineHeight: 22 }}>
-              {user && !showPublic
-                ? "Every trade where you are buyer, seller, or linked by wallet."
-                : "All escrow deals on the platform ledger, by chain. Sign in to see all your trades."}
-            </Text>
-            {error ? <><Notice text={error} /><Button label="Try again" tone="ghost" onPress={() => void load()} /></> : null}
-            {exportNotice ? <Notice text={exportNotice} tone="ok" /> : null}
-            {user && !publicOnly ? (
-              <View style={{ marginBottom: 10 }}>
-                <Button
-                  label={showPublic ? "Show my trades" : "Browse public ledger"}
-                  tone="ghost"
-                  onPress={() => {
-                    setRows([]);
-                    setLoading(true);
-                    setVisibleCount(PAGE_SIZE);
-                    setShowPublic((value) => !value);
-                  }}
-                />
-              </View>
-            ) : null}
-            <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
-              <View style={{ flex: 1 }}><Button label="Start a trade" onPress={() => router.push("/new-trade")} /></View>
-              <View style={{ flex: 1 }}><Button label="Join a trade" tone="ghost" onPress={() => router.push(user ? "/join-trade" : "/sign-in")} /></View>
-            </View>
-
-            {/* Restrained filter & export utility strip */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipRow}>
-              {(["all", "open", "completed", "disputed"] as const).map((key) => {
-                const active = category === key;
-                const label = key === "all" ? "All" : key === "open" ? "Open" : key === "completed" ? "Completed" : "Disputed";
-                return (
-                  <Pressable
-                    key={key}
-                    accessibilityRole="button"
-                    onPress={() => {
-                      setCategory(key);
-                      setVisibleCount(PAGE_SIZE);
-                    }}
-                    style={[s.chip, active && s.chipActive]}
-                  >
-                    <Text style={[s.chipLabel, active && s.chipLabelActive]}>{label}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            <View style={s.utilityRow}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setDatePickerOpen(true)}
-                style={[s.utilPill, selectedYear !== null && s.utilPillActive]}
-              >
-                <Text translate={false} style={[s.utilPillText, selectedYear !== null && s.utilPillTextActive]}>
-                  {periodLabel} ▾
-                </Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                disabled={exporting || filtered.length === 0}
-                onPress={() => void exportCsv()}
-                style={[s.utilPill, (exporting || filtered.length === 0) && { opacity: 0.45 }]}
-              >
-                <Text style={s.utilPillText}>{exporting ? "Exporting…" : "Export CSV"}</Text>
-              </Pressable>
-              <Text translate={false} style={s.countMeta}>
-                {filtered.length} {filtered.length === 1 ? t("trade") : t("trades")}
-              </Text>
-            </View>
-          </View>
-        }
-        ListEmptyComponent={
-          !error ? (
-            <Text style={{ color: colors.muted, marginTop: 14 }}>
-              {loading ? "Loading trades…" : rows.length > 0 ? "No trades match this filter." : "No trades yet."}
-            </Text>
-          ) : null
-        }
-        ListFooterComponent={
-          remainingCount > 0 ? (
-            <View style={{ marginTop: 16, gap: 8 }}>
-              <Text translate={false} style={{ color: colors.muted, fontSize: 12, textAlign: "center" }}>
-                {t("Showing {shown} of {total}", { shown: visibleRows.length, total: filtered.length })}
-              </Text>
+      >
+        <View style={{ marginBottom: 8 }}>
+          <Text style={{ color: colors.text, fontSize: 32, fontWeight: "800", letterSpacing: -0.8, lineHeight: 34, marginBottom: 8 }}>
+            {showPublic ? "Public ledger" : user ? "My trades" : "Trades"}
+          </Text>
+          <Text style={{ color: colors.muted, marginBottom: 14, fontSize: 15, lineHeight: 22 }}>
+            {user && !showPublic
+              ? "Every trade where you are buyer, seller, or linked by wallet."
+              : "All escrow deals on the platform ledger, by chain. Sign in to see all your trades."}
+          </Text>
+          {error ? <><Notice text={error} /><Button label="Try again" tone="ghost" onPress={() => void load()} /></> : null}
+          {exportNotice ? <Notice text={exportNotice} tone="ok" /> : null}
+          {user && !publicOnly ? (
+            <View style={{ marginBottom: 10 }}>
               <Button
-                label={`Load more (${remainingCount})`}
+                label={showPublic ? "Show my trades" : "Browse public ledger"}
                 tone="ghost"
-                onPress={() => setVisibleCount((current) => current + PAGE_SIZE)}
+                onPress={() => {
+                  hasLoaded.current = false;
+                  setRows([]);
+                  setLoading(true);
+                  setVisibleCount(PAGE_SIZE);
+                  setShowPublic((value) => !value);
+                }}
               />
             </View>
-          ) : filtered.length > PAGE_SIZE ? (
-            <Text translate={false} style={{ color: colors.muted, fontSize: 12, textAlign: "center", marginTop: 16 }}>
-              {t("Showing all {total} trades", { total: filtered.length })}
-            </Text>
-          ) : null
-        }
-        renderItem={({ item }) => (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push(`/trade/${item.id}`)}
-            style={s.tradeCard}
-          >
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-              <Text translate={false} numberOfLines={2} style={{ color: colors.text, fontWeight: "700", fontSize: 16, flex: 1, minWidth: 0 }}>
-                {item.title}
+          ) : null}
+          <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
+            <View style={{ flex: 1 }}><Button label="Start a trade" onPress={() => router.push("/new-trade")} /></View>
+            <View style={{ flex: 1 }}><Button label="Join a trade" tone="ghost" onPress={() => router.push(user ? "/join-trade" : "/sign-in")} /></View>
+          </View>
+
+          {/* Restrained filter & export utility strip */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipRow}>
+            {(["all", "open", "completed", "disputed"] as const).map((key) => {
+              const active = category === key;
+              const label = key === "all" ? "All" : key === "open" ? "Open" : key === "completed" ? "Completed" : "Disputed";
+              return (
+                <Pressable
+                  key={key}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setCategory(key);
+                    setVisibleCount(PAGE_SIZE);
+                  }}
+                  style={[s.chip, active && s.chipActive]}
+                >
+                  <Text style={[s.chipLabel, active && s.chipLabelActive]}>{label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <View style={s.utilityRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setDatePickerOpen(true)}
+              style={[s.utilPill, selectedYear !== null && s.utilPillActive]}
+            >
+              <Text translate={false} style={[s.utilPillText, selectedYear !== null && s.utilPillTextActive]}>
+                {periodLabel} ▾
               </Text>
-              <View style={{
-                backgroundColor: `${statusColor(item.status)}22`,
-                borderColor: `${statusColor(item.status)}55`,
-                borderWidth: 1,
-                borderRadius: 999,
-                paddingHorizontal: 9,
-                paddingVertical: 4,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 5,
-                flexShrink: 0,
-              }}>
-                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor(item.status), flexShrink: 0 }} />
-                <Text numberOfLines={1} style={{ color: statusColor(item.status), fontWeight: "700", fontSize: 12 }}>
-                  {readableLabel(item.status)}
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={exporting || filtered.length === 0}
+              onPress={() => void exportCsv()}
+              style={[s.utilPill, (exporting || filtered.length === 0) && { opacity: 0.45 }]}
+            >
+              <Text style={s.utilPillText}>{exporting ? "Exporting…" : "Export CSV"}</Text>
+            </Pressable>
+            <Text translate={false} style={s.countMeta}>
+              {filtered.length} {filtered.length === 1 ? t("trade") : t("trades")}
+            </Text>
+          </View>
+        </View>
+
+        {visibleRows.length === 0 && !error ? (
+          <Text style={{ color: colors.muted, marginTop: 14 }}>
+            {loading ? "Loading trades…" : rows.length > 0 ? "No trades match this filter." : "No trades yet."}
+          </Text>
+        ) : (
+          visibleRows.map((item) => (
+            <Pressable
+              key={item.id}
+              accessibilityRole="button"
+              onPress={() => router.push(`/trade/${item.id}`)}
+              style={s.tradeCard}
+            >
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                <Text translate={false} numberOfLines={2} style={{ color: colors.text, fontWeight: "700", fontSize: 16, flex: 1, minWidth: 0 }}>
+                  {item.title}
                 </Text>
+                <View style={{
+                  backgroundColor: `${statusColor(item.status)}22`,
+                  borderColor: `${statusColor(item.status)}55`,
+                  borderWidth: 1,
+                  borderRadius: 999,
+                  paddingHorizontal: 9,
+                  paddingVertical: 4,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 5,
+                  flexShrink: 0,
+                }}>
+                  <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor(item.status), flexShrink: 0 }} />
+                  <Text numberOfLines={1} style={{ color: statusColor(item.status), fontWeight: "700", fontSize: 12 }}>
+                    {readableLabel(item.status)}
+                  </Text>
+                </View>
               </View>
-            </View>
-            <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-              <Text style={{ color: colors.gold, fontWeight: "600" }}>{formatAmount(item.amountAtomic)} {tokenLabel(item.tokenSymbol)}</Text>
-              <Text style={{ color: colors.muted, fontSize: 12 }}>· {item.chain === "tron" ? "Tron" : "Ethereum"}</Text>
-              {tradeDate(item) ? (
-                <Text translate={false} style={{ color: colors.muted, fontSize: 12 }}>
-                  · {MONTH_NAMES[tradeDate(item)!.getMonth()]} {tradeDate(item)!.getDate()}, {tradeDate(item)!.getFullYear()}
-                </Text>
-              ) : null}
-            </View>
-            {user ? <TradePartyBadge trade={item} userId={user.id} walletAddresses={user.wallets?.map((wallet) => wallet.address)} /> : null}
-            <TradeRoleTags
-              buyer={item.buyerUser?.displayName || (item.buyerAddress ? shortAddr(item.buyerAddress) : "")}
-              seller={item.sellerUser?.displayName || (item.sellerAddress ? shortAddr(item.sellerAddress) : "")}
-            />
-          </Pressable>
+              <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                <Text style={{ color: colors.gold, fontWeight: "600" }}>{formatAmount(item.amountAtomic)} {tokenLabel(item.tokenSymbol)}</Text>
+                <Text style={{ color: colors.muted, fontSize: 12 }}>· {item.chain === "tron" ? "Tron" : "Ethereum"}</Text>
+                {tradeDate(item) ? (
+                  <Text translate={false} style={{ color: colors.muted, fontSize: 12 }}>
+                    · {MONTH_NAMES[tradeDate(item)!.getMonth()]} {tradeDate(item)!.getDate()}, {tradeDate(item)!.getFullYear()}
+                  </Text>
+                ) : null}
+              </View>
+              {user ? <TradePartyBadge trade={item} userId={user.id} walletAddresses={user.wallets?.map((wallet) => wallet.address)} /> : null}
+              <TradeRoleTags
+                buyer={item.buyerUser?.displayName || (item.buyerAddress ? shortAddr(item.buyerAddress) : "")}
+                seller={item.sellerUser?.displayName || (item.sellerAddress ? shortAddr(item.sellerAddress) : "")}
+              />
+            </Pressable>
+          ))
         )}
-      />
+
+        {remainingCount > 0 ? (
+          <View style={{ marginTop: 16, gap: 8 }}>
+            <Text translate={false} style={{ color: colors.muted, fontSize: 12, textAlign: "center" }}>
+              {t("Showing {shown} of {total}", { shown: visibleRows.length, total: filtered.length })}
+            </Text>
+            <Button
+              label={`Load more (${remainingCount})`}
+              tone="ghost"
+              onPress={() => setVisibleCount((current) => current + PAGE_SIZE)}
+            />
+          </View>
+        ) : filtered.length > PAGE_SIZE ? (
+          <Text translate={false} style={{ color: colors.muted, fontSize: 12, textAlign: "center", marginTop: 16 }}>
+            {t("Showing all {total} trades", { total: filtered.length })}
+          </Text>
+        ) : null}
+      </ScrollView>
 
       {/* Minimal Month / Year Filter Sheet */}
       <Modal visible={datePickerOpen} transparent animationType="fade" onRequestClose={() => setDatePickerOpen(false)}>

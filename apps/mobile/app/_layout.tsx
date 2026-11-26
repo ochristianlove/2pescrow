@@ -2,8 +2,8 @@ import { AppKit, AppKitProvider, useAccount } from "@reown/appkit-react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Component, useEffect, useRef, type ErrorInfo, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text as RNText, View } from "react-native";
-import { appKit } from "../src/appkit";
+import { AppState, Pressable, StyleSheet, Text as RNText, View } from "react-native";
+import { appKit, disconnectWallet, subscribeWalletSessionEvents, verifyWalletSession } from "../src/appkit";
 import { AuthProvider, useAuth } from "../src/auth";
 import { LiveNotificationsProvider, useLiveNotifications } from "../src/liveNotifications";
 import { shortAddr } from "../src/format";
@@ -98,6 +98,50 @@ function WalletConnectedFeedback() {
   return null;
 }
 
+function WalletSessionGuard() {
+  const { isConnected, address } = useAccount();
+  const backgroundedAt = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!isConnected || !address) return;
+    let cancelled = false;
+
+    // Delay slightly on cold boot so AppKit finishes rehydrating the provider before checking expiry/topic.
+    const bootTimer = setTimeout(() => {
+      if (!cancelled) {
+        void verifyWalletSession({ activePing: true, timeoutMs: 2500 });
+      }
+    }, 1200);
+
+    const unsubscribe = subscribeWalletSessionEvents(() => {
+      if (!cancelled) void disconnectWallet();
+    });
+
+    const appStateSub = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "background" || nextState === "inactive") {
+        if (backgroundedAt.current === null) backgroundedAt.current = Date.now();
+        return;
+      }
+      if (nextState === "active") {
+        const awayMs = backgroundedAt.current ? Date.now() - backgroundedAt.current : 0;
+        backgroundedAt.current = null;
+        if (awayMs >= 10_000) {
+          void verifyWalletSession({ activePing: true, timeoutMs: 2500 });
+        }
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(bootTimer);
+      unsubscribe();
+      appStateSub.remove();
+    };
+  }, [isConnected, address]);
+
+  return null;
+}
+
 function WalletConnectShell({ children }: { children: ReactNode }) {
   if (!appKit) return <View style={styles.shell}>{children}</View>;
   return (
@@ -106,6 +150,7 @@ function WalletConnectShell({ children }: { children: ReactNode }) {
         <View style={styles.shell}>
           {children}
           <WalletConnectedFeedback />
+          <WalletSessionGuard />
           <AppKit />
         </View>
       </AppKitProvider>

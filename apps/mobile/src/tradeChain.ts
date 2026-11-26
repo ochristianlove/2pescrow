@@ -1,4 +1,5 @@
 import { AbiCoder, Interface } from "ethers";
+import { disconnectWallet, isDeadWalletSessionError, openConnectedWalletApp } from "./appkit";
 import { apiUrl } from "./config";
 import {
   inspectEscrowDealCapabilities,
@@ -231,10 +232,22 @@ async function simulateCall(from: string, to: string, data: string) {
 async function send(provider: WalletProvider, from: string, to: string, data: string) {
   await ensureMainnet(provider);
   await simulateCall(from, to, data);
-  const hash = await provider.request({
-    method: "eth_sendTransaction",
-    params: [{ from, to, data }],
-  }, CHAIN);
+  const openTimer = setTimeout(() => openConnectedWalletApp(), 250);
+  let hash: unknown;
+  try {
+    hash = await provider.request({
+      method: "eth_sendTransaction",
+      params: [{ from, to, data }],
+    }, CHAIN);
+  } catch (err) {
+    if (isDeadWalletSessionError(err)) {
+      await disconnectWallet();
+      throw new Error("Your wallet disconnected while inactive. Please reconnect your wallet and try again.");
+    }
+    throw err;
+  } finally {
+    clearTimeout(openTimer);
+  }
   if (typeof hash !== "string" || !hash.startsWith("0x")) throw new Error("The wallet did not return a transaction.");
   const receipt = await waitForReceipt(hash);
   if (!receipt || receipt.status !== 1) throw new Error("The transaction failed.");

@@ -1,4 +1,4 @@
-import { Text, TextInput } from "../../src/language";
+import { Text, TextInput, useLanguage } from "../../src/language";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Linking, Pressable, ScrollView, View } from "react-native";
@@ -61,12 +61,16 @@ function eventLabel(name: string) {
   return name.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
 }
 
+const TRADES_PAGE_SIZE = 5;
+
 export default function DashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const { syncEscrowIds } = useLiveNotifications();
   const fresh = useRef(false);
   const [data, setData] = useState<Dash | null>(null);
+  const [visibleTrades, setVisibleTrades] = useState(TRADES_PAGE_SIZE);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [referral, setReferral] = useState<Referral | null>(null);
@@ -158,6 +162,8 @@ export default function DashboardScreen() {
   }
 
   const trades = data?.myTrades ?? [];
+  const visibleTradeRows = trades.slice(0, visibleTrades);
+  const remainingTrades = Math.max(0, trades.length - visibleTrades);
   const active = data?.stats.activeEscrows ?? 0;
   const wallets = data?.wallets.length ?? 0;
   const name = user?.displayName || user?.email || "there";
@@ -211,32 +217,52 @@ export default function DashboardScreen() {
               <Text style={styles.link}>Save a wallet on your profile</Text>
             </Pressable>
           </View>
-        ) : trades.map((trade) => (
-          <Pressable key={trade.id} onPress={() => router.push(`/trade/${trade.id}`)} style={styles.row}>
-            <View style={styles.rowTop}>
-              <Text translate={false} numberOfLines={2} style={styles.rowTitle}>{trade.title}</Text>
-              <View
-                style={[
-                  styles.statusBadge,
-                  {
-                    backgroundColor: `${statusColor(trade.status)}22`,
-                    borderColor: `${statusColor(trade.status)}55`,
-                  },
-                ]}
-              >
-                <View style={[styles.statusDot, { backgroundColor: statusColor(trade.status) }]} />
-                <Text numberOfLines={1} style={[styles.statusText, { color: statusColor(trade.status) }]}>
-                  {readableLabel(trade.status)}
+        ) : (
+          <>
+            {visibleTradeRows.map((trade) => (
+              <Pressable key={trade.id} onPress={() => router.push(`/trade/${trade.id}`)} style={styles.row}>
+                <View style={styles.rowTop}>
+                  <Text translate={false} numberOfLines={2} style={styles.rowTitle}>{trade.title}</Text>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      {
+                        backgroundColor: `${statusColor(trade.status)}22`,
+                        borderColor: `${statusColor(trade.status)}55`,
+                      },
+                    ]}
+                  >
+                    <View style={[styles.statusDot, { backgroundColor: statusColor(trade.status) }]} />
+                    <Text numberOfLines={1} style={[styles.statusText, { color: statusColor(trade.status) }]}>
+                      {readableLabel(trade.status)}
+                    </Text>
+                  </View>
+                </View>
+                <TradePartyBadge trade={trade} userId={user?.id} walletAddresses={data?.wallets.map((wallet) => wallet.address)} />
+                <TradeRoleTags
+                  buyer={trade.buyerUser?.displayName || (trade.buyerAddress ? shortAddr(trade.buyerAddress) : "")}
+                  seller={trade.sellerUser?.displayName || (trade.sellerAddress ? shortAddr(trade.sellerAddress) : "")}
+                />
+              </Pressable>
+            ))}
+            {remainingTrades > 0 ? (
+              <View style={{ marginTop: 4, marginBottom: 8, gap: 6 }}>
+                <Text translate={false} style={[styles.meta, { textAlign: "center" }]}>
+                  {t("Showing {shown} of {total}", { shown: visibleTradeRows.length, total: trades.length })}
                 </Text>
+                <Button
+                  label={`Load more (${remainingTrades})`}
+                  tone="ghost"
+                  onPress={() => setVisibleTrades((current) => current + TRADES_PAGE_SIZE)}
+                />
               </View>
-            </View>
-            <TradePartyBadge trade={trade} userId={user?.id} walletAddresses={data?.wallets.map((wallet) => wallet.address)} />
-            <TradeRoleTags
-              buyer={trade.buyerUser?.displayName || (trade.buyerAddress ? shortAddr(trade.buyerAddress) : "")}
-              seller={trade.sellerUser?.displayName || (trade.sellerAddress ? shortAddr(trade.sellerAddress) : "")}
-            />
-          </Pressable>
-        ))}
+            ) : trades.length > TRADES_PAGE_SIZE ? (
+              <Text translate={false} style={[styles.meta, { textAlign: "center", marginBottom: 8 }]}>
+                {t("Showing all {total} trades", { total: trades.length })}
+              </Text>
+            ) : null}
+          </>
+        )}
 
         <View style={styles.card}>
           <Text style={styles.eyebrow}>Referral program</Text>
